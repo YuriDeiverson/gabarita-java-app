@@ -30,23 +30,28 @@ export type QuestionCategory =
   | 'Conhecimentos Específicos - Jornalismo';
 
 export interface Question {
-  id: number;
-  category: QuestionCategory;
+  id: number | string;
+  category: QuestionCategory | string;
+  topic?: string;
   text: string;
   correct: 'Certo' | 'Errado' | 'Anulada';
   explanation: string;
   reference?: string; // e.g., "CEBRASPE - TRT 8 - 2022"
   passageId?: string; // e.g., "capitalismo-vigilancia"
+  passageTitle?: string;
+  passageContent?: string;
 }
 
 export interface QuizState {
-  answers: { [key: number]: 'Certo' | 'Errado' };
-  submitted: { [key: number]: boolean };
+  answers: { [key: string]: 'Certo' | 'Errado' };
+  submitted: { [key: string]: boolean };
   scoreMode: 'tradicional' | 'simples'; // tradicional = Cebraspe (-1 for wrong), simples = +1 for right
 }
 
 export interface StudyBlock {
   id: string;
+  day?: string;
+  date?: string;
   title: string;
   duration: string; // e.g., "2h"
   methodology: string; // e.g., "30% Teoria, 50% Exercícios, 20% Revisão"

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { studySections } from '../data/studyData';
-import { BookOpen, Cpu, Shield, MapPin, Terminal, AlertTriangle, ChevronDown, ChevronUp, CheckCircle, Search, HelpCircle, Clock, Target, Zap } from 'lucide-react';
+import { BookOpen, Cpu, Shield, MapPin, Terminal, AlertTriangle, ChevronDown, ChevronUp, CheckCircle, HelpCircle, Clock, Target, Zap } from 'lucide-react';
 
 export default function StudyTab() {
   const sections = useMemo(() => {
@@ -17,7 +17,6 @@ export default function StudyTab() {
 
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
 
-  const [searchTerm, setSearchTerm] = useState<string>('');
   const [expandedCards, setExpandedCards] = useState<{ [key: string]: boolean }>({});
   const [completedCards, setCompletedCards] = useState<{ [key: string]: boolean }>(() => {
     const saved = localStorage.getItem('completed_study_cards');
@@ -95,17 +94,7 @@ export default function StudyTab() {
   const totalCards = sections.reduce((acc, section) => acc + section.cards.length, 0);
   const progressPercent = totalCards > 0 ? Math.round((completedCount / totalCards) * 100) : 0;
 
-  // Filter study cards by search term
-  const filteredCards = useMemo(() => {
-    if (!activeSection) return [];
-    if (!searchTerm.trim()) return activeSection.cards;
-    const lowerSearch = searchTerm.toLowerCase();
-    return activeSection.cards.filter(card => 
-      card.title.toLowerCase().includes(lowerSearch) || 
-      card.content.toLowerCase().includes(lowerSearch) ||
-      card.keyTakeaways.some(t => t.toLowerCase().includes(lowerSearch))
-    );
-  }, [activeSection, searchTerm]);
+  const filteredCards = activeSection?.cards || [];
 
   if (sections.length === 0 || !activeSection) {
     return (
@@ -118,8 +107,13 @@ export default function StudyTab() {
   return (
     <div id="study-tab-container" className="space-y-6">
       {/* Subject Selector and Search Row */}
-      <div className="flex flex-col lg:flex-row gap-4 items-slate lg:items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-        <div className="flex flex-wrap gap-2">
+      <div className="study-filter-shell bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100">
+        <div className="study-filter-heading flex items-center justify-between gap-3 mb-3">
+          <div><p className="text-xs font-extrabold uppercase tracking-wider text-indigo-600">Biblioteca de estudos</p><p className="text-sm text-slate-500 mt-0.5">Escolha uma disciplina para consultar seus resumos</p></div>
+          <BookOpen className="w-5 h-5 text-indigo-300 shrink-0" />
+        </div>
+        <div className="study-filter-row">
+        <div className="study-section-filters">
           {sections.map(section => {
             const IconComponent = iconMap[section.icon] || HelpCircle;
             const colors = colorMap[section.color] || colorMap.slate;
@@ -148,17 +142,6 @@ export default function StudyTab() {
           })}
         </div>
 
-        {/* Search Input */}
-        <div className="relative min-w-[240px]">
-          <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-          <input
-            id="study-search-input"
-            type="text"
-            placeholder="Pesquisar nos resumos..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all"
-          />
         </div>
       </div>
 
@@ -205,10 +188,10 @@ export default function StudyTab() {
       </div>
 
       {/* Study Notes List */}
-      <div className="space-y-3">
+      <div className="study-notes-grid space-y-3">
         {filteredCards.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-xl border border-slate-100">
-            <p className="text-slate-500 text-sm">Nenhum resumo encontrado para "{searchTerm}".</p>
+            <p className="text-slate-500 text-sm">Nenhum resumo disponível para esta disciplina.</p>
           </div>
         ) : (
           filteredCards.map(card => {
@@ -227,18 +210,29 @@ export default function StudyTab() {
                 {/* Card Header (Clickable) */}
                 <div 
                   onClick={() => toggleCard(card.id)}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isExpanded}
+                  aria-controls={`study-card-content-${card.id}`}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      toggleCard(card.id);
+                    }
+                  }}
                   className="flex items-center justify-between p-3 cursor-pointer hover:bg-slate-50 transition-colors"
                 >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <button
                       onClick={(e) => toggleComplete(card.id, e)}
-                      className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                      aria-label={isCompleted ? `Marcar ${card.title} como pendente` : `Marcar ${card.title} como concluído`}
+                      className={`checklist-control flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
                         isCompleted 
                           ? 'bg-emerald-500 border-emerald-500 text-white' 
                           : 'border-slate-300 hover:border-emerald-400'
                       }`}
                     >
-                      {isCompleted && <CheckCircle className="w-3 h-3" />}
+                      {isCompleted && <CheckCircle className="w-4 h-4" />}
                     </button>
                     <div className="flex-1 min-w-0">
                       <h3 className={`font-semibold text-sm truncate ${
@@ -250,8 +244,9 @@ export default function StudyTab() {
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                     {card.isQuente && (
-                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-700 rounded">
-                        🔥
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-700 rounded" aria-label="Assunto de alta prioridade">
+                        <Zap className="w-3 h-3" />
+                        Prioritário
                       </span>
                     )}
                     {isExpanded ? (
@@ -264,7 +259,7 @@ export default function StudyTab() {
 
                 {/* Card Expandable Body */}
                 {isExpanded && (
-                  <div className="border-t border-slate-100 p-4 bg-white">
+                  <div id={`study-card-content-${card.id}`} className="border-t border-slate-100 p-4 bg-white">
                     {/* Content */}
                     <div 
                       className="text-sm text-slate-600 leading-relaxed mb-4 [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:mb-1 [&_strong]:font-semibold [&_strong]:text-slate-800"

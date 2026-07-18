@@ -11,23 +11,22 @@ const getApiErrorMessage = async (response: Response, fallback: string) => {
 
 export interface StudyPlan {
   id: string;
-  course_id: string;
+  course_id?: string;
+  courseId?: string;
   title: string;
-  exam_date: string;
-  hours_per_day: number;
-  days_per_week: number;
-  total_weeks: number;
-  study_sections: string;
-  schedule_weeks: string;
-  created_at: string;
-  updated_at: string;
-  is_active: number;
+  exam_date?: string;
+  examDate?: string;
+  status?: 'ACTIVE' | 'ARCHIVED';
+  is_primary?: boolean;
+  is_active?: boolean | number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface QuizProgress {
   id: string;
   study_plan_id: string;
-  question_id: number;
+  question_id: number | string;
   answer: string;
   is_correct: number;
   answered_at: string;
@@ -37,14 +36,14 @@ export interface ScheduleProgress {
   id: string;
   study_plan_id: string;
   block_id: string;
-  is_completed: number;
+  is_completed: number | boolean;
   completed_at: string | null;
 }
 
 // Study Plans API
 export const studyPlansApi = {
-  getAll: async (): Promise<StudyPlan[]> => {
-    const response = await fetch(`${API_BASE_URL}/study-plans`);
+  getAll: async (includeArchived = false): Promise<StudyPlan[]> => {
+    const response = await fetch(`${API_BASE_URL}/study-plans?includeArchived=${includeArchived}`);
     if (!response.ok) throw new Error('Failed to fetch study plans');
     return response.json();
   },
@@ -68,6 +67,7 @@ export const studyPlansApi = {
     hoursPerDay: number;
     daysPerWeek: number;
     totalWeeks: number;
+    blockMinutes?: number;
     studySections: any[];
     scheduleWeeks: any[];
   }): Promise<StudyPlan> => {
@@ -87,6 +87,7 @@ export const studyPlansApi = {
     hoursPerDay: number;
     daysPerWeek: number;
     totalWeeks: number;
+    blockMinutes?: number;
     studySections: any[];
     scheduleWeeks: any[];
   }): Promise<StudyPlan> => {
@@ -114,6 +115,31 @@ export const studyPlansApi = {
     });
     if (!response.ok) throw new Error('Failed to activate study plan');
   },
+
+  duplicate: async (id: string, title?: string): Promise<StudyPlan> => {
+    const query = title ? `?title=${encodeURIComponent(title)}` : '';
+    const response = await fetch(`${API_BASE_URL}/study-plans/${id}/duplicate${query}`, { method: 'POST' });
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to duplicate study plan'));
+    return response.json();
+  },
+
+  archive: async (id: string): Promise<StudyPlan> => {
+    const response = await fetch(`${API_BASE_URL}/study-plans/${id}/archive`, { method: 'PATCH' });
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to archive study plan'));
+    return response.json();
+  },
+
+  restore: async (id: string): Promise<StudyPlan> => {
+    const response = await fetch(`${API_BASE_URL}/study-plans/${id}/restore`, { method: 'PATCH' });
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to restore study plan'));
+    return response.json();
+  },
+
+  history: async (id: string): Promise<Record<string, unknown>[]> => {
+    const response = await fetch(`${API_BASE_URL}/study-plans/${id}/history`);
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to fetch plan history'));
+    return response.json();
+  },
 };
 
 // Quiz Progress API
@@ -132,7 +158,7 @@ export const quizProgressApi = {
 
   create: async (data: {
     studyPlanId: string;
-    questionId: number;
+    questionId: number | string;
     answer: string;
     isCorrect: boolean;
   }): Promise<QuizProgress> => {
@@ -229,6 +255,7 @@ export const scheduleApi = {
   examDate: string;
   studyDays: { day: string; hours: number }[];
   studySections: any[];
+  blockMinutes?: number;
 }): Promise<{ scheduleWeeks: any[] }> => {
   const response = await fetch(`${API_BASE_URL}/schedule/generate`, {
     method: 'POST',
@@ -245,6 +272,60 @@ export const scheduleApi = {
   }> => {
     const response = await fetch(`${API_BASE_URL}/schedule/stats/${studyPlanId}`);
     if (!response.ok) throw new Error('Failed to fetch schedule statistics');
+    return response.json();
+  },
+
+  regenerate: async (studyPlanId: string): Promise<{ blocksCreated: number; warning: string }> => {
+    const response = await fetch(`${API_BASE_URL}/schedule/plans/${studyPlanId}/regenerate`, { method: 'POST' });
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to regenerate schedule'));
+    return response.json();
+  },
+};
+
+export const questionsApi = {
+  forCourse: async (courseId: string): Promise<import('../types').Question[]> => {
+    const response = await fetch(`${API_BASE_URL}/questions/course/${encodeURIComponent(courseId)}`);
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to fetch course questions'));
+    const rows = await response.json();
+    return rows.map((row: any) => ({ id: row.id, category: row.category, topic: row.topic || row.category, text: row.text,
+      correct: row.correct, explanation: row.explanation, reference: row.reference,
+      passageId: row.passage_id, passageTitle: row.passage_title, passageContent: row.passage_content }));
+  },
+  importLegacy: async (courseId: string, questions: unknown[]): Promise<{ imported: number; updated: number; total: number }> => {
+    const response = await fetch(`${API_BASE_URL}/questions/import/legacy?courseId=${encodeURIComponent(courseId)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(questions),
+    });
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to import legacy questions'));
+    return response.json();
+  },
+};
+
+export const simulationsApi = {
+  create: async (data: Record<string, unknown>) => {
+    const response = await fetch(`${API_BASE_URL}/simulations`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to create simulation'));
+    return response.json();
+  },
+  answer: async (id: string, data: { questionId: string; answer: unknown; timeSpentSeconds: number }) => {
+    const response = await fetch(`${API_BASE_URL}/simulations/${id}/answers`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to save answer'));
+    return response.json();
+  },
+  start: (id: string) => fetch(`${API_BASE_URL}/simulations/${id}/start`, { method: 'PATCH' }),
+  pause: (id: string) => fetch(`${API_BASE_URL}/simulations/${id}/pause`, { method: 'PATCH' }),
+  finish: (id: string) => fetch(`${API_BASE_URL}/simulations/${id}/finish`, { method: 'PATCH' }),
+};
+
+export const analyticsApi = {
+  dashboard: async (days = 30, planId?: string | null): Promise<any> => {
+    const params = new URLSearchParams({ days: String(days) });
+    if (planId && !String(planId).startsWith('local-')) params.set('planId', planId);
+    const response = await fetch(`${API_BASE_URL}/analytics/dashboard?${params}`);
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to fetch dashboard'));
     return response.json();
   },
 };

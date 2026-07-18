@@ -6,6 +6,7 @@ build/
 dist/
 frontend/dist/
 backend/dist/
+backend-java/target/
 
 # Database
 *.db

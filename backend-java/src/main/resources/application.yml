@@ -1,0 +1,16 @@
+server:
+  port: ${PORT:3001}
+  forward-headers-strategy: framework
+spring:
+  application.name: gabarita-api
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/gabarita}
+    username: ${DATABASE_USER:gabarita}
+    password: ${DATABASE_PASSWORD:gabarita}
+  flyway:
+    enabled: true
+  jackson:
+    default-property-inclusion: non_null
+management.endpoints.web.exposure.include: health,info
+app:
+  cors-origins: ${CORS_ORIGINS:http://localhost:3000}

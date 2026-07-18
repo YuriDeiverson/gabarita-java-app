@@ -1,12 +1,12 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { quizQuestions } from '../data/quizData';
 import { QuestionCategory, Question } from '../types';
 import { passages } from '../data/passagesData';
-import { quizProgressApi } from '../services/api';
-import { CheckCircle2, XCircle, RefreshCw, Award, Filter, Sparkles, AlertCircle, Info, ChevronRight, HelpCircle } from 'lucide-react';
+import { questionsApi, quizProgressApi } from '../services/api';
+import { CheckCircle2, XCircle, Award, Filter, Sparkles, AlertCircle, Info } from 'lucide-react';
 
 export default function QuizTab() {
-  const questions = useMemo<Question[]>(() => {
+  const [questions, setQuestions] = useState<Question[]>(() => {
     const saved = localStorage.getItem('custom_quiz_questions');
     if (saved) {
       try {
@@ -18,7 +18,7 @@ export default function QuizTab() {
     return quizQuestions;
   }, []);
 
-  const [answers, setAnswers] = useState<{ [key: number]: 'Certo' | 'Errado' }>(() => {
+  const [answers, setAnswers] = useState<{ [key: string]: 'Certo' | 'Errado' }>(() => {
     const saved = localStorage.getItem('quiz_answers');
     return saved ? JSON.parse(saved) : {};
   });
@@ -30,20 +30,58 @@ export default function QuizTab() {
 
   const [categoryFilter, setCategoryFilter] = useState<QuestionCategory | 'Todos'>('Todos');
   const [statusFilter, setStatusFilter] = useState<'Todos' | 'Respondidas' | 'Não Respondidas' | 'Corretas' | 'Incorretas' | 'Anuladas'>('Todos');
-  const [expandedPassages, setExpandedPassages] = useState<{ [key: number]: boolean }>({});
+  const [expandedPassages, setExpandedPassages] = useState<{ [key: string]: boolean }>({});
+  const [visibleQuestions, setVisibleQuestions] = useState(10);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const courseId = localStorage.getItem('active_course');
+    if (!courseId) return;
+    questionsApi.forCourse(courseId).then(remoteQuestions => {
+      if (remoteQuestions.length > 0) {
+        setQuestions(remoteQuestions);
+        localStorage.setItem('active_quiz_questions_cache', JSON.stringify(remoteQuestions));
+      }
+    }).catch(error => console.warn('Banco de questões indisponível; usando conteúdo offline.', error));
+  }, []);
 
   // Sync answers with localStorage
   useEffect(() => {
     localStorage.setItem('quiz_answers', JSON.stringify(answers));
   }, [answers]);
 
+  useEffect(() => {
+    const config = localStorage.getItem('study_config');
+    if (!config) return;
+    try {
+      const { studyPlanId } = JSON.parse(config);
+      if (!studyPlanId || String(studyPlanId).startsWith('local-')) return;
+      quizProgressApi.getByStudyPlan(studyPlanId).then(progress => {
+        const remoteAnswers: { [key: string]: 'Certo' | 'Errado' } = {};
+        progress.forEach(item => {
+          const questionId = String(item.question_id);
+          if (item.answer === 'Certo' || item.answer === 'Errado') {
+            remoteAnswers[questionId] = item.answer;
+          }
+        });
+        setAnswers(current => ({ ...current, ...remoteAnswers }));
+      }).catch(error => console.warn('Respostas remotas indisponíveis; usando cache local.', error));
+    } catch (error) {
+      console.warn('Configuração local inválida.', error);
+    }
+  }, []);
+
   // Sync scoreMode with localStorage
   useEffect(() => {
     localStorage.setItem('quiz_score_mode', scoreMode);
   }, [scoreMode]);
 
-  const handleAnswer = async (questionId: number, option: 'Certo' | 'Errado') => {
-    const question = questions.find(q => q.id === questionId);
+  useEffect(() => {
+    setVisibleQuestions(10);
+  }, [categoryFilter, statusFilter]);
+
+  const handleAnswer = async (questionId: number | string, option: 'Certo' | 'Errado') => {
+    const question = questions.find(q => String(q.id) === String(questionId));
     if (!question) return;
     if (question.correct === 'Anulada') return;
 
@@ -51,6 +89,19 @@ export default function QuizTab() {
       ...prev,
       [questionId]: option
     }));
+
+    try {
+      const savedHistory = JSON.parse(localStorage.getItem('quiz_answer_history') || '{}');
+      savedHistory[String(questionId)] = { answer: option, answeredAt: new Date().toISOString() };
+      localStorage.setItem('quiz_answer_history', JSON.stringify(savedHistory));
+      const events = JSON.parse(localStorage.getItem('quiz_answer_events') || '[]');
+      let planId = null;
+      try { planId = JSON.parse(localStorage.getItem('study_config') || '{}').studyPlanId || null; } catch {}
+      events.push({ questionId: String(questionId), answer: option, answeredAt: new Date().toISOString(), planId, courseId: localStorage.getItem('active_course') });
+      localStorage.setItem('quiz_answer_events', JSON.stringify(events.slice(-5000)));
+    } catch (error) {
+      console.warn('Não foi possível atualizar o histórico local da resposta.', error);
+    }
 
     // Save to API if study plan ID exists
     const config = localStorage.getItem('study_config');
@@ -72,18 +123,28 @@ export default function QuizTab() {
     }
   };
 
-  const togglePassage = (questionId: number) => {
+  const togglePassage = (questionId: number | string) => {
     setExpandedPassages(prev => ({
       ...prev,
       [questionId]: !prev[questionId]
     }));
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (window.confirm(`Tem certeza que deseja reiniciar todo o simulado com as ${questions.length} questões? Seu progresso atual será apagado.`)) {
       setAnswers({});
       setExpandedPassages({});
       localStorage.removeItem('quiz_answers');
+      localStorage.removeItem('quiz_answer_history');
+      localStorage.removeItem('quiz_answer_events');
+      try {
+        const config = JSON.parse(localStorage.getItem('study_config') || '{}');
+        if (config.studyPlanId && !String(config.studyPlanId).startsWith('local-')) {
+          await quizProgressApi.deleteByStudyPlan(config.studyPlanId);
+        }
+      } catch (error) {
+        console.warn('O simulado local foi reiniciado, mas o progresso remoto não foi removido.', error);
+      }
     }
   };
 
@@ -92,7 +153,7 @@ export default function QuizTab() {
     const validQuestions = questions.filter(q => q.correct !== 'Anulada');
     const total = validQuestions.length;
     const answeredCount = Object.keys(answers).filter(id => {
-      const question = questions.find(q => q.id === Number(id));
+      const question = questions.find(q => String(q.id) === id);
       return question && question.correct !== 'Anulada';
     }).length;
     let correctCount = 0;
@@ -157,6 +218,23 @@ export default function QuizTab() {
     });
   }, [categoryFilter, statusFilter, answers, questions]);
 
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    if (!sentinel || visibleQuestions >= filteredQuestions.length) return;
+
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleQuestions(current => Math.min(current + 10, filteredQuestions.length));
+        }
+      },
+      { rootMargin: '300px 0px' }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [visibleQuestions, filteredQuestions.length]);
+
   // Performance Vibe Level
   const performanceVibe = useMemo(() => {
     const currentScore = scoreMode === 'tradicional' ? stats.cebraspePercentage : stats.percentage;
@@ -172,21 +250,15 @@ export default function QuizTab() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Performance Overview */}
         <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
+          <div className="quiz-heading flex items-start justify-between gap-4">
+            <div className="space-y-1 min-w-0">
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-amber-500" />
                 Simulador de Questões CEBRASPE
               </h2>
               <p className="text-xs text-slate-500">Avalie seu nível de prontidão com {questions.length} questões focadas no edital.</p>
             </div>
-            <button
-              id="btn-reset-quiz"
-              onClick={handleReset}
-              className="text-xs flex items-center gap-1 text-slate-500 hover:text-slate-800 border border-slate-200 hover:bg-slate-50 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
-            >
-              Resetar Simulado
-            </button>
+            <button id="btn-reset-quiz" onClick={handleReset} className="shrink-0 text-xs flex items-center justify-center gap-1 text-slate-500 hover:text-slate-800 border border-slate-200 hover:bg-slate-50 px-3 py-2 rounded-lg transition cursor-pointer">Resetar</button>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -198,8 +270,8 @@ export default function QuizTab() {
               <span className="text-xs text-emerald-800 font-bold">Acertos</span>
               <p className="text-xl font-bold text-emerald-600 mt-1">
                 {Object.keys(answers).filter(id => {
-                  const q = questions.find(q => q.id === Number(id));
-                  return q && q.correct !== 'Anulada' && answers[Number(id)] === q.correct;
+                  const q = questions.find(q => String(q.id) === id);
+                  return q && q.correct !== 'Anulada' && answers[id] === q.correct;
                 }).length}
               </p>
             </div>
@@ -207,8 +279,8 @@ export default function QuizTab() {
               <span className="font-bold text-rose-800 text-xs">Erros</span>
               <p className="text-rose-600 mt-1 text-xl font-bold font-mono">
                 {Object.keys(answers).filter(id => {
-                  const q = questions.find(q => q.id === Number(id));
-                  return q && q.correct !== 'Anulada' && answers[Number(id)] !== q.correct;
+                  const q = questions.find(q => String(q.id) === id);
+                  return q && q.correct !== 'Anulada' && answers[id] !== q.correct;
                 }).length}
               </p>
             </div>
@@ -218,8 +290,8 @@ export default function QuizTab() {
                 {stats.answeredCount > 0
                   ? Math.round(
                       (Object.keys(answers).filter(id => {
-                        const q = questions.find(q => q.id === Number(id));
-                        return q && q.correct !== 'Anulada' && answers[Number(id)] === q.correct;
+                        const q = questions.find(q => String(q.id) === id);
+                        return q && q.correct !== 'Anulada' && answers[id] === q.correct;
                       }).length /
                         stats.answeredCount) *
                         100
@@ -325,13 +397,13 @@ export default function QuizTab() {
       </div>
 
       {/* Questions List */}
-      <div className="space-y-6">
+      <div className="questions-grid space-y-6">
         {filteredQuestions.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-xl border border-slate-100">
             <p className="text-slate-500 text-sm">Nenhuma questão encontrada para os filtros selecionados.</p>
           </div>
         ) : (
-          filteredQuestions.map((q, index) => {
+          filteredQuestions.slice(0, visibleQuestions).map((q, index) => {
             const userAnswer = answers[q.id];
             const isAnswered = !!userAnswer;
             const isAnnulled = q.correct === 'Anulada';
@@ -376,14 +448,14 @@ export default function QuizTab() {
                 </div>
 
                 {/* Supporting Passage Text (Collapsible) */}
-                {q.passageId && expandedPassages[q.id] && passages[q.passageId] && (
+                {q.passageId && expandedPassages[q.id] && (q.passageContent || passages[q.passageId]) && (
                   <div className="px-5 py-4 bg-indigo-50/20 border-b border-slate-100 text-xs leading-relaxed text-slate-600 transition-all">
                     <div className="font-bold text-indigo-800 flex items-center gap-1 mb-1.5">
                       <Info className="w-3.5 h-3.5" />
-                      <span className="uppercase tracking-wider text-[10px]">{passages[q.passageId].title}</span>
+                      <span className="uppercase tracking-wider text-[10px]">{q.passageTitle || passages[q.passageId]?.title || 'Texto de apoio'}</span>
                     </div>
                     <div className="whitespace-pre-wrap pl-3.5 border-l-2 border-indigo-300 italic">
-                      {passages[q.passageId].content}
+                      {q.passageContent || passages[q.passageId]?.content}
                     </div>
                   </div>
                 )}
@@ -474,6 +546,8 @@ export default function QuizTab() {
           })
         )}
       </div>
+
+      <div ref={loadMoreRef} className="h-px" aria-hidden="true" />
     </div>
   );
 }

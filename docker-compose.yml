@@ -1,0 +1,27 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: gabarita
+      POSTGRES_USER: gabarita
+      POSTGRES_PASSWORD: gabarita
+    volumes:
+      - gabarita_postgres:/var/lib/postgresql/data
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gabarita"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  api:
+    build: ./backend-java
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/gabarita
+      DATABASE_USER: gabarita
+      DATABASE_PASSWORD: gabarita
+      CORS_ORIGINS: http://localhost:3000
+    ports: ["3001:3001"]
+    depends_on:
+      postgres: { condition: service_healthy }
+volumes:
+  gabarita_postgres:

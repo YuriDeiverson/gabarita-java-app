@@ -3,16 +3,20 @@ import HomeTab from './components/HomeTab';
 import StudyTab from './components/StudyTab';
 import QuizTab from './components/QuizTab';
 import ScheduleTab from './components/ScheduleTab';
-import { BookOpen, Award, Calendar, Sparkles, CheckSquare, CheckCircle2, Target, Home as HomeIcon } from 'lucide-react';
+import PerformanceTab from './components/PerformanceTab';
+import { BookOpen, Calendar, Sparkles, CheckSquare, Target, Home as HomeIcon, ChartNoAxesCombined, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'home' | 'study' | 'quiz' | 'schedule'>(() => {
+  const [activeTab, setActiveTab] = useState<'home' | 'study' | 'quiz' | 'schedule' | 'performance'>(() => {
     const saved = localStorage.getItem('app_active_tab');
-    return (saved as 'home' | 'study' | 'quiz' | 'schedule') || 'home';
+    return (saved as 'home' | 'study' | 'quiz' | 'schedule' | 'performance') || 'home';
   });
 
   const [activeCourse, setActiveCourse] = useState<string>(() => {
     return localStorage.getItem('active_course') || 'seplag_informatica';
+  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem('app_sidebar_collapsed') === 'true';
   });
 
   // Global KPIs extracted from localStorage
@@ -73,6 +77,10 @@ export default function App() {
     // Listen for tab switches to reload KPIs
     localStorage.setItem('app_active_tab', activeTab);
   }, [activeTab]);
+
+  useEffect(() => {
+    localStorage.setItem('app_sidebar_collapsed', String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
 
   // Keep KPIs in sync if the user performs actions in other tabs
   useEffect(() => {
@@ -136,14 +144,15 @@ export default function App() {
   const isHome = activeTab === 'home';
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col">
+    <div className={`min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+      <a className="skip-link" href="#main-content">Pular para o conteúdo principal</a>
       {/* Upper Navigation & App Bar */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+      <header className="app-header bg-white border-b border-slate-200 sticky top-0 z-50">
+        <div className="w-full px-4 sm:px-6 xl:px-8 2xl:px-10">
+          <div className="flex items-center justify-between min-h-16 py-2">
             {/* Logo and Brand */}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-16 flex items-center justify-center">
+              <div className="w-10 h-12 flex items-center justify-center shrink-0">
                 <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-extrabold shadow-sm">
                   {isHome ? 'GC' : (activeCourse === 'tecnico_enfermagem' ? 'E' : activeCourse === 'jornalismo' ? 'J' : 'I')}
                 </div>
@@ -155,13 +164,13 @@ export default function App() {
                       Gabarita Concursos
                     </h1>
                     <p className="text-[10px] text-slate-500 font-medium">
-                      Estudos Inteligentes de Reta Final (Método Pareto 80/20)
+                      Seu plano de estudos, simples e direto
                     </p>
                   </>
                 ) : (
                   <>
                     <h1 className="text-base font-extrabold tracking-tight text-slate-900 flex items-center gap-1.5">
-                      {brand.title}
+                      <span className="app-course-title">{brand.title}</span>
                       <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200">
                         {brand.focus}
                       </span>
@@ -203,11 +212,24 @@ export default function App() {
       </header>
 
       {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-grow w-full flex flex-col space-y-6">
+      <main id="main-content" className="app-main px-4 sm:px-6 xl:px-8 2xl:px-10 py-6 flex-grow w-full flex flex-col space-y-6" tabIndex={-1}>
         
-        {/* Navigation Tabs Bar - ONLY SHOWN IF NOT ON HOME/SELECTION */}
-        {!isHome && (
-          <div className="flex border-b border-slate-200 space-x-1 lg:space-x-2 bg-slate-100/50 p-1.5 rounded-xl self-start w-full md:w-auto overflow-x-auto">
+        {/* Navigation */}
+          <nav className="app-navigation flex space-x-1 lg:space-x-2 bg-slate-100 p-1.5 rounded-xl self-start w-full md:w-auto" aria-label="Navegação principal">
+            <div className="sidebar-control">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600">Área do aluno</p>
+                <p className="text-xs text-slate-500 truncate">Rotina de aprovação</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed(value => !value)}
+                className="sidebar-toggle"
+                aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+              >
+                {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+              </button>
+            </div>
             <button
               id="tab-home-trigger"
               onClick={() => setActiveTab('home')}
@@ -216,9 +238,10 @@ export default function App() {
                   ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
               }`}
+              aria-current={activeTab === 'home' ? 'page' : undefined}
             >
               <HomeIcon className="w-4 h-4" />
-              <span>Início (Configurar)</span>
+              <span>Início</span>
             </button>
 
             <button
@@ -229,9 +252,10 @@ export default function App() {
                   ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
               }`}
+              aria-current={activeTab === 'study' ? 'page' : undefined}
             >
               <BookOpen className="w-4 h-4" />
-              <span>1. Estudar (Pareto)</span>
+              <span>Estudar</span>
             </button>
             
             <button
@@ -242,9 +266,10 @@ export default function App() {
                   ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
               }`}
+              aria-current={activeTab === 'quiz' ? 'page' : undefined}
             >
               <Sparkles className="w-4 h-4" />
-              <span>2. Simulado</span>
+              <span>Simulado</span>
             </button>
 
             <button
@@ -255,19 +280,34 @@ export default function App() {
                   ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
               }`}
+              aria-current={activeTab === 'schedule' ? 'page' : undefined}
             >
               <Calendar className="w-4 h-4" />
-              <span>3. Cronograma Ativo</span>
+              <span>Cronograma</span>
             </button>
-          </div>
-        )}
+
+            <button
+              id="tab-performance-trigger"
+              onClick={() => setActiveTab('performance')}
+              className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs lg:text-sm font-bold transition-all cursor-pointer grow md:grow-0 whitespace-nowrap ${
+                activeTab === 'performance'
+                  ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+              }`}
+              aria-current={activeTab === 'performance' ? 'page' : undefined}
+            >
+              <ChartNoAxesCombined className="w-4 h-4" />
+              <span>Desempenho</span>
+            </button>
+          </nav>
 
         {/* Tab Content Rendering */}
-        <div className="flex-grow transition-all duration-300">
+        <div className="app-content flex-grow transition-all duration-300">
           {activeTab === 'home' && <HomeTab onPlanGenerated={handlePlanGenerated} />}
           {activeTab === 'study' && <StudyTab />}
           {activeTab === 'quiz' && <QuizTab />}
           {activeTab === 'schedule' && <ScheduleTab />}
+          {activeTab === 'performance' && <PerformanceTab />}
         </div>
       </main>
 

@@ -1,7 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { initialScheduleWeeks } from '../data/scheduleData';
 import { scheduleApi } from '../services/api';
-import { Calendar, CheckSquare, Clock, BookOpen, AlertTriangle, Play, HelpCircle, Trophy } from 'lucide-react';
+import { Calendar, Check, Clock, AlertTriangle, Trophy, ChevronDown } from 'lucide-react';
+
+const durationInMinutes = (duration: string) => {
+  const hours = Number(duration.match(/(\d+)h/)?.[1] || 0);
+  const minutes = Number(duration.match(/(?:(?:\d+)h)?(\d+)(?:min)?$/)?.[1] || 0);
+  return hours * 60 + minutes;
+};
 
 export default function ScheduleTab() {
   const [weeks, setWeeks] = useState(() => {
@@ -33,7 +39,17 @@ export default function ScheduleTab() {
     return baseWeeks;
   });
 
-  const [activeWeekId, setActiveWeekId] = useState<string>('all');
+  const [activeWeekId, setActiveWeekId] = useState<string>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return weeks[0]?.id || 'all';
+    }
+    return 'all';
+  });
+  const [expandedBlocks, setExpandedBlocks] = useState<Record<string, boolean>>({});
+
+  const toggleBlockDetails = (blockId: string) => {
+    setExpandedBlocks(current => ({ ...current, [blockId]: !current[blockId] }));
+  };
 
   // Load correct custom weeks on mount
   useEffect(() => {
@@ -57,6 +73,26 @@ export default function ScheduleTab() {
         done: !!parsedState[block.id]
       }))
     })));
+
+    const config = localStorage.getItem('study_config');
+    if (config) {
+      try {
+        const { studyPlanId } = JSON.parse(config);
+        if (studyPlanId && !String(studyPlanId).startsWith('local-')) {
+          scheduleApi.getProgress(studyPlanId).then(remoteProgress => {
+            const completed = new Set(
+              remoteProgress.filter(item => Boolean(item.is_completed)).map(item => String(item.block_id))
+            );
+            setWeeks(current => current.map(week => ({
+              ...week,
+              blocks: week.blocks.map(block => ({ ...block, done: completed.has(String(block.id)) }))
+            })));
+          }).catch(error => console.warn('Progresso remoto indisponível; usando cache local.', error));
+        }
+      } catch (error) {
+        console.warn('Configuração local inválida.', error);
+      }
+    }
   }, []);
 
   // Sync checkboxes to localStorage as a key-value object of blockId -> boolean
@@ -148,7 +184,7 @@ export default function ScheduleTab() {
 
     weeks.forEach(week => {
       week.blocks.forEach(block => {
-        const hours = parseInt(block.duration) || 0;
+        const hours = durationInMinutes(block.duration) / 60;
         totalBlocks++;
         totalHours += hours;
 
@@ -185,10 +221,10 @@ export default function ScheduleTab() {
           <div className="space-y-1">
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
               <Calendar className="w-5 h-5 text-indigo-500" />
-              Cronograma de Estudos de Reta Final
+              Seu cronograma
             </h2>
             <p className="text-xs text-slate-500">
-              Planejamento focado em subtópicos quentes de Pareto até o dia da prova ({examConfig.examDateStr}), baseado no edital de {examConfig.courseName}.
+              Acompanhe suas metas até a prova em {examConfig.examDateStr}.
             </p>
           </div>
 
@@ -206,16 +242,16 @@ export default function ScheduleTab() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-indigo-50/50 p-3 rounded-xl border border-indigo-100 text-center">
+          <div className="schedule-stats grid grid-cols-3 gap-3">
+            <div className="schedule-stat-total bg-indigo-50/50 p-3 rounded-xl border border-indigo-100 text-center">
               <span className="text-[10px] text-indigo-800 font-bold block uppercase tracking-wider">Carga Horária Total</span>
               <span className="text-lg font-extrabold text-indigo-900 font-mono">{stats.totalHours}h</span>
             </div>
-            <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100 text-center">
+            <div className="schedule-stat-studied bg-emerald-50/50 p-3 rounded-xl border border-emerald-100 text-center">
               <span className="text-[10px] text-emerald-800 font-bold block uppercase tracking-wider">Horas Estudadas</span>
               <span className="text-lg font-extrabold text-emerald-900 font-mono">{stats.completedHours}h</span>
             </div>
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
+            <div className="schedule-stat-goals bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
               <span className="text-[10px] text-slate-500 font-bold block uppercase tracking-wider">Metas Cumpridas</span>
               <span className="text-lg font-extrabold text-slate-800 font-mono">{stats.completedBlocks} / {stats.totalBlocks}</span>
             </div>
@@ -223,7 +259,7 @@ export default function ScheduleTab() {
         </div>
 
         {/* Tactical Banner */}
-        <div className="bg-indigo-900 text-white p-6 rounded-2xl shadow-sm border border-indigo-800 flex flex-col justify-between relative overflow-hidden">
+        <div className="schedule-tip bg-indigo-900 text-white p-6 rounded-2xl shadow-sm border border-indigo-800 flex flex-col justify-between relative overflow-hidden">
           <div className="absolute -right-10 -bottom-10 opacity-5">
             <Trophy className="w-48 h-48" />
           </div>
@@ -271,7 +307,7 @@ export default function ScheduleTab() {
       </div>
 
       {/* Week Timeline and study goals */}
-      <div className="space-y-6">
+      <div className="schedule-weeks-grid space-y-6">
         {filteredWeeks.map(week => {
           const completedInWeek = week.blocks.filter(b => b.done).length;
           const totalInWeek = week.blocks.length;
@@ -292,11 +328,11 @@ export default function ScheduleTab() {
                     </span>
                     <h3 className="font-bold text-sm lg:text-base text-slate-800">{week.title}</h3>
                   </div>
-                  <p className="text-xs text-slate-500 leading-relaxed">{week.focus}</p>
+                  <p className="week-focus text-xs text-slate-500 leading-relaxed">{week.focus}</p>
                 </div>
 
                 {/* Week Progress */}
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="week-progress flex items-center gap-3 shrink-0">
                   <div className="text-right">
                     <span className="text-[10px] text-slate-400 block font-bold">Meta Semana</span>
                     <span className="text-xs font-bold text-slate-700">{completedInWeek} / {totalInWeek} concluídos ({weekPercentage}%)</span>
@@ -316,29 +352,41 @@ export default function ScheduleTab() {
 
               {/* Study Blocks List */}
               <div className="p-6 divide-y divide-slate-100">
-                {week.blocks.map(block => (
+                {week.blocks.map((block, blockIndex) => (
+                  <div key={block.id} className="schedule-block-wrapper">
+                  {(blockIndex === 0 || week.blocks[blockIndex - 1]?.date !== block.date) && (
+                    <div className="schedule-day-header py-4 first:pt-2 flex items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-sm font-extrabold text-indigo-900 capitalize">{block.day || 'Dia de estudo'}</h4>
+                        <p className="text-xs text-slate-500">{block.date}</p>
+                      </div>
+                      <span className="text-xs font-bold text-slate-500 bg-slate-100 rounded-full px-3 py-1">
+                        {(week.blocks.filter(item => item.date === block.date).reduce((total, item) => total + durationInMinutes(item.duration), 0) / 60).toLocaleString('pt-BR')}h planejadas
+                      </span>
+                    </div>
+                  )}
                   <div 
-                    key={block.id} 
                     id={`block-row-${block.id}`}
                     className={`py-4 first:pt-0 last:pb-0 flex flex-col md:flex-row items-start justify-between gap-4 transition-colors ${
                       block.done ? 'bg-slate-50/10' : ''
                     }`}
                   >
                     {/* Checkbox and core title */}
-                    <div className="flex items-start gap-4 grow">
+                    <div className="schedule-task-main flex items-start gap-4 grow min-w-0">
                       <button
                         id={`chk-${block.id}`}
                         onClick={() => toggleBlock(week.id, block.id)}
-                        className={`mt-1 w-5 h-5 rounded border flex items-center justify-center transition-all cursor-pointer ${
+                        aria-label={block.done ? `Marcar ${block.title} como pendente` : `Marcar ${block.title} como concluído`}
+                        className={`checklist-control mt-0.5 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer ${
                           block.done 
                             ? 'bg-emerald-600 border-emerald-600 text-white' 
                             : 'border-slate-300 hover:border-slate-400 bg-white'
                         }`}
                       >
-                        {block.done && <CheckSquare className="w-4.5 h-4.5 text-white" />}
+                        {block.done && <Check className="w-4 h-4 text-white" strokeWidth={3} />}
                       </button>
 
-                      <div className="space-y-1.5">
+                      <div className="space-y-1.5 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className={`text-sm font-bold ${block.done ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
                             {block.title}
@@ -349,8 +397,22 @@ export default function ScheduleTab() {
                           </span>
                         </div>
 
+                        <button
+                          type="button"
+                          onClick={() => toggleBlockDetails(block.id)}
+                          aria-expanded={!!expandedBlocks[block.id]}
+                          aria-controls={`block-details-${block.id}`}
+                          className="block-details-toggle text-sm font-semibold text-indigo-700 items-center gap-1"
+                        >
+                          {expandedBlocks[block.id] ? 'Ocultar atividades' : 'Ver atividades'}
+                          <ChevronDown className={`w-4 h-4 transition-transform ${expandedBlocks[block.id] ? 'rotate-180' : ''}`} />
+                        </button>
+
                         {/* List of subtopics */}
-                        <div className="flex flex-wrap gap-1.5">
+                        <div
+                          id={`block-details-${block.id}`}
+                          className={`block-subtopics flex flex-wrap gap-1.5 ${expandedBlocks[block.id] ? 'is-expanded' : ''}`}
+                        >
                           {block.subtopics.map((sub, index) => (
                             <span 
                               key={index} 
@@ -368,7 +430,7 @@ export default function ScheduleTab() {
                     </div>
 
                     {/* Methodology information */}
-                    <div className="flex md:flex-col items-center md:items-end justify-between md:justify-center w-full md:w-auto shrink-0 gap-2 border-t md:border-t-0 border-slate-100 pt-2 md:pt-0">
+                    <div className={`block-methodology flex md:flex-col items-center md:items-end justify-between md:justify-center w-full md:w-auto shrink-0 gap-2 border-t md:border-t-0 border-slate-100 pt-2 md:pt-0 ${expandedBlocks[block.id] ? 'is-expanded' : ''}`}>
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Método de Estudo</span>
                       <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
                         block.done
@@ -378,6 +440,7 @@ export default function ScheduleTab() {
                         {block.methodology}
                       </span>
                     </div>
+                  </div>
                   </div>
                 ))}
               </div>
