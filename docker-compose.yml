@@ -14,7 +14,7 @@ services:
       timeout: 3s
       retries: 10
   api:
-    build: ./backend-java
+    build: ./backend
     environment:
       DATABASE_URL: jdbc:postgresql://postgres:5432/gabarita
       DATABASE_USER: gabarita
