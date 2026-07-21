@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Archive, ArchiveRestore, Check, Clock3, Copy, History, LoaderCircle, Pencil, Play,
-  RefreshCw, Trash2, X, CalendarDays, FolderOpen
+  Check, Clock3, Copy, History, LoaderCircle, Pencil, Play,
+  Trash2, X, CalendarDays, FolderOpen
 } from 'lucide-react';
 import { StudyPlan, studyPlansApi } from '../services/api';
 
@@ -9,6 +9,7 @@ interface PlanManagerProps {
   refreshKey?: number;
   onActivated?: (courseId: string) => void;
   onEdit?: (courseId: string) => void;
+  onDeleted?: (courseId: string) => void;
 }
 
 const courseLabel = (plan: StudyPlan) => {
@@ -25,11 +26,10 @@ const examDate = (plan: StudyPlan) => {
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(new Date(`${value}T00:00:00Z`));
 };
 
-export default function PlanManager({ refreshKey, onActivated, onEdit }: PlanManagerProps) {
+export default function PlanManager({ refreshKey, onActivated, onEdit, onDeleted }: PlanManagerProps) {
   const [plans, setPlans] = useState<StudyPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [includeArchived, setIncludeArchived] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [history, setHistory] = useState<Record<string, unknown>[] | null>(null);
   const [historyTitle, setHistoryTitle] = useState('');
@@ -38,14 +38,14 @@ export default function PlanManager({ refreshKey, onActivated, onEdit }: PlanMan
     setLoading(true);
     setError('');
     try {
-      setPlans(await studyPlansApi.getAll(includeArchived));
+      setPlans(await studyPlansApi.getAll(false));
     } catch (requestError) {
       console.error(requestError);
       setError('Não foi possível carregar os planos salvos no servidor.');
     } finally {
       setLoading(false);
     }
-  }, [includeArchived]);
+  }, []);
 
   useEffect(() => { loadPlans(); }, [loadPlans, refreshKey]);
 
@@ -68,15 +68,12 @@ export default function PlanManager({ refreshKey, onActivated, onEdit }: PlanMan
     await studyPlansApi.duplicate(plan.id, `${plan.title} — cópia`);
   });
 
-  const archive = (plan: StudyPlan) => {
-    if (window.confirm(`Arquivar o plano "${plan.title}"? Ele poderá ser consultado depois.`)) {
-      run(plan.id, () => studyPlansApi.archive(plan.id));
-    }
-  };
-
   const remove = (plan: StudyPlan) => {
     if (window.confirm(`Excluir definitivamente o plano "${plan.title}" e seus dados relacionados?`)) {
-      run(plan.id, () => studyPlansApi.delete(plan.id));
+      onDeleted?.(plan.course_id || plan.courseId || '');
+      run(plan.id, async () => {
+        await studyPlansApi.delete(plan.id);
+      });
     }
   };
 
@@ -92,22 +89,13 @@ export default function PlanManager({ refreshKey, onActivated, onEdit }: PlanMan
   };
 
   return (
-    <section className="plan-manager space-y-4" aria-labelledby="server-plans-title">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+    <section className="plan-manager plan-manager-layout space-y-5" aria-labelledby="server-plans-title">
+      <div>
         <div>
           <h3 id="server-plans-title" className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
-            <FolderOpen className="w-5 h-5 text-indigo-600" /> Meus planos de estudo
+            <FolderOpen className="w-5 h-5 text-indigo-600" /> Planos
           </h3>
-          <p className="text-sm text-slate-500 mt-1">Ative, edite, duplique ou arquive seus cronogramas em um só lugar.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer min-h-11 px-3 rounded-xl bg-white border border-slate-200">
-            <input type="checkbox" checked={includeArchived} onChange={event => setIncludeArchived(event.target.checked)} className="w-4 h-4 accent-indigo-600" />
-            Ver arquivados
-          </label>
-          <button onClick={loadPlans} aria-label="Atualizar planos" className="w-11 h-11 min-h-11 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-indigo-700">
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <p className="text-sm text-slate-500 mt-1">Seus estudos salvos e prontos para continuar.</p>
         </div>
       </div>
 
@@ -122,32 +110,28 @@ export default function PlanManager({ refreshKey, onActivated, onEdit }: PlanMan
           <p className="text-sm text-slate-500">Configure um concurso acima para criar seu primeiro plano.</p>
         </div>
       ) : (
-        <div className="plan-card-grid grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div className="plan-list grid grid-cols-1 gap-3">
           {plans.map(plan => {
             const active = Boolean(plan.is_primary || plan.is_active);
-            const archived = plan.status === 'ARCHIVED';
             const busy = busyId === plan.id;
             return (
-              <article key={plan.id} className={`bg-white border rounded-2xl p-4 sm:p-5 ${active ? 'border-indigo-300 ring-1 ring-indigo-100' : 'border-slate-200'}`}>
-                <div className="flex items-start justify-between gap-3">
+              <article key={plan.id} className={`plan-row bg-white border rounded-2xl p-4 sm:p-5 ${active ? 'border-indigo-300 ring-1 ring-indigo-100' : 'border-slate-200'}`}>
+                <div className="plan-summary flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap gap-2 mb-2">
                       {active && <span className="inline-flex items-center gap-1 text-xs font-bold rounded-full bg-indigo-100 text-indigo-700 px-2 py-1"><Check className="w-3 h-3" /> Principal</span>}
-                      {archived && <span className="text-xs font-bold rounded-full bg-slate-100 text-slate-600 px-2 py-1">Arquivado</span>}
                     </div>
                     <h4 className="font-bold text-slate-900 leading-snug">{plan.title}</h4>
                     <p className="text-sm text-slate-500 mt-1">{courseLabel(plan)}</p>
                   </div>
                   {busy && <LoaderCircle className="w-5 h-5 text-indigo-600 animate-spin shrink-0" />}
                 </div>
-                <div className="flex items-center gap-2 mt-4 text-sm text-slate-600"><CalendarDays className="w-4 h-4" /> Prova: {examDate(plan)}</div>
-                <div className="plan-actions flex gap-2 mt-4 pt-4 border-t border-slate-100 overflow-x-auto md:overflow-visible md:flex-wrap">
-                  {!active && !archived && <button disabled={busy} onClick={() => activate(plan)} className="plan-action primary"><Play className="w-4 h-4" /> Ativar</button>}
-                  {!archived && <button disabled={busy} onClick={() => onEdit?.(plan.course_id || plan.courseId || '')} className="plan-action"><Pencil className="w-4 h-4" /> Editar</button>}
-                  {!archived && <button disabled={busy} onClick={() => duplicate(plan)} className="plan-action"><Copy className="w-4 h-4" /> Duplicar</button>}
+                <div className="plan-date flex items-center gap-2 text-sm text-slate-600"><CalendarDays className="w-4 h-4 shrink-0" /> <span>Prova: {examDate(plan)}</span></div>
+                <div className="plan-actions">
+                  {!active && <button disabled={busy} onClick={() => activate(plan)} className="plan-action primary"><Play className="w-4 h-4" /> Ativar</button>}
+                  <button disabled={busy} onClick={() => onEdit?.(plan.course_id || plan.courseId || '')} className="plan-action"><Pencil className="w-4 h-4" /> Reconfigurar</button>
+                  <button disabled={busy} onClick={() => duplicate(plan)} className="plan-action"><Copy className="w-4 h-4" /> Duplicar</button>
                   <button disabled={busy} onClick={() => showHistory(plan)} className="plan-action"><History className="w-4 h-4" /> Histórico</button>
-                  {!archived && <button disabled={busy} onClick={() => archive(plan)} className="plan-action"><Archive className="w-4 h-4" /> Arquivar</button>}
-                  {archived && <button disabled={busy} onClick={() => run(plan.id, () => studyPlansApi.restore(plan.id))} className="plan-action primary"><ArchiveRestore className="w-4 h-4" /> Restaurar</button>}
                   <button disabled={busy} onClick={() => remove(plan)} className="plan-action danger"><Trash2 className="w-4 h-4" /> Excluir</button>
                 </div>
               </article>

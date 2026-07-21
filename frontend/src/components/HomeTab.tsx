@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, MouseEvent } from 'react';
 import { COURSES_CONFIG, generateCustomPlan } from '../data/generator';
 import { API_BASE_URL, studyPlansApi, scheduleApi, questionsApi } from '../services/api';
-import PlanManager from './PlanManager';
 import { 
   Calendar, 
   Clock, 
@@ -13,32 +12,60 @@ import {
   Info, 
   HeartPulse, 
   GraduationCap, 
-  CheckCircle, 
   ArrowLeft, 
+  ArrowRight,
   Trash2, 
   Play, 
-  Check 
+  Check,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
+
+const getTodayIso = () => {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+};
+
+const EXAM_BOARDS = ['CEBRASPE', 'FGV', 'FCC', 'VUNESP', 'Instituto AOCP', 'IBFC', 'IDECAN', 'Quadrix'];
+
+const ROLE_OPTIONS = [
+  { value: 'seplag_informatica', label: 'Especialista em Gestão Pública - Tecnologia da Informação' },
+  { value: 'seplag_informatica', label: 'Analista de Tecnologia da Informação' },
+  { value: 'seplag_informatica', label: 'Desenvolvedor de Sistemas' },
+  { value: 'tecnico_enfermagem', label: 'Técnico em Enfermagem' },
+  { value: 'tecnico_enfermagem', label: 'Enfermeiro' },
+  { value: 'jornalismo', label: 'Jornalista / Analista de Comunicação' },
+  { value: 'jornalismo', label: 'Assessor de Comunicação' },
+];
+
+const subtopicKey = (topicId: string, subtopic: string) => `${topicId}::${subtopic}`;
 
 interface HomeTabProps {
   onPlanGenerated: (courseId: string) => void;
+  onPlansChanged?: () => void;
 }
 
-export default function HomeTab({ onPlanGenerated }: HomeTabProps) {
+export default function HomeTab({ onPlanGenerated, onPlansChanged }: HomeTabProps) {
   const [screen, setScreen] = useState<'selection' | 'configure'>('selection');
+  const [configStep, setConfigStep] = useState(1);
   const [selectedCourse, setSelectedCourse] = useState<string>('jornalismo');
 
   // Configuration States (loaded dynamically per course when configuring)
-  const [examDate, setExamDate] = useState<string>('2026-08-15');
+  const [examDate, setExamDate] = useState<string>(getTodayIso);
+  const [examBoard, setExamBoard] = useState<string>('CEBRASPE');
+  const [targetRole, setTargetRole] = useState<string>('Jornalista / Analista de Comunicação');
   const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([1, 2, 3, 4, 5]); // Monday to Friday
   const [hoursPerDayInput, setHoursPerDayInput] = useState<string>('4');
   const [hoursByWeekday, setHoursByWeekday] = useState<Record<number, number>>({});
   const [blockMinutes, setBlockMinutes] = useState<number>(60);
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
+  const [selectedSubtopicIds, setSelectedSubtopicIds] = useState<string[]>([]);
+  const [expandedTopicIds, setExpandedTopicIds] = useState<string[]>([]);
 
   // List of active plans stats
   const [savedPlans, setSavedPlans] = useState<{ [key: string]: any }>({});
-  const [serverPlansRefreshKey, setServerPlansRefreshKey] = useState(0);
+  const hasSavedPlans = Object.keys(savedPlans).length > 0;
 
   const weekdayOptions = [
   { label: 'Seg', value: 1 },
@@ -66,9 +93,9 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
     return !(isLocalhost && /^https?:\/\//.test(API_BASE_URL));
   };
 
-  // Helper to calculate matching study days between today (July 2, 2026) and exam date
+  // Calculate the available study days from the user's current date.
   const calculateStudyDays = (examDateStr: string, weekdays: number[]): number => {
-    const today = new Date('2026-07-02');
+    const today = new Date(`${getTodayIso()}T00:00:00`);
     const exam = new Date(examDateStr);
     if (exam < today || weekdays.length === 0) return 0;
     
@@ -85,12 +112,17 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
 
   const getCoursePlanStats = (courseId: string) => {
     const configSaved = localStorage.getItem(`${courseId}_study_config`);
-    if (!configSaved) return null;
+    const sectionsSaved = localStorage.getItem(`${courseId}_study_sections`);
+    const questionsSaved = localStorage.getItem(`${courseId}_quiz_questions`);
+    const weeksSaved = localStorage.getItem(`${courseId}_schedule_weeks`);
+    if (!configSaved || !sectionsSaved || !questionsSaved || !weeksSaved) return null;
 
     let examDateStr = '';
     let hoursPerDayNum = 0;
     let totalDaysNum = 0;
     let weekdaysArr: number[] = [];
+    let examBoardStr = '';
+    let targetRoleStr = '';
 
     try {
       const parsed = JSON.parse(configSaved);
@@ -98,20 +130,19 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
       hoursPerDayNum = parsed.hoursPerDay;
       totalDaysNum = parsed.totalDays;
       weekdaysArr = parsed.selectedWeekdays || [1, 2, 3, 4, 5];
+      examBoardStr = parsed.examBoard || 'CEBRASPE';
+      targetRoleStr = parsed.targetRole || '';
     } catch (e) {}
 
     let totalBlocks = 0;
     let completedBlocks = 0;
 
-    const weeksSaved = localStorage.getItem(`${courseId}_schedule_weeks`);
-    if (weeksSaved) {
-      try {
-        const weeks = JSON.parse(weeksSaved);
-        weeks.forEach((w: any) => {
-          totalBlocks += (w.blocks || []).length;
-        });
-      } catch (e) {}
-    }
+    try {
+      const weeks = JSON.parse(weeksSaved);
+      weeks.forEach((w: any) => {
+        totalBlocks += (w.blocks || []).length;
+      });
+    } catch (e) {}
 
     const progressSaved = localStorage.getItem(`${courseId}_study_schedule_progress`);
     if (progressSaved) {
@@ -126,6 +157,8 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
       hoursPerDay: hoursPerDayNum,
       totalDays: totalDaysNum,
       selectedWeekdays: weekdaysArr,
+      examBoard: examBoardStr,
+      targetRole: targetRoleStr,
       totalBlocks,
       completedBlocks,
       percentage: totalBlocks > 0 ? Math.round((completedBlocks / totalBlocks) * 100) : 0
@@ -133,6 +166,10 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
   };
 
   const loadSavedPlans = () => {
+    if (localStorage.getItem('study_plan_deleted') === 'true') {
+      setSavedPlans({});
+      return;
+    }
     const plans: { [key: string]: any } = {};
     ['seplag_informatica', 'tecnico_enfermagem', 'jornalismo'].forEach(courseId => {
       const stats = getCoursePlanStats(courseId);
@@ -145,6 +182,55 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
 
   useEffect(() => {
     loadSavedPlans();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    studyPlansApi.getAll(false).then(remotePlans => {
+      if (cancelled || localStorage.getItem('study_plan_deleted') === 'true') return;
+
+      const remoteIds = new Set(remotePlans.map(plan => String(plan.id)));
+      const staleCourses = ['seplag_informatica', 'tecnico_enfermagem', 'jornalismo'].filter(courseId => {
+        const rawConfig = localStorage.getItem(`${courseId}_study_config`);
+        if (!rawConfig) return false;
+        try {
+          const planId = JSON.parse(rawConfig).studyPlanId;
+          return Boolean(planId && !String(planId).startsWith('local-') && !remoteIds.has(String(planId)));
+        } catch {
+          return false;
+        }
+      });
+
+      if (staleCourses.length === 0) return;
+
+      staleCourses.forEach(courseId => {
+        [
+          'study_sections', 'quiz_questions', 'schedule_weeks', 'study_config',
+          'study_schedule_progress', 'quiz_answers'
+        ].forEach(key => localStorage.removeItem(`${courseId}_${key}`));
+      });
+
+      if (staleCourses.includes(localStorage.getItem('active_course') || '')) {
+        [
+          'active_course', 'custom_study_sections', 'custom_quiz_questions',
+          'custom_schedule_weeks', 'study_config', 'study_schedule_progress',
+          'quiz_answers', 'quiz_answer_history', 'quiz_answer_events',
+          'active_quiz_questions_cache'
+        ].forEach(key => localStorage.removeItem(key));
+      }
+
+      const stillHasLocalPlan = ['seplag_informatica', 'tecnico_enfermagem', 'jornalismo']
+        .some(courseId => localStorage.getItem(`${courseId}_study_config`));
+      if (!stillHasLocalPlan) localStorage.setItem('study_plan_deleted', 'true');
+
+      loadSavedPlans();
+      onPlansChanged?.();
+    }).catch(() => {
+      // Keep offline/local plans intact when the API cannot be reached.
+    });
+
+    return () => { cancelled = true; };
   }, []);
 
   // Compute live study days on configuration screen
@@ -195,36 +281,47 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
   const handleOpenConfigure = (courseId: string) => {
     setSelectedCourse(courseId);
     const config = COURSES_CONFIG[courseId];
+    const defaultRole = ROLE_OPTIONS.find(role => role.value === courseId)?.label || config.name;
     
     // Attempt to load existing config
     const savedConfigStr = localStorage.getItem(`${courseId}_study_config`);
     if (savedConfigStr) {
       try {
         const parsed = JSON.parse(savedConfigStr);
-        setExamDate(parsed.examDate || '2026-08-15');
+        setExamDate(parsed.examDate || getTodayIso());
+        setExamBoard(parsed.examBoard || 'CEBRASPE');
+        setTargetRole(parsed.targetRole || defaultRole);
         setSelectedWeekdays(parsed.selectedWeekdays || [1, 2, 3, 4, 5]);
         setHoursPerDayInput(String(Math.max(1, parsed.hoursPerDay || 4)));
         setHoursByWeekday(parsed.hoursByWeekday || {});
         setBlockMinutes(parsed.blockMinutes || 60);
         setSelectedTopicIds(parsed.selectedTopics || config.topics.map(t => t.id));
+        setSelectedSubtopicIds(parsed.selectedSubtopics || config.topics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))));
       } catch (e) {
         // Fallbacks
-        setExamDate('2026-08-15');
+        setExamDate(getTodayIso());
+        setExamBoard('CEBRASPE');
+        setTargetRole(defaultRole);
         setSelectedWeekdays([1, 2, 3, 4, 5]);
         setHoursPerDayInput('4');
         setHoursByWeekday({});
         setBlockMinutes(60);
         setSelectedTopicIds(config.topics.map(t => t.id));
+        setSelectedSubtopicIds(config.topics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))));
       }
     } else {
       // Defaults
-      setExamDate('2026-08-15');
+      setExamDate(getTodayIso());
+      setExamBoard('CEBRASPE');
+      setTargetRole(defaultRole);
       setSelectedWeekdays([1, 2, 3, 4, 5]);
       setHoursPerDayInput('4');
       setHoursByWeekday({});
       setBlockMinutes(60);
       setSelectedTopicIds(config.topics.map(t => t.id));
+      setSelectedSubtopicIds(config.topics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))));
     }
+    setConfigStep(1);
     setScreen('configure');
   };
 
@@ -238,11 +335,43 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
   };
 
   const handleTopicToggle = (topicId: string) => {
-    setSelectedTopicIds(prev => 
-      prev.includes(topicId)
-        ? prev.filter(id => id !== topicId)
-        : [...prev, topicId]
+    const topic = activeCourseConfig.topics.find(item => item.id === topicId);
+    if (!topic) return;
+    const keys = topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic));
+    const shouldSelect = !keys.every(key => selectedSubtopicIds.includes(key));
+    setSelectedSubtopicIds(current => shouldSelect
+      ? Array.from(new Set([...current, ...keys]))
+      : current.filter(key => !keys.includes(key))
     );
+    setSelectedTopicIds(current => shouldSelect
+      ? Array.from(new Set([...current, topicId]))
+      : current.filter(id => id !== topicId)
+    );
+  };
+
+  const handleSubtopicToggle = (topicId: string, subtopic: string) => {
+    const key = subtopicKey(topicId, subtopic);
+    setSelectedSubtopicIds(current => {
+      const next = current.includes(key) ? current.filter(item => item !== key) : [...current, key];
+      const topic = activeCourseConfig.topics.find(item => item.id === topicId);
+      const topicHasSelection = topic?.subtopics.some(item => next.includes(subtopicKey(topicId, item)));
+      setSelectedTopicIds(ids => topicHasSelection
+        ? Array.from(new Set([...ids, topicId]))
+        : ids.filter(id => id !== topicId)
+      );
+      return next;
+    });
+  };
+
+  const handleRoleChange = (roleLabel: string) => {
+    const option = ROLE_OPTIONS.find(role => role.label === roleLabel);
+    if (!option) return;
+    const config = COURSES_CONFIG[option.value];
+    setTargetRole(option.label);
+    setSelectedCourse(option.value);
+    setSelectedTopicIds(config.topics.map(topic => topic.id));
+    setSelectedSubtopicIds(config.topics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))));
+    setExpandedTopicIds([]);
   };
 
   const handleCreatePlan = async () => {
@@ -256,18 +385,17 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
       return;
     }
     if (calculatedDays === 0) {
-      alert("Com as configurações escolhidas, não há dias de estudo entre hoje (02/07/2026) e o dia da prova!");
+      alert("Escolha uma data futura que contenha pelo menos um dos dias disponíveis para estudo.");
       return;
     }
     const hoursPerDay = normalizedHoursPerDay;
     setHoursPerDayInput(String(hoursPerDay));
 
-    const today = new Date('2026-07-02');
+    const today = new Date(`${getTodayIso()}T00:00:00`);
     const exam = new Date(examDate);
-    if (exam < today) {
-      if (!window.confirm("A data da prova selecionada já passou em relação à data atual simulada (02/07/2026). Deseja prosseguir mesmo assim?")) {
-        return;
-      }
+    if (exam <= today) {
+      alert("A data da prova precisa ser posterior ao dia atual.");
+      return;
     }
 
     try {
@@ -278,10 +406,12 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
         calculatedDays,
         hoursPerDay,
         selectedTopicIds,
-        selectedWeekdays
+        selectedWeekdays,
+        selectedSubtopicIds
       );
 
       if (result.success) {
+        localStorage.removeItem('study_plan_deleted');
         let scheduleWeeks = result.weeks;
         let studyPlanId: string | null = null;
 
@@ -304,7 +434,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
 
             const planPayload = {
               courseId: selectedCourse,
-              title: activeCourseConfig.name,
+              title: targetRole.trim() || activeCourseConfig.name,
               examDate,
               hoursPerDay,
               daysPerWeek: selectedWeekdays.length,
@@ -342,12 +472,15 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
         localStorage.setItem(`${selectedCourse}_schedule_weeks`, JSON.stringify(scheduleWeeks));
         localStorage.setItem(`${selectedCourse}_study_config`, JSON.stringify({
           examDate,
+          examBoard,
+          targetRole,
           totalDays: calculatedDays,
           hoursPerDay,
           selectedWeekdays,
           hoursByWeekday,
           blockMinutes,
           selectedTopics: selectedTopicIds,
+          selectedSubtopics: selectedSubtopicIds,
           studyPlanId
         }));
         localStorage.removeItem(`${selectedCourse}_study_schedule_progress`);
@@ -360,12 +493,15 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
         localStorage.setItem('custom_schedule_weeks', JSON.stringify(scheduleWeeks));
         localStorage.setItem('study_config', JSON.stringify({
           examDate,
+          examBoard,
+          targetRole,
           totalDays: calculatedDays,
           hoursPerDay,
           selectedWeekdays,
           hoursByWeekday,
           blockMinutes,
           selectedTopics: selectedTopicIds,
+          selectedSubtopics: selectedSubtopicIds,
           studyPlanId
         }));
         localStorage.removeItem('study_schedule_progress');
@@ -378,7 +514,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
 
         // Reload saved plans list
         loadSavedPlans();
-        setServerPlansRefreshKey(key => key + 1);
+        onPlansChanged?.();
 
         // Trigger callback in parent component to switch to Study Summaries
         onPlanGenerated(selectedCourse);
@@ -423,6 +559,28 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
     }
   };
 
+  const clearLocalPlan = (courseId: string) => {
+    [
+      'study_sections', 'quiz_questions', 'schedule_weeks', 'study_config',
+      'study_schedule_progress', 'quiz_answers'
+    ].forEach(key => localStorage.removeItem(`${courseId}_${key}`));
+
+    if (localStorage.getItem('active_course') === courseId) {
+      [
+        'active_course', 'custom_study_sections', 'custom_quiz_questions',
+        'custom_schedule_weeks', 'study_config', 'study_schedule_progress',
+        'quiz_answers', 'quiz_answer_history', 'quiz_answer_events',
+        'active_quiz_questions_cache'
+      ].forEach(key => localStorage.removeItem(key));
+    }
+
+    const stillHasPlan = ['seplag_informatica', 'tecnico_enfermagem', 'jornalismo']
+      .some(id => localStorage.getItem(`${id}_study_config`));
+    if (!stillHasPlan) localStorage.setItem('study_plan_deleted', 'true');
+    loadSavedPlans();
+    onPlansChanged?.();
+  };
+
   const handleDeletePlan = async (courseId: string, e: MouseEvent) => {
     e.stopPropagation(); // Avoid triggering card click
     if (window.confirm("Deseja realmente excluir este plano de estudos? Seu progresso e histórico serão perdidos de forma irreversível.")) {
@@ -447,28 +605,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
           }
         }
 
-        // Clear localStorage
-        localStorage.removeItem(`${courseId}_study_sections`);
-        localStorage.removeItem(`${courseId}_quiz_questions`);
-        localStorage.removeItem(`${courseId}_schedule_weeks`);
-        localStorage.removeItem(`${courseId}_study_config`);
-        localStorage.removeItem(`${courseId}_study_schedule_progress`);
-        localStorage.removeItem(`${courseId}_quiz_answers`);
-
-        // If this was the active course, clean active keys
-        const active = localStorage.getItem('active_course');
-        if (active === courseId) {
-          localStorage.removeItem('active_course');
-          localStorage.removeItem('custom_study_sections');
-          localStorage.removeItem('custom_quiz_questions');
-          localStorage.removeItem('custom_schedule_weeks');
-          localStorage.removeItem('study_config');
-          localStorage.removeItem('study_schedule_progress');
-          localStorage.removeItem('quiz_answers');
-        }
-
-        loadSavedPlans();
-        setServerPlansRefreshKey(key => key + 1);
+        clearLocalPlan(courseId);
       } catch (error) {
         console.error('Error deleting study plan:', error);
         alert('Erro ao excluir plano de estudo. Tente novamente.');
@@ -482,112 +619,44 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
     <div id="home-tab-container" className="space-y-8 animate-fade-in">
       
       {screen === 'selection' ? (
-        <>
-          {/* Banner Principal */}
-          <div className="home-hero bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-8 rounded-3xl shadow-md border border-indigo-900 relative overflow-hidden">
-            <div className="relative z-10 max-w-5xl space-y-4">
-              <span className="px-3 py-1 text-xs font-bold bg-white/10 text-blue-50 rounded-full inline-flex items-center gap-1 border border-white/10">
-                <Sparkles className="w-3.5 h-3.5" />
-                Gabarita Concursos • Planejamento Inteligente
-              </span>
-              <h2 className="text-2xl lg:text-4xl font-black tracking-tight leading-tight text-white">
-                Organize sua reta final com um plano claro, revisões e questões no mesmo fluxo.
-              </h2>
-              <p className="text-sm lg:text-base text-slate-300 leading-relaxed">
-                Escolha o concurso, defina sua disponibilidade e acompanhe estudos, cronograma, simulados e desempenho sem perder o foco.
-              </p>
+        <div className="home-selection-flow space-y-8">
+          {!hasSavedPlans && (
+            <div className="home-hero text-white p-8 rounded-3xl shadow-md border relative overflow-hidden">
+              <div className="relative z-10 max-w-5xl space-y-4">
+                <span className="px-3 py-1 text-xs font-bold bg-white/10 text-blue-50 rounded-full inline-flex items-center gap-1 border border-white/10">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Gabarita Concursos • plano mínimo
+                </span>
+                <h2 className="text-2xl lg:text-4xl font-black tracking-tight leading-tight text-white">
+                  Menos tela. Mais decisão.
+                </h2>
+                <p className="text-sm lg:text-base text-slate-300 leading-relaxed">
+                  Escolha o concurso, defina disponibilidade e deixe o restante virar uma rotina visível: leitura, questões, calendário e desempenho.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Seção 1: Escolha de Especialidade */}
-          <div className="space-y-4">
+          <div className="home-course-section space-y-4">
             <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
               <Settings2 className="w-5 h-5 text-indigo-600" />
-              Qual concurso você vai estudar?
+              {hasSavedPlans ? 'Criar um novo plano' : 'Comece seu plano'}
             </h3>
 
-            <div className="course-grid grid grid-cols-1 md:grid-cols-3 gap-6">
-              
-              {/* Card Informática */}
-              <div className="course-card bg-white p-6 rounded-2xl border border-slate-200 hover:border-indigo-300 transition-all shadow-xs flex flex-col justify-between">
-                <div className="space-y-3">
-                  <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                    <GraduationCap className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h4 className="font-extrabold text-slate-800 text-base">Informática</h4>
-                    <p className="text-xs text-slate-400 mt-1">SEPLAG AL - Especialista em Gestão Pública</p>
-                  </div>
-                  <p className="text-sm text-slate-600">
-                    Foco completo em Engenharia de Software, DevOps, Banco de Dados Relacional e NoSQL, Redes e Legislação específica de Alagoas.
-                  </p>
-                </div>
-                <div className="pt-4 border-t border-slate-100 flex gap-2">
-                  <button
-                    onClick={() => handleOpenConfigure('seplag_informatica')}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-2.5 px-4 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    <Settings2 className="w-3.5 h-3.5" />
-                    {savedPlans.seplag_informatica ? 'Reconfigurar' : 'Configurar Plano'}
-                  </button>
-                </div>
+            <div className="create-plan-entry bg-white border border-slate-200 p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+              <div className="max-w-2xl">
+                <h4 className="text-xl font-bold">Plano personalizado</h4>
+                <p className="text-sm text-slate-500 mt-1">Escolha banca, cargo, disponibilidade e cada assunto do edital na próxima etapa.</p>
               </div>
-
-              {/* Card Técnico Enfermagem */}
-              <div className="course-card bg-white p-6 rounded-2xl border border-slate-200 hover:border-indigo-300 transition-all shadow-xs flex flex-col justify-between">
-                <div className="space-y-3">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                    <HeartPulse className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h4 className="font-extrabold text-slate-800 text-base">Técnico em Enfermagem</h4>
-                    <p className="text-xs text-slate-400 mt-1">Concurso Saúde e Hospitais Públicos</p>
-                  </div>
-                  <p className="text-sm text-slate-600">
-                    Revisão sistemática de Fundamentos de Enfermagem, Legislação do SUS, Urgência & Emergência, Farmacologia e Deontologia COFEN.
-                  </p>
-                </div>
-                <div className="pt-4 border-t border-slate-100 flex gap-2">
-                  <button
-                    onClick={() => handleOpenConfigure('tecnico_enfermagem')}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-2.5 px-4 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    <Settings2 className="w-3.5 h-3.5" />
-                    {savedPlans.tecnico_enfermagem ? 'Reconfigurar' : 'Configurar Plano'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Card Jornalismo */}
-              <div className="course-card bg-white p-6 rounded-2xl border border-slate-200 hover:border-indigo-300 transition-all shadow-xs flex flex-col justify-between">
-                <div className="space-y-3">
-                  <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-                    <BookOpen className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h4 className="font-extrabold text-slate-800 text-base">Jornalismo</h4>
-                    <p className="text-xs text-slate-400 mt-1">Comunicação, Redação e Assessoria</p>
-                  </div>
-                  <p className="text-sm text-slate-600">
-                    Preparação focada em Assessoria de Imprensa, Teorias da Comunicação, Marco Legal de CT&I, Divulgação Científica e Ética.
-                  </p>
-                </div>
-                <div className="pt-4 border-t border-slate-100 flex gap-2">
-                  <button
-                    onClick={() => handleOpenConfigure('jornalismo')}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-2.5 px-4 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    <Settings2 className="w-3.5 h-3.5" />
-                    {savedPlans.jornalismo ? 'Reconfigurar' : 'Configurar Plano'}
-                  </button>
-                </div>
-              </div>
-
+              <button onClick={() => handleOpenConfigure('seplag_informatica')} className="create-plan-button inline-flex items-center justify-center gap-2 px-6 font-bold shrink-0">
+                <Settings2 className="w-4 h-4" /> Criar plano
+              </button>
             </div>
           </div>
 
           {/* Seção 2: Seus Planos Salvos */}
-          <div id="local-saved-plans" className="space-y-4 pt-4">
+          {hasSavedPlans && <div id="local-saved-plans" className="space-y-4 pt-4">
             <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
               <Award className="w-5 h-5 text-amber-500" />
               Seus Planos de Estudo Ativos e Salvos:
@@ -622,9 +691,8 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                             Prova em {plan.examDate.split('-').reverse().join('/')}
                           </span>
                         </div>
-                        <h4 className="font-extrabold text-slate-800 text-sm lg:text-base">
-                          {config.name}
-                        </h4>
+                        <h4 className="font-extrabold text-slate-800 text-sm lg:text-base">{plan.targetRole || config.name}</h4>
+                        <p className="text-xs font-bold text-slate-500">{plan.examBoard || 'CEBRASPE'}</p>
                         
                         <div className="text-[11px] text-slate-500 space-y-1">
                           <p className="flex items-center gap-1">
@@ -652,14 +720,21 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                         </div>
                       </div>
 
-                      <div className="flex justify-between items-center pt-2 gap-4">
+                      <div className="plan-local-actions flex flex-wrap justify-between items-center pt-2 gap-2">
                         <button
                           type="button"
-                          onClick={() => handleActivatePlan(courseId)}
+                          onClick={(event) => { event.stopPropagation(); handleActivatePlan(courseId); }}
                           className="flex items-center gap-1 bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-700 font-extrabold text-xs py-2 px-3.5 rounded-xl transition cursor-pointer"
                         >
                           <Play className="w-3.5 h-3.5" />
                           Estudar / Ativar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => { event.stopPropagation(); handleOpenConfigure(courseId); }}
+                          className="flex items-center gap-1 border border-slate-200 text-slate-700 font-extrabold text-xs py-2 px-3.5 rounded-xl"
+                        >
+                          <Settings2 className="w-3.5 h-3.5" /> Reconfigurar
                         </button>
                         
                         <button
@@ -676,14 +751,9 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                 })}
               </div>
             )}
-          </div>
+          </div>}
 
-          <PlanManager
-            refreshKey={serverPlansRefreshKey}
-            onActivated={(courseId) => courseId && handleActivatePlan(courseId)}
-            onEdit={(courseId) => courseId && handleOpenConfigure(courseId)}
-          />
-        </>
+        </div>
       ) : (
         /* Tela de Configuração do Plano */
         <div className="space-y-6 animate-fade-in">
@@ -694,23 +764,29 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
             className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 font-bold text-xs cursor-pointer transition hover:underline"
           >
             <ArrowLeft className="w-4 h-4" />
-            Voltar para a seleção de especialidades
+            Voltar para o início
           </button>
 
-          <div className="plan-stepper" aria-label="Etapas de configuração do plano">
-            {['Concurso', 'Prova', 'Disponibilidade', 'Carga horária', 'Assuntos', 'Revisão'].map((step, index) => (
-              <div key={step} className={`plan-step ${index === 0 ? 'is-active' : ''}`}>
+          <div className="plan-stepper" aria-label="Etapas de configuração do estudo">
+            {['Concurso', 'Disponibilidade', 'Assuntos', 'Revisão'].map((step, index) => (
+              <button
+                type="button"
+                key={step}
+                onClick={() => index + 1 < configStep && setConfigStep(index + 1)}
+                className={`plan-step ${index + 1 === configStep ? 'is-active' : ''} ${index + 1 < configStep ? 'is-complete' : ''}`}
+                aria-current={index + 1 === configStep ? 'step' : undefined}
+              >
                 <span className="plan-step-number">{index + 1}</span>
                 <span className="plan-step-label">{step}</span>
-              </div>
+              </button>
             ))}
           </div>
 
           {/* Grid do Formulário */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div className={`plan-config-grid grid grid-cols-1 lg:grid-cols-12 gap-8 ${configStep === 4 ? 'is-review' : ''}`}>
             
             {/* Formulário de Configuração */}
-            <div className="lg:col-span-8 space-y-6">
+            <div className="wizard-main lg:col-span-8 space-y-6">
               <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-xs space-y-6">
                 
                 {/* Header do Form */}
@@ -721,58 +797,50 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                     {selectedCourse === 'seplag_informatica' ? <GraduationCap className="w-5 h-5" /> : selectedCourse === 'tecnico_enfermagem' ? <HeartPulse className="w-5 h-5" /> : <BookOpen className="w-5 h-5" />}
                   </div>
                   <div>
-                    <h3 className="font-extrabold text-slate-850 text-base">Configurar Cronograma: {activeCourseConfig.name}</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">{activeCourseConfig.description}</p>
+                    <h3 className="font-extrabold text-slate-850 text-base">Reconfigurar o estudo</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Etapa {configStep} de 4 · {activeCourseConfig.name}</p>
                   </div>
                 </div>
 
-                {/* 1. Dia da Prova e Carga Horária */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  
-                  {/* Dia da Prova */}
-                  <div className="space-y-1.5">
-                    <label htmlFor="exam-date" className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Data da Prova:</label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                      <input
-                        id="exam-date"
-                        type="date"
-                        value={examDate}
-                        onChange={(e) => setExamDate(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2.5 pl-9 pr-3 text-xs focus:bg-white focus:ring-1 focus:ring-indigo-500 focus:border-transparent outline-none text-slate-700 font-medium"
-                      />
+                {configStep === 1 && (
+                  <div className="wizard-step-panel space-y-5">
+                    <div>
+                      <h2 className="text-xl font-bold">Dados do concurso</h2>
+                      <p className="text-sm text-slate-500 mt-1">Defina a prova que orientará todo o plano.</p>
+                    </div>
+                    <div className="contest-fields grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <label className="wizard-field space-y-1.5">
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Data da prova</span>
+                        <input id="exam-date" type="date" min={getTodayIso()} value={examDate} onChange={(e) => setExamDate(e.target.value)} className="w-full px-3 text-sm font-semibold" />
+                      </label>
+                      <label className="wizard-field space-y-1.5">
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Banca</span>
+                        <select value={examBoard} onChange={(e) => setExamBoard(e.target.value)} className="w-full px-3 text-sm font-semibold">
+                          {!EXAM_BOARDS.includes(examBoard) && <option value={examBoard}>{examBoard}</option>}
+                          {EXAM_BOARDS.map(board => <option key={board} value={board}>{board}</option>)}
+                        </select>
+                      </label>
+                      <label className="wizard-field space-y-1.5">
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Cargo</span>
+                        <select value={targetRole} onChange={(e) => handleRoleChange(e.target.value)} className="w-full px-3 text-sm font-semibold">
+                          {!ROLE_OPTIONS.some(role => role.label === targetRole) && <option value={targetRole}>{targetRole}</option>}
+                          {ROLE_OPTIONS.map(role => <option key={`${role.value}-${role.label}`} value={role.label}>{role.label}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                    <div className="wizard-course-context p-4 border border-slate-200 bg-slate-50">
+                      <p className="text-xs font-bold text-slate-500 uppercase">Concurso selecionado</p>
+                      <p className="font-bold mt-1">{activeCourseConfig.name}</p>
+                      <p className="text-sm text-slate-500 mt-1">{activeCourseConfig.description}</p>
                     </div>
                   </div>
+                )}
 
-                  {/* Horas de Estudo por Dia */}
-                  <div className="space-y-1.5">
-                    <label htmlFor="hours-per-day" className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Horas de Estudo por Dia:</label>
-                    <div className="relative">
-                      <Clock className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                      <input
-                        id="hours-per-day"
-                        type="number"
-                        inputMode="numeric"
-                        min="1"
-                        max="24"
-                        step="1"
-                        value={hoursPerDayInput}
-                        aria-describedby="hours-per-day-help"
-                        aria-invalid={hoursPerDayInput !== '' && Number(hoursPerDayInput) < 1}
-                        onChange={(e) => handleHoursPerDayChange(e.target.value)}
-                        onBlur={commitHoursPerDay}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2.5 pl-9 pr-3 text-xs focus:bg-white focus:ring-1 focus:ring-indigo-500 focus:border-transparent outline-none text-slate-700 font-mono font-bold"
-                      />
-                    </div>
-                    <p id="hours-per-day-help" className="text-[10px] text-slate-400">
-                      Mínimo de 1 hora por dia.
-                    </p>
+                {configStep === 2 && <div className="wizard-step-panel space-y-5">
+                  <div>
+                    <h2 className="text-xl font-bold">Sua disponibilidade</h2>
+                    <p className="text-sm text-slate-500 mt-1">Selecione os dias e informe quantas horas cabem em cada um.</p>
                   </div>
-
-                </div>
-
-                {/* 2. Dias da Semana de Estudo */}
-                <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Dias da semana que posso estudar:</label>
                   <div className="flex flex-wrap gap-2">
                     {weekdayOptions.map(day => {
@@ -819,28 +887,40 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                       })}
                     </div>
                   )}
-                </div>
-
-                <div className="space-y-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                    <label className="space-y-1.5">
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Horas padrão por dia</span>
+                      <input id="hours-per-day" type="number" inputMode="numeric" min="1" max="24" step="1" value={hoursPerDayInput} onChange={(e) => handleHoursPerDayChange(e.target.value)} onBlur={commitHoursPerDay} className="w-full px-3 text-sm font-bold" />
+                    </label>
+                    <div className="space-y-1.5">
                   <label htmlFor="block-duration" className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Duração de cada bloco:</label>
-                  <select id="block-duration" value={blockMinutes} onChange={event => setBlockMinutes(Number(event.target.value))} className="w-full md:w-64 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700">
+                  <select id="block-duration" value={blockMinutes} onChange={event => setBlockMinutes(Number(event.target.value))} className="w-full px-3 text-sm font-bold text-slate-700">
                     <option value="30">30 minutos</option>
                     <option value="45">45 minutos</option>
                     <option value="60">1 hora</option>
                     <option value="90">1 hora e 30 minutos</option>
                     <option value="120">2 horas</option>
                   </select>
-                  <p className="text-xs text-slate-400">O sistema alternará os assuntos até preencher as horas de cada dia.</p>
-                </div>
+                    </div>
+                  </div>
+                  <p className="text-sm font-bold text-slate-700">Total semanal: {weeklyHours} horas em {selectedWeekdays.length} dias.</p>
+                </div>}
 
                 {/* 3. Assuntos do Edital (Filtro) */}
-                <div className="space-y-3">
+                {configStep === 3 && <div className="wizard-step-panel space-y-4">
+                  <div>
+                    <h2 className="text-xl font-bold">Assuntos do edital</h2>
+                    <p className="text-sm text-slate-500 mt-1">Escolha o que fará parte da sua rotina de estudos.</p>
+                  </div>
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Selecione os Assuntos do Edital:</label>
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => setSelectedTopicIds(activeCourseConfig.topics.map(t => t.id))}
+                        onClick={() => {
+                          setSelectedTopicIds(activeCourseConfig.topics.map(topic => topic.id));
+                          setSelectedSubtopicIds(activeCourseConfig.topics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))));
+                        }}
                         className="text-[10px] text-indigo-600 font-bold hover:underline"
                       >
                         Selecionar Todos
@@ -848,7 +928,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                       <span className="text-slate-300 text-[10px]">|</span>
                       <button
                         type="button"
-                        onClick={() => setSelectedTopicIds([])}
+                        onClick={() => { setSelectedTopicIds([]); setSelectedSubtopicIds([]); }}
                         className="text-[10px] text-slate-500 font-bold hover:underline"
                       >
                         Limpar Todos
@@ -856,60 +936,99 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="subject-accordion space-y-2">
                     {activeCourseConfig.topics.map(topic => {
-                      const isChecked = selectedTopicIds.includes(topic.id);
+                      const topicKeys = topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic));
+                      const selectedCount = topicKeys.filter(key => selectedSubtopicIds.includes(key)).length;
+                      const isChecked = selectedCount === topicKeys.length && topicKeys.length > 0;
+                      const isExpanded = expandedTopicIds.includes(topic.id);
                       return (
-                        <div
-                          key={topic.id}
-                          onClick={() => handleTopicToggle(topic.id)}
-                          className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition ${
-                            isChecked 
-                              ? 'bg-slate-50 border-slate-300' 
-                              : 'bg-white border-slate-100 hover:border-slate-200'
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 mt-0.5 transition ${
-                              isChecked ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300'
-                            }`}
-                          >
-                            {isChecked && <CheckCircle className="w-3.5 h-3.5 text-white" />}
-                          </button>
-                          <div className="space-y-0.5">
-                            <span className="text-xs font-extrabold text-slate-800">{topic.title}</span>
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {topic.subtopics.slice(0, 3).map((sub, i) => (
-                                <span key={i} className="text-[8px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
-                                  {sub}
-                                </span>
-                              ))}
-                            </div>
+                        <div key={topic.id} className="subject-group border border-slate-200 bg-white">
+                          <div className="subject-group-header flex items-center gap-3 p-4">
+                            <button type="button" onClick={() => handleTopicToggle(topic.id)} aria-label={`${isChecked ? 'Desmarcar' : 'Selecionar'} todos os assuntos de ${topic.title}`} className={`subject-check flex items-center justify-center shrink-0 ${isChecked ? 'is-selected' : ''}`}>
+                              {isChecked && <Check className="w-4 h-4" />}
+                            </button>
+                            <button type="button" onClick={() => setExpandedTopicIds(current => current.includes(topic.id) ? current.filter(id => id !== topic.id) : [...current, topic.id])} aria-expanded={isExpanded} className="subject-expand flex flex-1 min-w-0 items-center justify-between gap-3 text-left">
+                              <span>
+                                <strong className="block text-sm text-slate-800">{topic.title}</strong>
+                                <span className="block text-xs text-slate-500 mt-0.5">{selectedCount} de {topic.subtopics.length} selecionados</span>
+                              </span>
+                              {isExpanded ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
+                            </button>
                           </div>
+                          {isExpanded && <div className="subject-options border-t border-slate-200 p-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {topic.subtopics.map(subtopic => {
+                              const key = subtopicKey(topic.id, subtopic);
+                              const checked = selectedSubtopicIds.includes(key);
+                              return <label key={key} className={`subject-option flex items-start gap-3 p-3 border cursor-pointer ${checked ? 'is-selected' : ''}`}>
+                                <input type="checkbox" checked={checked} onChange={() => handleSubtopicToggle(topic.id, subtopic)} className="mt-0.5" />
+                                <span className="text-sm font-semibold text-slate-700">{subtopic}</span>
+                              </label>;
+                            })}
+                          </div>}
                         </div>
                       );
                     })}
                   </div>
-                </div>
+                </div>}
+
+                {configStep === 4 && (
+                  <div className="wizard-step-panel space-y-5">
+                    <div>
+                      <p className="text-xs font-bold uppercase text-slate-500">Revisão final</p>
+                      <h2 className="text-2xl font-bold mt-1">Seu plano tático está pronto</h2>
+                      <p className="text-sm text-slate-500 mt-1">Confira as decisões antes de gerar o cronograma.</p>
+                    </div>
+                    <dl className="wizard-review-grid grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div><dt>Prova</dt><dd>{new Date(`${examDate}T00:00:00`).toLocaleDateString('pt-BR')}</dd></div>
+                      <div><dt>Banca e cargo</dt><dd>{examBoard} · {targetRole}</dd></div>
+                      <div><dt>Disponibilidade</dt><dd>{selectedWeekdays.length} dias · {weeklyHours}h por semana</dd></div>
+                      <div><dt>Conteúdo</dt><dd>{selectedSubtopicIds.length} subtópicos em {selectedTopicIds.length} matérias</dd></div>
+                    </dl>
+                    <div className="border-t border-slate-200 pt-4">
+                      <p className="text-xs font-bold uppercase text-slate-500 mb-3">Prioridades selecionadas</p>
+                      <div className="flex flex-wrap gap-2">
+                        {activeCourseConfig.topics.filter(topic => selectedTopicIds.includes(topic.id)).map(topic => (
+                          <span key={topic.id} className="px-3 py-2 border border-slate-200 bg-slate-50 text-sm font-semibold">{topic.title}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Botão de Geração */}
-                <div className="pt-4 border-t border-slate-100">
+                {configStep === 4 && <div className="pt-4 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={handleCreatePlan}
                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm py-3.5 px-6 rounded-xl transition shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Sparkles className="w-4 h-4" />
-                    Criar e ativar cronograma de estudos
+                    {hasSavedPlans ? 'Salvar e ativar plano de estudos' : 'Criar e ativar plano de estudos'}
                   </button>
+                </div>}
+
+                <div className="wizard-navigation flex items-center justify-between gap-3 pt-4 border-t border-slate-100">
+                  <button type="button" onClick={() => setConfigStep(step => Math.max(1, step - 1))} disabled={configStep === 1} className="wizard-back inline-flex items-center gap-2 px-4 font-bold disabled:opacity-30">
+                    <ArrowLeft className="w-4 h-4" /> Anterior
+                  </button>
+                  {configStep < 4 && (
+                    <button
+                      type="button"
+                      onClick={() => setConfigStep(step => Math.min(4, step + 1))}
+                      disabled={(configStep === 1 && (!examDate || examDate <= getTodayIso() || !examBoard.trim() || !targetRole.trim())) || (configStep === 2 && selectedWeekdays.length === 0) || (configStep === 3 && selectedSubtopicIds.length === 0)}
+                      className="wizard-next inline-flex items-center gap-2 px-5 font-bold disabled:opacity-40"
+                    >
+                      Continuar <ArrowRight className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
 
               </div>
             </div>
 
             {/* Painel Tático Resumo */}
-            <div className="lg:col-span-4 space-y-6">
+            {configStep === 4 && <div className="lg:col-span-4 space-y-6">
               <div className="bg-slate-900 text-white p-6 rounded-2xl border border-slate-800 shadow-sm space-y-4">
                 <div className="flex items-center gap-2">
                   <Award className="w-5 h-5 text-amber-500" />
@@ -920,6 +1039,10 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                   <div>
                     <span className="text-slate-400 block font-bold">Especialidade:</span>
                     <span className="text-sm font-extrabold text-white">{activeCourseConfig.name}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block font-bold">Banca e cargo:</span>
+                    <span className="text-sm font-extrabold text-white">{examBoard} · {targetRole}</span>
                   </div>
                   <div>
                     <span className="text-slate-400 block font-bold font-mono">Dias de Estudo Ativo:</span>
@@ -935,8 +1058,8 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                   </div>
                   <div>
                     <span className="text-slate-400 block font-bold">Assuntos Selecionados:</span>
-                    <span className="text-white font-extrabold">{selectedTopicIds.length} de {activeCourseConfig.topics.length} tópicos do edital</span>
-                  </div>
+                    <span className="text-white font-extrabold">{selectedSubtopicIds.length} subtópicos em {selectedTopicIds.length} matérias</span>
+                    </div>
                 </div>
 
                 <div className="flex items-start gap-2 bg-slate-800/50 p-3 rounded-lg border border-slate-800 text-[11px] leading-relaxed">
@@ -946,7 +1069,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                   </p>
                 </div>
               </div>
-            </div>
+            </div>}
 
           </div>
 

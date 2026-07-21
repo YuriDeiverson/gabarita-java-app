@@ -213,15 +213,15 @@ export default function ScheduleTab() {
   }, [weeks, activeWeekId]);
 
   return (
-    <div id="schedule-tab-container" className="space-y-6">
+    <div id="schedule-tab-container" className="schedule-layout space-y-7">
       {/* Overview Dashboard */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="schedule-overview grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-4">
         {/* Progress Card */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between space-y-4">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between space-y-5">
           <div className="space-y-1">
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
               <Calendar className="w-5 h-5 text-indigo-500" />
-              Seu cronograma
+              Cronograma linear
             </h2>
             <p className="text-xs text-slate-500">
               Acompanhe suas metas até a prova em {examConfig.examDateStr}.
@@ -280,7 +280,7 @@ export default function ScheduleTab() {
       </div>
 
       {/* Week Navigation Selector */}
-      <div className="flex flex-wrap gap-2 bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+      <div className="schedule-week-nav flex flex-wrap gap-2 bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
         <button
           onClick={() => setActiveWeekId('all')}
           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
@@ -307,7 +307,7 @@ export default function ScheduleTab() {
       </div>
 
       {/* Week Timeline and study goals */}
-      <div className="schedule-weeks-grid space-y-6">
+      <div className="schedule-weeks-list space-y-5">
         {filteredWeeks.map(week => {
           const completedInWeek = week.blocks.filter(b => b.done).length;
           const totalInWeek = week.blocks.length;
@@ -320,7 +320,7 @@ export default function ScheduleTab() {
               className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden"
             >
               {/* Week Header */}
-              <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="schedule-week-header bg-slate-50 px-6 py-4 border-b border-slate-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-extrabold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded">
@@ -337,7 +337,7 @@ export default function ScheduleTab() {
                     <span className="text-[10px] text-slate-400 block font-bold">Meta Semana</span>
                     <span className="text-xs font-bold text-slate-700">{completedInWeek} / {totalInWeek} concluídos ({weekPercentage}%)</span>
                   </div>
-                  <div className="w-12 h-12 rounded-full border-4 border-slate-200 relative flex items-center justify-center font-bold text-[10px] text-slate-700">
+                  <div className="schedule-week-ring w-12 h-12 rounded-full border-4 border-slate-200 relative flex items-center justify-center font-bold text-[10px] text-slate-700">
                     <div 
                       className="absolute inset-0 rounded-full border-4 border-indigo-600"
                       style={{ 

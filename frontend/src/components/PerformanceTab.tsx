@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Activity, AlertTriangle, Award, BookOpenCheck, CheckCircle2, LoaderCircle, RefreshCw, Target, TrendingUp } from 'lucide-react';
+import { Activity, AlertTriangle, Award, BookOpenCheck, CheckCircle2, RefreshCw, Target, TrendingUp } from 'lucide-react';
 import { analyticsApi } from '../services/api';
 
 interface TopicStat { topic: string; answered: number; correct: number; wrong: number; accuracy: number; }
@@ -93,17 +93,23 @@ export default function PerformanceTab() {
   const summary = data?.summary;
   const maxAnswered = useMemo(() => Math.max(1, ...(data?.evolution || []).map(day => number(day.answered))), [data]);
 
-  if (loading && !data) return <div className="min-h-72 flex items-center justify-center gap-2 text-slate-500"><LoaderCircle className="w-5 h-5 animate-spin" /> Calculando seu desempenho...</div>;
+  if (loading && !data) return <div className="performance-skeleton" role="status" aria-label="Calculando seu desempenho">
+    <span className="sr-only">Calculando seu desempenho...</span>
+    <div className="skeleton-line skeleton-title" />
+    <div className="skeleton-line skeleton-subtitle" />
+    <div className="skeleton-metrics">{Array.from({ length: 4 }, (_, index) => <div key={index} />)}</div>
+    <div className="skeleton-panel" />
+  </div>;
 
-  return <div id="performance-tab-container" className="space-y-5">
-    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+  return <div id="performance-tab-container" className="performance-layout space-y-6">
+    <div className="performance-header flex flex-col sm:flex-row sm:items-end justify-between gap-3">
       <div><h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2"><Activity className="w-6 h-6 text-indigo-600" /> Seu desempenho</h2><p className="text-sm text-slate-500 mt-1">Evolução baseada nos assuntos que você acertou e errou.</p></div>
-      <div className="flex gap-2 overflow-x-auto">{[7,30,90].map(days=><button key={days} onClick={()=>setPeriod(days)} className={`px-4 rounded-xl text-sm font-bold whitespace-nowrap ${period===days?'bg-slate-900 text-white':'bg-white border border-slate-200 text-slate-600'}`}>{days} dias</button>)}<button onClick={load} aria-label="Atualizar desempenho" className="w-11 h-11 min-h-11 shrink-0 rounded-xl bg-white border border-slate-200 flex items-center justify-center"><RefreshCw className={`w-4 h-4 ${loading?'animate-spin':''}`} /></button></div>
+      <div className="performance-periods flex gap-2 overflow-x-auto">{[7,30,90].map(days=><button key={days} onClick={()=>setPeriod(days)} className={`px-4 rounded-xl text-sm font-bold whitespace-nowrap ${period===days?'bg-slate-900 text-white':'bg-white border border-slate-200 text-slate-600'}`}>{days} dias</button>)}<button onClick={load} aria-label="Atualizar desempenho" className="w-11 h-11 min-h-11 shrink-0 rounded-xl bg-white border border-slate-200 flex items-center justify-center"><RefreshCw className={`w-4 h-4 ${loading?'animate-spin':''}`} /></button></div>
     </div>
     {error&&<div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-700">{error}</div>}
 
     {!summary || number(summary.answered)===0 ? <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-10 text-center"><Target className="w-10 h-10 text-slate-300 mx-auto mb-3" /><h3 className="font-bold text-slate-800">Seu painel começa com a primeira resposta</h3><p className="text-sm text-slate-500 mt-1">Responda algumas questões do simulado para descobrir seus pontos fortes e o que precisa revisar.</p></div> : <>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="performance-metrics grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         <Metric label="Respondidas" value={number(summary.answered)} icon={<BookOpenCheck />} color="indigo" />
         <Metric label="Acertos" value={number(summary.correct)} icon={<CheckCircle2 />} color="emerald" />
         <Metric label="Erros" value={number(summary.wrong)} icon={<AlertTriangle />} color="rose" />
@@ -114,7 +120,7 @@ export default function PerformanceTab() {
 
       <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6"><div className="mb-5"><h3 className="font-bold text-slate-900">Evolução diária</h3><p className="text-sm text-slate-500">Altura indica quantidade respondida; a cor mostra o aproveitamento.</p></div>{data?.evolution.length===0?<p className="text-sm text-slate-500">Ainda não há respostas neste período.</p>:<div className="daily-chart flex items-end gap-3 overflow-x-auto min-h-48 pb-2">{data?.evolution.map(day=><div key={day.day} className="flex flex-col items-center gap-2 min-w-12 grow"><span className="text-xs font-bold text-slate-600">{number(day.accuracy).toFixed(0)}%</span><div title={`${day.answered} respostas`} className={`w-full max-w-12 rounded-t-lg ${number(day.accuracy)>=70?'bg-emerald-500':number(day.accuracy)>=50?'bg-amber-400':'bg-rose-400'}`} style={{height:`${Math.max(24,(number(day.answered)/maxAnswered)*120)}px`}} /><span className="text-[10px] text-slate-500">{new Date(`${day.day}T00:00:00`).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}</span></div>)}</div>}</section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4"><TopicList title="Pontos fortes" subtitle="Assuntos com aproveitamento de 70% ou mais" items={data?.strongTopics||[]} tone="strong" /><TopicList title="Pontos para revisar" subtitle="Assuntos com maior incidência de erros" items={data?.weakTopics||[]} tone="weak" /></div>
+      <div className="performance-topic-lists grid grid-cols-1 gap-4"><TopicList title="Pontos fortes" subtitle="Assuntos com aproveitamento de 70% ou mais" items={data?.strongTopics||[]} tone="strong" /><TopicList title="Pontos para revisar" subtitle="Assuntos com maior incidência de erros" items={data?.weakTopics||[]} tone="weak" /></div>
 
       <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6"><h3 className="font-bold text-slate-900 mb-4">Desempenho por assunto</h3><div className="space-y-4">{data?.byTopic.map(item=><div key={item.topic}><div className="flex justify-between gap-3 text-sm mb-1.5"><span className="font-semibold text-slate-700 truncate">{item.topic}</span><span className="font-bold text-slate-900 shrink-0">{number(item.accuracy).toFixed(0)}%</span></div><div className="h-2.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full rounded-full ${number(item.accuracy)>=70?'bg-emerald-500':number(item.accuracy)>=50?'bg-amber-400':'bg-rose-400'}`} style={{width:`${number(item.accuracy)}%`}} /></div><p className="text-xs text-slate-400 mt-1">{item.correct} acertos • {item.wrong} erros • {item.answered} respostas</p></div>)}</div></section>
     </>}

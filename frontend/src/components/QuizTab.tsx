@@ -3,7 +3,33 @@ import { quizQuestions } from '../data/quizData';
 import { QuestionCategory, Question } from '../types';
 import { passages } from '../data/passagesData';
 import { questionsApi, quizProgressApi } from '../services/api';
-import { CheckCircle2, XCircle, Award, Filter, Sparkles, AlertCircle, Info } from 'lucide-react';
+import { CheckCircle2, XCircle, Award, Filter, Sparkles, AlertCircle, Info, Bookmark, Flag, Grid2X2, X } from 'lucide-react';
+
+const normalizeQuestionText = (value: string) => value
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .toLowerCase();
+
+const preservePassages = (remoteQuestions: Question[], localQuestions: Question[]) => {
+  const localByText = new Map(
+    [...quizQuestions, ...localQuestions].map(question => [normalizeQuestionText(question.text), question])
+  );
+
+  return remoteQuestions.map(question => {
+    const localQuestion = localByText.get(normalizeQuestionText(question.text));
+    const passageId = question.passageId || localQuestion?.passageId;
+    const catalogPassage = passageId ? passages[passageId] : undefined;
+
+    return {
+      ...question,
+      passageId,
+      passageTitle: question.passageTitle || localQuestion?.passageTitle || catalogPassage?.title,
+      passageContent: question.passageContent || localQuestion?.passageContent || catalogPassage?.content,
+    };
+  });
+};
 
 export default function QuizTab() {
   const [questions, setQuestions] = useState<Question[]>(() => {
@@ -16,7 +42,7 @@ export default function QuizTab() {
       }
     }
     return quizQuestions;
-  }, []);
+  });
 
   const [answers, setAnswers] = useState<{ [key: string]: 'Certo' | 'Errado' }>(() => {
     const saved = localStorage.getItem('quiz_answers');
@@ -30,17 +56,29 @@ export default function QuizTab() {
 
   const [categoryFilter, setCategoryFilter] = useState<QuestionCategory | 'Todos'>('Todos');
   const [statusFilter, setStatusFilter] = useState<'Todos' | 'Respondidas' | 'Não Respondidas' | 'Corretas' | 'Incorretas' | 'Anuladas'>('Todos');
-  const [expandedPassages, setExpandedPassages] = useState<{ [key: string]: boolean }>({});
   const [visibleQuestions, setVisibleQuestions] = useState(10);
+  const [questionMapOpen, setQuestionMapOpen] = useState(false);
+  const [pendingQuestionId, setPendingQuestionId] = useState<string | null>(null);
+  const [favoriteQuestions, setFavoriteQuestions] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('quiz_favorite_questions') || '[]')); } catch { return new Set(); }
+  });
+  const [reportedQuestions, setReportedQuestions] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('quiz_reported_questions') || '[]')); } catch { return new Set(); }
+  });
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const questionMapCloseRef = useRef<HTMLButtonElement | null>(null);
+  const questionMapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const courseId = localStorage.getItem('active_course');
     if (!courseId) return;
     questionsApi.forCourse(courseId).then(remoteQuestions => {
       if (remoteQuestions.length > 0) {
-        setQuestions(remoteQuestions);
-        localStorage.setItem('active_quiz_questions_cache', JSON.stringify(remoteQuestions));
+        setQuestions(localQuestions => {
+          const reconciledQuestions = preservePassages(remoteQuestions, localQuestions);
+          localStorage.setItem('active_quiz_questions_cache', JSON.stringify(reconciledQuestions));
+          return reconciledQuestions;
+        });
       }
     }).catch(error => console.warn('Banco de questões indisponível; usando conteúdo offline.', error));
   }, []);
@@ -79,6 +117,71 @@ export default function QuizTab() {
   useEffect(() => {
     setVisibleQuestions(10);
   }, [categoryFilter, statusFilter]);
+
+  useEffect(() => {
+    if (!questionMapOpen) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    questionMapCloseRef.current?.focus();
+    document.body.classList.add('mobile-sheet-open');
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setQuestionMapOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab' || !questionMapRef.current) return;
+      const focusable = Array.from(questionMapRef.current.querySelectorAll<HTMLElement>('button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])'));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', handleDialogKeyDown);
+    return () => {
+      document.body.classList.remove('mobile-sheet-open');
+      window.removeEventListener('keydown', handleDialogKeyDown);
+      previousFocus?.focus();
+    };
+  }, [questionMapOpen]);
+
+  useEffect(() => {
+    if (!pendingQuestionId) return;
+    const target = document.getElementById(`q-card-${pendingQuestionId}`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setPendingQuestionId(null);
+  }, [pendingQuestionId, visibleQuestions]);
+
+  const toggleFavorite = (questionId: number | string) => {
+    const id = String(questionId);
+    setFavoriteQuestions(current => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      localStorage.setItem('quiz_favorite_questions', JSON.stringify([...next]));
+      return next;
+    });
+  };
+
+  const toggleReport = (questionId: number | string) => {
+    const id = String(questionId);
+    setReportedQuestions(current => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      localStorage.setItem('quiz_reported_questions', JSON.stringify([...next]));
+      return next;
+    });
+  };
+
+  const jumpToQuestion = (questionId: number | string, index: number) => {
+    setVisibleQuestions(current => Math.max(current, index + 1));
+    setPendingQuestionId(String(questionId));
+    setQuestionMapOpen(false);
+  };
 
   const handleAnswer = async (questionId: number | string, option: 'Certo' | 'Errado') => {
     const question = questions.find(q => String(q.id) === String(questionId));
@@ -123,17 +226,9 @@ export default function QuizTab() {
     }
   };
 
-  const togglePassage = (questionId: number | string) => {
-    setExpandedPassages(prev => ({
-      ...prev,
-      [questionId]: !prev[questionId]
-    }));
-  };
-
   const handleReset = async () => {
     if (window.confirm(`Tem certeza que deseja reiniciar todo o simulado com as ${questions.length} questões? Seu progresso atual será apagado.`)) {
       setAnswers({});
-      setExpandedPassages({});
       localStorage.removeItem('quiz_answers');
       localStorage.removeItem('quiz_answer_history');
       localStorage.removeItem('quiz_answer_events');
@@ -194,7 +289,7 @@ export default function QuizTab() {
   const filteredQuestions = useMemo(() => {
     return questions.filter(q => {
       // Category filter
-      const categoryMatch = categoryFilter === 'Todos' || categoryFilter === 'All' || q.category === categoryFilter;
+      const categoryMatch = categoryFilter === 'Todos' || q.category === categoryFilter;
 
       // Status filter
       let statusMatch = true;
@@ -245,23 +340,23 @@ export default function QuizTab() {
   }, [stats, scoreMode]);
 
   return (
-    <div id="quiz-tab-container" className="space-y-6">
+    <div id="quiz-tab-container" className="quiz-layout space-y-7">
       {/* Quiz Header & Score Card */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="quiz-overview grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-4">
         {/* Performance Overview */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between space-y-4">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between space-y-5">
           <div className="quiz-heading flex items-start justify-between gap-4">
             <div className="space-y-1 min-w-0">
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-amber-500" />
-                Simulador de Questões CEBRASPE
+                Simulado em sequência
               </h2>
-              <p className="text-xs text-slate-500">Avalie seu nível de prontidão com {questions.length} questões focadas no edital.</p>
+              <p className="text-xs text-slate-500">Uma questão por linha, sem colunas competindo pela atenção.</p>
             </div>
             <button id="btn-reset-quiz" onClick={handleReset} className="shrink-0 text-xs flex items-center justify-center gap-1 text-slate-500 hover:text-slate-800 border border-slate-200 hover:bg-slate-50 px-3 py-2 rounded-lg transition cursor-pointer">Resetar</button>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="quiz-stats grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="bg-slate-50 p-3 rounded-lg text-center">
               <span className="text-xs text-slate-500 block">Respondidas</span>
               <span className="text-xl font-bold text-slate-800">{stats.answeredCount} / {stats.total}</span>
@@ -358,8 +453,53 @@ export default function QuizTab() {
         </div>
       </div>
 
+      <div className="mobile-quiz-toolbar" aria-label="Progresso do simulado">
+        <div className="mobile-quiz-progress">
+          <div className="flex items-center justify-between gap-3">
+            <span>{stats.answeredCount} de {stats.total} respondidas</span>
+            <strong>{stats.total > 0 ? Math.round((stats.answeredCount / stats.total) * 100) : 0}%</strong>
+          </div>
+          <div className="mobile-progress-track" aria-hidden="true"><span style={{ width: `${stats.total > 0 ? (stats.answeredCount / stats.total) * 100 : 0}%` }} /></div>
+        </div>
+        <button type="button" onClick={() => setQuestionMapOpen(true)} aria-haspopup="dialog" aria-expanded={questionMapOpen}>
+          <Grid2X2 aria-hidden="true" />
+          Mapa
+        </button>
+      </div>
+
+      {questionMapOpen && <div className="mobile-sheet-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setQuestionMapOpen(false)}>
+        <div ref={questionMapRef} className="mobile-question-sheet" role="dialog" aria-modal="true" aria-labelledby="question-map-title">
+          <div className="mobile-sheet-handle" aria-hidden="true" />
+          <div className="mobile-sheet-header">
+            <div>
+              <h2 id="question-map-title">Mapa de questões</h2>
+              <p>Toque em um número para ir até a questão.</p>
+            </div>
+            <button ref={questionMapCloseRef} type="button" onClick={() => setQuestionMapOpen(false)} aria-label="Fechar mapa de questões"><X /></button>
+          </div>
+          <div className="mobile-question-grid">
+            {filteredQuestions.map((question, index) => {
+              const answer = answers[question.id];
+              const correct = answer && answer === question.correct;
+              return <button
+                type="button"
+                key={question.id}
+                onClick={() => jumpToQuestion(question.id, index)}
+                className={question.correct === 'Anulada' ? 'is-annulled' : answer ? (correct ? 'is-correct' : 'is-wrong') : ''}
+                aria-label={`Ir para questão ${index + 1}${answer ? ', respondida' : ', não respondida'}`}
+              >
+                {index + 1}
+                {question.correct === 'Anulada'
+                  ? <span className="question-map-status" aria-hidden="true">–</span>
+                  : answer && <span className="question-map-status" aria-hidden="true">{correct ? '✓' : '×'}</span>}
+              </button>;
+            })}
+          </div>
+        </div>
+      </div>}
+
       {/* Question Filters Row */}
-      <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+      <div className="quiz-filters flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-2 text-sm font-bold text-slate-700 shrink-0">
           <Filter className="w-4 h-4 text-slate-400" />
           <span>Filtros do Simulado:</span>
@@ -397,7 +537,7 @@ export default function QuizTab() {
       </div>
 
       {/* Questions List */}
-      <div className="questions-grid space-y-6">
+      <div className="questions-list space-y-4">
         {filteredQuestions.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-xl border border-slate-100">
             <p className="text-slate-500 text-sm">Nenhuma questão encontrada para os filtros selecionados.</p>
@@ -430,31 +570,37 @@ export default function QuizTab() {
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
                       {q.category}
                     </span>
-                    {q.passageId && (
-                      <button
-                        id={`btn-toggle-passage-${q.id}`}
-                        onClick={() => togglePassage(q.id)}
-                        className="inline-flex items-center justify-center font-extrabold px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs border border-indigo-200 transition cursor-pointer gap-1"
-                        title={expandedPassages[q.id] ? "Ocultar Texto Completo" : "Mostrar Texto Completo"}
-                      >
-                        <span className="text-xs leading-none font-bold">{expandedPassages[q.id] ? '−' : '+'}</span>
-                        <span className="text-[9px] font-bold uppercase tracking-wider">Texto de Apoio</span>
-                      </button>
-                    )}
+                    {q.passageId && <span className="passage-available">Texto de apoio</span>}
                   </div>
-                  {q.reference && (
-                    <span className="text-[10px] text-slate-400 font-mono">{q.reference}</span>
-                  )}
+                  <div className="question-card-actions">
+                    {q.reference && <span className="question-reference text-[10px] text-slate-400 font-mono">{q.reference}</span>}
+                    <button
+                      type="button"
+                      onClick={() => toggleFavorite(q.id)}
+                      className={favoriteQuestions.has(String(q.id)) ? 'is-active' : ''}
+                      aria-pressed={favoriteQuestions.has(String(q.id))}
+                      aria-label={favoriteQuestions.has(String(q.id)) ? 'Remover questão dos favoritos' : 'Favoritar questão'}
+                      title={favoriteQuestions.has(String(q.id)) ? 'Remover dos favoritos' : 'Favoritar questão'}
+                    ><Bookmark aria-hidden="true" /></button>
+                    <button
+                      type="button"
+                      onClick={() => toggleReport(q.id)}
+                      className={reportedQuestions.has(String(q.id)) ? 'is-reported' : ''}
+                      aria-pressed={reportedQuestions.has(String(q.id))}
+                      aria-label={reportedQuestions.has(String(q.id)) ? 'Questão marcada para revisão' : 'Reportar questão'}
+                      title={reportedQuestions.has(String(q.id)) ? 'Questão marcada para revisão' : 'Reportar questão'}
+                    ><Flag aria-hidden="true" /></button>
+                  </div>
                 </div>
 
-                {/* Supporting Passage Text (Collapsible) */}
-                {q.passageId && expandedPassages[q.id] && (q.passageContent || passages[q.passageId]) && (
-                  <div className="px-5 py-4 bg-indigo-50/20 border-b border-slate-100 text-xs leading-relaxed text-slate-600 transition-all">
-                    <div className="font-bold text-indigo-800 flex items-center gap-1 mb-1.5">
+                {/* The passage is part of the question and must remain visible while answering. */}
+                {q.passageId && (q.passageContent || passages[q.passageId]) && (
+                  <div className="question-passage px-5 py-4 border-b border-slate-100 text-xs leading-relaxed text-slate-600">
+                    <div className="question-passage-title font-bold flex items-center gap-1 mb-1.5">
                       <Info className="w-3.5 h-3.5" />
-                      <span className="uppercase tracking-wider text-[10px]">{q.passageTitle || passages[q.passageId]?.title || 'Texto de apoio'}</span>
+                      <span>{q.passageTitle || passages[q.passageId]?.title || 'Texto de apoio'}</span>
                     </div>
-                    <div className="whitespace-pre-wrap pl-3.5 border-l-2 border-indigo-300 italic">
+                    <div className="question-passage-content whitespace-pre-wrap">
                       {q.passageContent || passages[q.passageId]?.content}
                     </div>
                   </div>
@@ -483,6 +629,7 @@ export default function QuizTab() {
                           : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
                       }`}
                     >
+                      {userAnswer === 'Certo' && (q.correct === 'Certo' ? <CheckCircle2 aria-hidden="true" /> : <XCircle aria-hidden="true" />)}
                       Certo
                     </button>
                     <button
@@ -496,6 +643,7 @@ export default function QuizTab() {
                           : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
                       }`}
                     >
+                      {userAnswer === 'Errado' && (q.correct === 'Errado' ? <CheckCircle2 aria-hidden="true" /> : <XCircle aria-hidden="true" />)}
                       Errado
                     </button>
                       </>

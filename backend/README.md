@@ -7,11 +7,26 @@ Backend principal do Gabarita.ai, construido com Java 21, Spring Boot, PostgreSQ
 Na raiz do repositorio:
 
 ```bash
-docker compose up -d --build
-npm run dev:frontend
+npm run dev
 ```
 
 O frontend abre em `http://localhost:3000` e encaminha `/api` para a API em `http://localhost:3001`.
+
+Para usar Supabase em desenvolvimento, configure as variaveis do backend antes de rodar `npm run dev`:
+
+```env
+DATABASE_URL=jdbc:postgresql://db.xxxxxxxxxxxxx.supabase.co:5432/postgres?sslmode=require
+DATABASE_USER=postgres
+DATABASE_PASSWORD=sua-senha
+CORS_ORIGINS=http://localhost:3000
+```
+
+Se preferir rodar com Docker e PostgreSQL local:
+
+```bash
+npm run dev:backend:docker
+npm run dev:frontend
+```
 
 Verificacao:
 

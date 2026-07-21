@@ -18,7 +18,8 @@ public class QuestionController {
         SELECT q.id::text id,COALESCE(q.metadata->>'category',s.name,'Geral') category,q.statement text,
         CASE WHEN q.status='ANNULLED' THEN 'Anulada' ELSE q.correct_answer #>> '{}' END correct,
         COALESCE(q.explanation,'') explanation,COALESCE(q.metadata->>'reference',q.board,'') reference,
-        q.passage_id::text passage_id,p.title passage_title,p.content passage_content
+        COALESCE(q.passage_id::text,NULLIF(q.metadata->>'passageId','')) passage_id,
+        p.title passage_title,p.content passage_content
         FROM questions q LEFT JOIN subjects s ON s.id=q.subject_id LEFT JOIN passages p ON p.id=q.passage_id
         WHERE q.metadata->>'courseId'=:course AND q.status IN('ACTIVE','ANNULLED') ORDER BY q.created_at,q.id
         """).param("course",courseId).query().listOfRows();

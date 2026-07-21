@@ -105,11 +105,11 @@ export default function StudyTab() {
   }
 
   return (
-    <div id="study-tab-container" className="space-y-6">
+    <div id="study-tab-container" className="study-layout space-y-7">
       {/* Subject Selector and Search Row */}
-      <div className="study-filter-shell bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100">
+      <div className="study-filter-shell bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
         <div className="study-filter-heading flex items-center justify-between gap-3 mb-3">
-          <div><p className="text-xs font-extrabold uppercase tracking-wider text-indigo-600">Biblioteca de estudos</p><p className="text-sm text-slate-500 mt-0.5">Escolha uma disciplina para consultar seus resumos</p></div>
+          <div><p className="text-xs font-extrabold uppercase tracking-wider text-indigo-600">Caderno de leitura</p><p className="text-sm text-slate-500 mt-0.5">Escolha uma disciplina e avance pelos resumos em sequência.</p></div>
           <BookOpen className="w-5 h-5 text-indigo-300 shrink-0" />
         </div>
         <div className="study-filter-row">
@@ -146,7 +146,7 @@ export default function StudyTab() {
       </div>
 
       {/* Progress Overview */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+      <div className="study-progress-panel bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Target className="w-5 h-5 text-emerald-600" />
@@ -163,7 +163,7 @@ export default function StudyTab() {
       </div>
 
       {/* Active Section Header */}
-      <div className="bg-gradient-to-br from-slate-50 to-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="study-section-panel bg-gradient-to-br from-slate-50 to-white rounded-xl border border-slate-200 p-6 shadow-sm">
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
@@ -188,7 +188,7 @@ export default function StudyTab() {
       </div>
 
       {/* Study Notes List */}
-      <div className="study-notes-grid space-y-3">
+      <div className="study-notes-list space-y-3">
         {filteredCards.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-xl border border-slate-100">
             <p className="text-slate-500 text-sm">Nenhum resumo disponível para esta disciplina.</p>

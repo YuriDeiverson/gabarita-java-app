@@ -3,10 +3,12 @@
   "private": true,
   "version": "1.0.0",
   "description": "Sistema de estudos para concursos com metodologia Pareto 80/20",
- "scripts": {
-    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend:local\"",
     "dev:frontend": "cd frontend && npm run dev",
-    "dev:backend": "docker compose up api postgres",
+    "dev:backend": "npm run dev:backend:local",
+    "dev:backend:local": "cd backend && mvn spring-boot:run",
+    "dev:backend:docker": "docker compose up api postgres",
     "build:frontend": "cd frontend && npm run build",
     "build:backend": "docker compose build api",
     "build": "npm run build:frontend && npm run build:backend",

@@ -665,7 +665,8 @@ export function generateCustomPlan(
   studyDaysCount: number,
   hoursPerDay: number,
   selectedTopicIds: string[],
-  selectedWeekdays?: number[]
+  selectedWeekdays?: number[],
+  selectedSubtopicIds: string[] = []
 ): {
   success: boolean;
   sections: StudySection[];
@@ -673,6 +674,14 @@ export function generateCustomPlan(
   weeks: ScheduleWeek[];
 } {
   const config = COURSES_CONFIG[course] || COURSES_CONFIG.seplag_informatica;
+  const selectedSubtopicsByTopic = new Map<string, string[]>();
+  selectedSubtopicIds.forEach(value => {
+    const separator = value.indexOf('::');
+    if (separator < 0) return;
+    const topicId = value.slice(0, separator);
+    const label = value.slice(separator + 2);
+    selectedSubtopicsByTopic.set(topicId, [...(selectedSubtopicsByTopic.get(topicId) || []), label]);
+  });
   
   // 1. Filter the study sections by selected topics
   const filteredSections = config.studySections.filter(section => 
@@ -723,7 +732,8 @@ export function generateCustomPlan(
   const questionsToUse = deduplicateQuestions(filteredQuestions.length > 0 ? filteredQuestions : config.quizQuestions);
 
   // 3. Generate dynamic study blocks and timeline comparing TODAY with EXAM DATE
-  const today = new Date('2026-07-02'); // Anchor date as per metadata
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const examDate = new Date(examDateStr);
   
   // Calculate difference in days
@@ -780,6 +790,12 @@ export function generateCustomPlan(
     const activeSectionForWeek = sectionsToUse[currentSectionIndex];
     
     const blocks: StudyBlock[] = [];
+    const configuredTopic = config.topics.find(topic =>
+      topic.id === activeSectionForWeek.id ||
+      topic.title.toLowerCase().includes(activeSectionForWeek.title.toLowerCase()) ||
+      activeSectionForWeek.title.toLowerCase().includes(topic.title.toLowerCase())
+    );
+    const selectedSubtopics = configuredTopic ? selectedSubtopicsByTopic.get(configuredTopic.id) || [] : [];
     
     // Divide hours in this week among blocks (e.g. 40% theory, 60% exercises)
     const theoryHours = Math.ceil(hoursInWeek * 0.4) || 1;
@@ -791,7 +807,7 @@ export function generateCustomPlan(
       title: `Estudo Dirigido: ${activeSectionForWeek.title}`,
       duration: `${theoryHours}h`,
       methodology: "30% Teoria Ativa, 70% Resumo de Pareto",
-      subtopics: activeSectionForWeek.cards.map(c => c.title),
+      subtopics: selectedSubtopics.length > 0 ? selectedSubtopics : activeSectionForWeek.cards.map(c => c.title),
       done: false
     });
 
@@ -801,7 +817,7 @@ export function generateCustomPlan(
       title: `Treinamento de Questões: ${activeSectionForWeek.title}`,
       duration: `${exercisesHours}h`,
       methodology: "50% Questões de Prova, 50% Revisão Justificada",
-      subtopics: activeSectionForWeek.cards.flatMap(c => c.keyTakeaways.slice(0, 2)),
+      subtopics: selectedSubtopics.length > 0 ? selectedSubtopics : activeSectionForWeek.cards.flatMap(c => c.keyTakeaways.slice(0, 2)),
       done: false
     });
 

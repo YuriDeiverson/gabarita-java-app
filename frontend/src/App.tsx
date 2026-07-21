@@ -4,12 +4,30 @@ import StudyTab from './components/StudyTab';
 import QuizTab from './components/QuizTab';
 import ScheduleTab from './components/ScheduleTab';
 import PerformanceTab from './components/PerformanceTab';
+import { studyPlansApi } from './services/api';
 import { BookOpen, Calendar, Sparkles, CheckSquare, Target, Home as HomeIcon, ChartNoAxesCombined, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
+type AppTab = 'home' | 'study' | 'quiz' | 'schedule' | 'performance';
+
+const hasActiveStudyPlan = () => Boolean(
+  (() => {
+    if (localStorage.getItem('study_plan_deleted') === 'true') return false;
+    const courseId = localStorage.getItem('active_course');
+    return Boolean(
+      courseId &&
+      localStorage.getItem(`${courseId}_study_config`) &&
+      localStorage.getItem(`${courseId}_study_sections`) &&
+      localStorage.getItem(`${courseId}_quiz_questions`) &&
+      localStorage.getItem(`${courseId}_schedule_weeks`)
+    );
+  })()
+);
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'home' | 'study' | 'quiz' | 'schedule' | 'performance'>(() => {
+  const [hasPlan, setHasPlan] = useState(hasActiveStudyPlan);
+  const [activeTab, setActiveTab] = useState<AppTab>(() => {
     const saved = localStorage.getItem('app_active_tab');
-    return (saved as 'home' | 'study' | 'quiz' | 'schedule' | 'performance') || 'home';
+    return saved && saved !== 'home' && !hasActiveStudyPlan() ? 'home' : (saved as AppTab) || 'home';
   });
 
   const [activeCourse, setActiveCourse] = useState<string>(() => {
@@ -79,6 +97,45 @@ export default function App() {
   }, [activeTab]);
 
   useEffect(() => {
+    const courseId = localStorage.getItem('active_course');
+    if (!courseId || localStorage.getItem('study_plan_deleted') === 'true') return;
+
+    const rawConfig = localStorage.getItem(`${courseId}_study_config`);
+    if (!rawConfig) return;
+
+    let localPlanId: string | null = null;
+    try { localPlanId = JSON.parse(rawConfig).studyPlanId || null; } catch { return; }
+    if (!localPlanId || String(localPlanId).startsWith('local-')) return;
+
+    studyPlansApi.getAll(false).then(remotePlans => {
+      if (remotePlans.some(plan => String(plan.id) === String(localPlanId))) return;
+
+      localStorage.setItem('study_plan_deleted', 'true');
+      ['seplag_informatica', 'tecnico_enfermagem', 'jornalismo'].forEach(id => {
+        [
+          'study_sections', 'quiz_questions', 'schedule_weeks', 'study_config',
+          'study_schedule_progress', 'quiz_answers'
+        ].forEach(key => localStorage.removeItem(`${id}_${key}`));
+      });
+      [
+        'active_course', 'custom_study_sections', 'custom_quiz_questions',
+        'custom_schedule_weeks', 'study_config', 'study_schedule_progress',
+        'quiz_answers', 'quiz_answer_history', 'quiz_answer_events',
+        'active_quiz_questions_cache'
+      ].forEach(key => localStorage.removeItem(key));
+
+      setHasPlan(false);
+      setActiveTab('home');
+    }).catch(() => {
+      // Preserve an offline plan when the API is unavailable.
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!hasPlan && activeTab !== 'home') setActiveTab('home');
+  }, [hasPlan, activeTab]);
+
+  useEffect(() => {
     localStorage.setItem('app_sidebar_collapsed', String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
@@ -86,6 +143,7 @@ export default function App() {
   useEffect(() => {
     const handleStorageChange = () => {
       loadGlobalKPIs();
+      setHasPlan(hasActiveStudyPlan());
       const currentCourse = localStorage.getItem('active_course') || 'seplag_informatica';
       setActiveCourse(currentCourse);
 
@@ -110,9 +168,17 @@ export default function App() {
   }, []);
 
   const handlePlanGenerated = (courseId: string) => {
+    setHasPlan(true);
     setActiveCourse(courseId);
     loadGlobalKPIs();
     setActiveTab('study'); // switch to study summaries tab on creation
+  };
+
+  const handlePlansChanged = () => {
+    const planAvailable = hasActiveStudyPlan();
+    setHasPlan(planAvailable);
+    loadGlobalKPIs();
+    if (!planAvailable) setActiveTab('home');
   };
 
   // Get current brand and subtitle based on selected course
@@ -142,14 +208,22 @@ export default function App() {
 
   const brand = getBranding();
   const isHome = activeTab === 'home';
+  const navigationItems = [
+    { id: 'home' as AppTab, label: 'Início', mobileLabel: 'Início', icon: HomeIcon },
+    { id: 'study' as AppTab, label: 'Estudar', mobileLabel: 'Estudar', icon: BookOpen },
+    { id: 'quiz' as AppTab, label: 'Simulado', mobileLabel: 'Questões', icon: Sparkles },
+    { id: 'schedule' as AppTab, label: 'Cronograma', mobileLabel: 'Roadmap', icon: Calendar },
+    { id: 'performance' as AppTab, label: 'Desempenho', mobileLabel: 'Progresso', icon: ChartNoAxesCombined },
+  ];
+  const activeNavigationItem = navigationItems.find(item => item.id === activeTab) || navigationItems[0];
 
   return (
-    <div className={`min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <div className={`app-shell min-h-screen bg-slate-50 text-slate-800 flex flex-col ${hasPlan ? 'has-plan' : 'no-plan'} ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <a className="skip-link" href="#main-content">Pular para o conteúdo principal</a>
       {/* Upper Navigation & App Bar */}
       <header className="app-header bg-white border-b border-slate-200 sticky top-0 z-50">
-        <div className="w-full px-4 sm:px-6 xl:px-8 2xl:px-10">
-          <div className="flex items-center justify-between min-h-16 py-2">
+        <div className="app-header-inner w-full px-4 sm:px-6 xl:px-8 2xl:px-10">
+          <div className="desktop-header-content flex items-center justify-between min-h-16 py-2">
             {/* Logo and Brand */}
             <div className="flex items-center gap-3">
               <div className="w-10 h-12 flex items-center justify-center shrink-0">
@@ -164,7 +238,7 @@ export default function App() {
                       Gabarita Concursos
                     </h1>
                     <p className="text-[10px] text-slate-500 font-medium">
-                      Seu plano de estudos, simples e direto
+                      Planejamento enxuto para reta final
                     </p>
                   </>
                 ) : (
@@ -208,6 +282,19 @@ export default function App() {
               </div>
             )}
           </div>
+          <div className="mobile-header-content" aria-label="Cabeçalho da tela atual">
+            <div className="mobile-brand-mark" aria-hidden="true">G</div>
+            <div className="min-w-0">
+              <span className="mobile-header-context">{hasPlan ? brand.focus : 'Gabarita Concursos'}</span>
+              <h1>{activeNavigationItem.label}</h1>
+            </div>
+            {hasPlan && !isHome ? (
+              <div className="mobile-header-progress" aria-label={`${globalProgress.completedBlocks} de ${globalProgress.totalBlocks} metas concluídas`}>
+                <span>{globalProgress.completedBlocks}</span>
+                <small>/{globalProgress.totalBlocks}</small>
+              </div>
+            ) : <div className="mobile-header-spacer" aria-hidden="true" />}
+          </div>
         </div>
       </header>
 
@@ -215,11 +302,11 @@ export default function App() {
       <main id="main-content" className="app-main px-4 sm:px-6 xl:px-8 2xl:px-10 py-6 flex-grow w-full flex flex-col space-y-6" tabIndex={-1}>
         
         {/* Navigation */}
-          <nav className="app-navigation flex space-x-1 lg:space-x-2 bg-slate-100 p-1.5 rounded-xl self-start w-full md:w-auto" aria-label="Navegação principal">
-            <div className="sidebar-control">
+          {hasPlan && <nav className="app-navigation desktop-app-navigation flex space-x-1 lg:space-x-2 bg-slate-100 p-1.5 rounded-xl self-start w-full md:w-auto" aria-label="Navegação principal">
+            {hasPlan && <div className="sidebar-control">
               <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600">Área do aluno</p>
-                <p className="text-xs text-slate-500 truncate">Rotina de aprovação</p>
+                <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600">Painel</p>
+                <p className="text-xs text-slate-500 truncate">Rotina de estudo</p>
               </div>
               <button
                 type="button"
@@ -229,87 +316,51 @@ export default function App() {
               >
                 {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
               </button>
-            </div>
-            <button
-              id="tab-home-trigger"
-              onClick={() => setActiveTab('home')}
-              className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs lg:text-sm font-bold transition-all cursor-pointer grow md:grow-0 whitespace-nowrap ${
-                activeTab === 'home'
-                  ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-              }`}
-              aria-current={activeTab === 'home' ? 'page' : undefined}
-            >
-              <HomeIcon className="w-4 h-4" />
-              <span>Início</span>
-            </button>
-
-            <button
-              id="tab-study-trigger"
-              onClick={() => setActiveTab('study')}
-              className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs lg:text-sm font-bold transition-all cursor-pointer grow md:grow-0 whitespace-nowrap ${
-                activeTab === 'study'
-                  ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-              }`}
-              aria-current={activeTab === 'study' ? 'page' : undefined}
-            >
-              <BookOpen className="w-4 h-4" />
-              <span>Estudar</span>
-            </button>
-            
-            <button
-              id="tab-quiz-trigger"
-              onClick={() => setActiveTab('quiz')}
-              className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs lg:text-sm font-bold transition-all cursor-pointer grow md:grow-0 whitespace-nowrap ${
-                activeTab === 'quiz'
-                  ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-              }`}
-              aria-current={activeTab === 'quiz' ? 'page' : undefined}
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>Simulado</span>
-            </button>
-
-            <button
-              id="tab-schedule-trigger"
-              onClick={() => setActiveTab('schedule')}
-              className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs lg:text-sm font-bold transition-all cursor-pointer grow md:grow-0 whitespace-nowrap ${
-                activeTab === 'schedule'
-                  ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-              }`}
-              aria-current={activeTab === 'schedule' ? 'page' : undefined}
-            >
-              <Calendar className="w-4 h-4" />
-              <span>Cronograma</span>
-            </button>
-
-            <button
-              id="tab-performance-trigger"
-              onClick={() => setActiveTab('performance')}
-              className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs lg:text-sm font-bold transition-all cursor-pointer grow md:grow-0 whitespace-nowrap ${
-                activeTab === 'performance'
-                  ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-              }`}
-              aria-current={activeTab === 'performance' ? 'page' : undefined}
-            >
-              <ChartNoAxesCombined className="w-4 h-4" />
-              <span>Desempenho</span>
-            </button>
-          </nav>
+            </div>}
+            {navigationItems.map(item => {
+              const Icon = item.icon;
+              return <button
+                key={item.id}
+                id={`tab-${item.id}-trigger`}
+                onClick={() => setActiveTab(item.id)}
+                className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs lg:text-sm font-bold transition-all cursor-pointer grow md:grow-0 whitespace-nowrap ${
+                  activeTab === item.id
+                    ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                }`}
+                aria-current={activeTab === item.id ? 'page' : undefined}
+              >
+                <Icon className="w-4 h-4" />
+                <span>{item.label}</span>
+              </button>;
+            })}
+          </nav>}
 
         {/* Tab Content Rendering */}
-        <div className="app-content flex-grow transition-all duration-300">
-          {activeTab === 'home' && <HomeTab onPlanGenerated={handlePlanGenerated} />}
-          {activeTab === 'study' && <StudyTab />}
-          {activeTab === 'quiz' && <QuizTab />}
-          {activeTab === 'schedule' && <ScheduleTab />}
-          {activeTab === 'performance' && <PerformanceTab />}
+        <div className="app-content min-w-0 flex-grow transition-all duration-300">
+          {activeTab === 'home' && <HomeTab onPlanGenerated={handlePlanGenerated} onPlansChanged={handlePlansChanged} />}
+          {hasPlan && activeTab === 'study' && <StudyTab />}
+          {hasPlan && activeTab === 'quiz' && <QuizTab />}
+          {hasPlan && activeTab === 'schedule' && <ScheduleTab />}
+          {hasPlan && activeTab === 'performance' && <PerformanceTab />}
         </div>
       </main>
+
+      {hasPlan && <nav className="mobile-bottom-nav" aria-label="Navegação principal mobile">
+        {navigationItems.map(item => {
+          const Icon = item.icon;
+          return <button
+            key={item.id}
+            type="button"
+            onClick={() => setActiveTab(item.id)}
+            aria-current={activeTab === item.id ? 'page' : undefined}
+            aria-label={item.label}
+          >
+            <Icon aria-hidden="true" />
+            <span>{item.mobileLabel}</span>
+          </button>;
+        })}
+      </nav>}
 
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-400">

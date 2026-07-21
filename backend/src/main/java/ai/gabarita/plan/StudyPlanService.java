@@ -76,7 +76,13 @@ public class StudyPlanService {
     @Transactional Map<String,Object> restore(UUID id, UUID user) {
         one(id,user); jdbc.sql("UPDATE study_plans SET status='ACTIVE',updated_at=now() WHERE id=:id").param("id",id).update(); audit(id,"RESTORED"); return one(id,user);
     }
-    @Transactional void delete(UUID id, UUID user) { one(id,user); audit(id,"DELETED"); jdbc.sql("DELETE FROM study_plans WHERE id=:id").param("id",id).update(); }
+    @Transactional void delete(UUID id, UUID user) {
+        one(id,user);
+        jdbc.sql("DELETE FROM study_sessions WHERE plan_id=:id").param("id",id).update();
+        jdbc.sql("DELETE FROM simulations WHERE plan_id=:id").param("id",id).update();
+        jdbc.sql("DELETE FROM plan_history WHERE plan_id=:id").param("id",id).update();
+        jdbc.sql("DELETE FROM study_plans WHERE id=:id").param("id",id).update();
+    }
     List<Map<String,Object>> history(UUID id, UUID user) { one(id,user); return jdbc.sql("SELECT * FROM plan_history WHERE plan_id=:id ORDER BY changed_at DESC").param("id",id).query().listOfRows(); }
 
     private void replaceChildren(UUID id, PlanRequest r) {

@@ -1487,7 +1487,7 @@ const balanceJournalismSpecificAnswers = (questions: Question[]): Question[] => 
 
   let counts = countSpecific();
   let balanceIndex = 0;
-  let nextId = Math.max(...balanced.map(q => q.id), 0) + 1;
+  let nextId = Math.max(...balanced.map(q => Number(q.id)), 0) + 1;
 
   while (counts.errado < counts.certo - 1) {
     balanced.push(createBalancingErradoQuestion(nextId, balanceIndex));
@@ -1613,7 +1613,7 @@ export const getJournalismQuestions = (): Question[] => {
   }
 
   // 6. Append core questions (Português, Inglês, TI Básica, Legislação, Alagoas) with non-overlapping IDs
-  let currentMaxId = Math.max(...result.map(q => q.id), 300);
+  let currentMaxId = Math.max(...result.map(q => Number(q.id)), 300);
   quizQuestions.forEach(q => {
     // Include all core questions for journalism
     currentMaxId++;
