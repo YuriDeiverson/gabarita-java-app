@@ -19,7 +19,24 @@ DATABASE_URL=jdbc:postgresql://db.xxxxxxxxxxxxx.supabase.co:5432/postgres?sslmod
 DATABASE_USER=postgres
 DATABASE_PASSWORD=sua-senha
 CORS_ORIGINS=http://localhost:3000
+SUPABASE_URL=https://xxxxxxxxxxxxx.supabase.co
 ```
+
+No frontend, configure apenas a URL pública e a publishable key do Supabase Auth:
+
+```env
+VITE_API_URL=/api
+VITE_SUPABASE_URL=https://xxxxxxxxxxxxx.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxxxxxxxxxxxx
+```
+
+O backend valida localmente cada access token pelo endpoint JWKS do projeto. Em projetos antigos que ainda
+usam HS256, `SUPABASE_JWT_SECRET` pode ser configurado temporariamente, mas a recomendação é ativar uma
+chave assimétrica em Authentication > Signing Keys.
+
+Ao iniciar, o Flyway aplica as migrações `V1` a `V7`. A `V7` conecta `auth.users` a `public.users`, instala
+o gatilho de perfil e remove o acesso direto das roles `anon` e `authenticated` às tabelas da aplicação.
+O navegador usa Supabase somente para autenticação; os dados de estudo passam pela API Spring autenticada.
 
 Se preferir rodar com Docker e PostgreSQL local:
 
@@ -82,6 +99,9 @@ O Vite faz proxy de `/api` para `http://localhost:3001` durante o desenvolviment
 - `DATABASE_PASSWORD`: senha do banco, opcional quando `DATABASE_URL` ja contem credenciais.
 - `CORS_ORIGINS`: origens permitidas para o frontend, separadas por virgula.
 - `PORT`: porta HTTP. Padrao local: `3001`.
+- `SUPABASE_URL`: URL pública do projeto, usada como issuer do JWT.
+- `SUPABASE_JWKS_URL`: endpoint JWKS opcional; por padrão é derivado de `SUPABASE_URL`.
+- `SUPABASE_JWT_SECRET`: compatibilidade opcional com tokens HS256 legados; nunca exponha no frontend.
 
 ## APIs implementadas
 

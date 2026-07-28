@@ -16,10 +16,13 @@ services:
   api:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql://postgres:2xu9dkiuh9kGyUXP@db.lvalnhkgyvdpppwtwwco.supabase.co:5432/postgres
-      DATABASE_USER: postgres.java-spring-gabarita-app
-      DATABASE_PASSWORD: 2xu9dkiuh9kGyUXP
-      CORS_ORIGINS: http://localhost:3000
+      DATABASE_URL: jdbc:postgresql://postgres:5432/gabarita
+      DATABASE_USER: gabarita
+      DATABASE_PASSWORD: gabarita
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_JWKS_URL: ${SUPABASE_JWKS_URL:-}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
     ports: ["3001:3001"]
     depends_on:
       postgres: { condition: service_healthy }

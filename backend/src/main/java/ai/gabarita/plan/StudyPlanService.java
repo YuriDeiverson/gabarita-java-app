@@ -6,12 +6,15 @@ import java.util.*;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ai.gabarita.study.StudyBootstrapService;
 import static ai.gabarita.plan.StudyPlanController.*;
 
 @Service
 public class StudyPlanService {
-    private final JdbcClient jdbc; private final ObjectMapper json;
-    public StudyPlanService(JdbcClient jdbc, ObjectMapper json) { this.jdbc = jdbc; this.json = json; }
+    private final JdbcClient jdbc; private final ObjectMapper json; private final StudyBootstrapService bootstrap;
+    public StudyPlanService(JdbcClient jdbc, ObjectMapper json, StudyBootstrapService bootstrap) {
+        this.jdbc = jdbc; this.json = json; this.bootstrap = bootstrap;
+    }
 
     List<Map<String,Object>> all(UUID user, boolean archived) {
         return jdbc.sql("SELECT *, course_id AS course_id, exam_date AS exam_date, is_primary AS is_active FROM study_plans WHERE user_id=:u AND (:a OR status<>'ARCHIVED') ORDER BY is_primary DESC, updated_at DESC")
@@ -19,7 +22,8 @@ public class StudyPlanService {
     }
     Map<String,Object> one(UUID id, UUID user) {
         return jdbc.sql("SELECT *, is_primary AS is_active FROM study_plans WHERE id=:id AND user_id=:u")
-                .param("id",id).param("u",user).query().singleRow();
+                .param("id",id).param("u",user).query().listOfRows().stream().findFirst()
+                .orElseThrow(() -> new NoSuchElementException("Plano não encontrado"));
     }
     Map<String,Object> active(UUID user) {
         return jdbc.sql("SELECT *, is_primary AS is_active FROM study_plans WHERE user_id=:u AND is_primary AND status='ACTIVE'")
@@ -36,7 +40,8 @@ public class StudyPlanService {
           .param("title",r.title()).param("date",r.examDate()).param("template",Boolean.TRUE.equals(r.template()))
           .param("block",or(r.blockMinutes(),60)).param("break",or(r.breakMinutes(),10)).param("sprint",or(r.finalSprintDays(),14))
           .param("weekly",r.weeklyGoalMinutes()).param("monthly",r.monthlyGoalMinutes()).param("settings",settings(r)).update();
-        replaceChildren(id,r); audit(id,"CREATED"); return one(id,user);
+        replaceChildren(id,r); bootstrap.synchronize(id,user,r.studySections(),or(r.blockMinutes(),60),r.hoursPerDay());
+        audit(id,"CREATED"); return one(id,user);
     }
 
     @Transactional Map<String,Object> update(UUID id, UUID user, PlanRequest r) {
@@ -50,7 +55,8 @@ public class StudyPlanService {
           .param("weekly",r.weeklyGoalMinutes()).param("monthly",r.monthlyGoalMinutes()).param("settings",settings(r))
           .param("id",id).param("u",user).update();
         if(changed==0) throw new NoSuchElementException("Plano não encontrado");
-        replaceChildren(id,r); audit(id,"UPDATED"); return one(id,user);
+        replaceChildren(id,r); bootstrap.synchronize(id,user,r.studySections(),or(r.blockMinutes(),60),r.hoursPerDay());
+        audit(id,"UPDATED"); return one(id,user);
     }
 
     @Transactional Map<String,Object> duplicate(UUID source, UUID user, String title) {

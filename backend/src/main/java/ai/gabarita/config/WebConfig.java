@@ -13,13 +13,19 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override public void addCorsMappings(CorsRegistry registry) {
         String[] allowedOrigins = Arrays.stream(origins.split(","))
-                .map(String::trim)
+                .map(WebConfig::normalizeOrigin)
                 .filter(origin -> !origin.isBlank())
+                .distinct()
                 .toArray(String[]::new);
 
         registry.addMapping("/api/**")
                 .allowedOrigins(allowedOrigins)
                 .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                 .allowedHeaders("*");
+    }
+
+    private static String normalizeOrigin(String origin) {
+        String normalized = origin.trim().replaceAll("^[\\\"']|[\\\"']$", "");
+        return normalized.replaceAll("/+$", "");
     }
 }

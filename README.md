@@ -10,20 +10,16 @@ Este projeto segue uma arquitetura monorepo profissional com separação clara e
 gabarita.ai/
 ├── frontend/           # Aplicação React + Vite
 │   ├── src/           # Código fonte do frontend
-│   ├── assets/        # Assets estáticos
+│   ├── src/auth/      # Cliente e sessão do Supabase Auth
 │   ├── index.html     # Entry point HTML
 │   ├── vite.config.ts # Configuração do Vite
 │   ├── tsconfig.json  # Configuração TypeScript
 │   └── package.json   # Dependências do frontend
-├── backend/           # API Express + TypeScript
-│   ├── server/        # Código fonte do backend
-│   │   ├── index.ts   # Entry point do servidor
-│   │   ├── database.ts # Configuração SQLite
-│   │   ├── routes/    # Rotas da API
-│   │   └── utils/     # Utilitários
-│   ├── tsconfig.json  # Configuração TypeScript
+├── backend/           # API Spring Boot + Java 21
+│   ├── src/main/java  # Controllers, serviços e segurança JWT
+│   ├── src/main/resources/db/migration # Schema PostgreSQL/Flyway
 │   ├── .env.example   # Exemplo de variáveis de ambiente
-│   └── package.json   # Dependências do backend
+│   └── pom.xml        # Dependências Maven
 ├── package.json       # Scripts do monorepo
 └── README.md          # Este arquivo
 ```
@@ -108,15 +104,29 @@ npm run build:backend
 - `POST /api/schedule/progress` - Salvar progresso
 - `GET /api/schedule/stats/:id` - Estatísticas
 
-## 💾 Banco de Dados
+## 💾 Banco de Dados e autenticação
 
-O sistema utiliza SQLite para persistência local. O arquivo do banco é criado automaticamente na pasta `backend/` na primeira execução.
+O sistema utiliza PostgreSQL/Supabase. O Flyway cria e atualiza o schema automaticamente. O Supabase Auth
+realiza cadastro, login, confirmação de e-mail e renovação da sessão; a API Spring valida o JWT antes de
+acessar qualquer dado e sempre filtra planos, sessões, simulados e progresso pelo usuário autenticado.
 
 ## 🔧 Variáveis de Ambiente
 
-Backend (`.env`):
+Backend (`backend/.env`):
 ```env
 PORT=3001
+DATABASE_URL=jdbc:postgresql://db.PROJECT_REF.supabase.co:5432/postgres?sslmode=require
+DATABASE_USER=postgres
+DATABASE_PASSWORD=sua-senha
+SUPABASE_URL=https://PROJECT_REF.supabase.co
+```
+
+Frontend (`frontend/.env`):
+
+```env
+VITE_API_URL=/api
+VITE_SUPABASE_URL=https://PROJECT_REF.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxxxx
 ```
 
 ## 🛠️ Tecnologias
@@ -129,10 +139,10 @@ PORT=3001
 - Lucide Icons
 
 ### Backend
-- Express
-- TypeScript
-- SQLite (better-sqlite3)
-- date-fns
+- Java 21 e Spring Boot
+- Spring Security OAuth2 Resource Server
+- PostgreSQL/Supabase
+- Flyway
 
 ## 📝 Funcionalidades
 

@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Activity, AlertTriangle, Award, BookOpenCheck, CheckCircle2, RefreshCw, Target, TrendingUp } from 'lucide-react';
+import { Activity, AlertTriangle, Award, BookOpenCheck, CheckCircle2, Clock3, RefreshCw, Target, TrendingUp } from 'lucide-react';
 import { analyticsApi } from '../services/api';
 
-interface TopicStat { topic: string; answered: number; correct: number; wrong: number; accuracy: number; }
+interface TopicStat { topic: string; answered: number; correct: number; wrong: number; accuracy: number; studied_seconds?: number; }
 interface DayStat { day: string; answered: number; correct: number; wrong: number; accuracy: number; }
-interface Dashboard { periodDays: number; summary: { answered: number; correct: number; wrong: number; accuracy: number }; evolution: DayStat[]; byTopic: TopicStat[]; strongTopics: TopicStat[]; weakTopics: TopicStat[]; recommendation?: TopicStat | null; }
+interface Dashboard { periodDays: number; summary: { answered: number; correct: number; wrong: number; accuracy: number; total_time_seconds?: number; study_seconds?: number; question_practice_seconds?: number; simulation_seconds?: number; session_questions?: number; question_bank_answered?: number; simulation_answered?: number; study_sessions?: number; question_sessions?: number; simulation_sessions?: number }; evolution: DayStat[]; byTopic: TopicStat[]; strongTopics: TopicStat[]; weakTopics: TopicStat[]; recommendation?: TopicStat | null; }
 
 const number = (value: unknown) => Number(value || 0);
+const timeLabel=(seconds:unknown)=>{const minutes=Math.round(number(seconds)/60);return minutes>=60?`${Math.floor(minutes/60)}h ${minutes%60}min`:`${minutes} min`;};
 
 const localDashboard = (periodDays: number, activePlanId?: string | null): Dashboard => {
   try {
@@ -78,7 +79,7 @@ export default function PerformanceTab() {
       try { activePlanId = JSON.parse(localStorage.getItem('study_config') || '{}').studyPlanId || null; } catch {}
       const remote = await analyticsApi.dashboard(period, activePlanId);
       const local = localDashboard(period, activePlanId);
-      setData(number(remote?.summary?.answered) > 0 ? remote : local);
+      setData(number(remote?.summary?.answered) > 0 || number(remote?.summary?.total_time_seconds) > 0 ? remote : local);
     }
     catch (requestError) {
       console.warn('Desempenho remoto indisponível; usando dados locais.', requestError);
@@ -103,18 +104,25 @@ export default function PerformanceTab() {
 
   return <div id="performance-tab-container" className="performance-layout space-y-6">
     <div className="performance-header flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-      <div><h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2"><Activity className="w-6 h-6 text-indigo-600" /> Seu desempenho</h2><p className="text-sm text-slate-500 mt-1">Evolução baseada nos assuntos que você acertou e errou.</p></div>
+      <div><h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2"><Activity className="w-6 h-6 text-indigo-600" /> Seu desempenho</h2><p className="text-sm text-slate-500 mt-1">Tempo de estudo, sessões, banco de questões e simulados reunidos em uma única análise.</p></div>
       <div className="performance-periods flex gap-2 overflow-x-auto">{[7,30,90].map(days=><button key={days} onClick={()=>setPeriod(days)} className={`px-4 rounded-xl text-sm font-bold whitespace-nowrap ${period===days?'bg-slate-900 text-white':'bg-white border border-slate-200 text-slate-600'}`}>{days} dias</button>)}<button onClick={load} aria-label="Atualizar desempenho" className="w-11 h-11 min-h-11 shrink-0 rounded-xl bg-white border border-slate-200 flex items-center justify-center"><RefreshCw className={`w-4 h-4 ${loading?'animate-spin':''}`} /></button></div>
     </div>
     {error&&<div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-700">{error}</div>}
 
-    {!summary || number(summary.answered)===0 ? <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-10 text-center"><Target className="w-10 h-10 text-slate-300 mx-auto mb-3" /><h3 className="font-bold text-slate-800">Seu painel começa com a primeira resposta</h3><p className="text-sm text-slate-500 mt-1">Responda algumas questões do simulado para descobrir seus pontos fortes e o que precisa revisar.</p></div> : <>
-      <div className="performance-metrics grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+    {!summary || (number(summary.answered)===0&&number(summary.total_time_seconds)===0) ? <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-10 text-center"><Target className="w-10 h-10 text-slate-300 mx-auto mb-3" /><h3 className="font-bold text-slate-800">Seu painel começa com a primeira sessão</h3><p className="text-sm text-slate-500 mt-1">Inicie o timer ou responda questões para acompanhar tempo, acertos e evolução por assunto.</p></div> : <>
+      <div className="performance-metrics grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+        <Metric label="Tempo total" value={timeLabel(summary.total_time_seconds)} icon={<Clock3 />} color="indigo" />
         <Metric label="Respondidas" value={number(summary.answered)} icon={<BookOpenCheck />} color="indigo" />
         <Metric label="Acertos" value={number(summary.correct)} icon={<CheckCircle2 />} color="emerald" />
         <Metric label="Erros" value={number(summary.wrong)} icon={<AlertTriangle />} color="rose" />
         <Metric label="Aproveitamento" value={`${number(summary.accuracy).toFixed(0)}%`} icon={<Target />} color="amber" />
       </div>
+
+      <section className="grid md:grid-cols-3 gap-3" aria-label="Fontes do desempenho">
+        <SourceMetric title="Sessões de assunto" value={`${number(summary.study_sessions)} sessões`} detail={`${timeLabel(summary.study_seconds)} · ${number(summary.session_questions)} questões`} />
+        <SourceMetric title="Banco de questões" value={`${number(summary.question_bank_answered)} respostas`} detail={`${number(summary.question_sessions)} pomodoros · ${timeLabel(summary.question_practice_seconds)}`} />
+        <SourceMetric title="Simulados" value={`${number(summary.simulation_answered)} respostas`} detail={`${number(summary.simulation_sessions)} simulados · ${timeLabel(summary.simulation_seconds)}`} />
+      </section>
 
       {data?.recommendation&&<div className="bg-indigo-950 text-white rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4"><div className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center shrink-0"><TrendingUp className="w-5 h-5 text-amber-400" /></div><div className="grow"><span className="text-xs font-bold text-indigo-300 uppercase tracking-wide">Próximo assunto recomendado</span><h3 className="font-extrabold mt-1">{data.recommendation.topic}</h3><p className="text-sm text-indigo-200 mt-1">{number(data.recommendation.accuracy).toFixed(0)}% de acertos em {number(data.recommendation.answered)} respostas. Revise o resumo e tente novas questões.</p></div></div>}
 
@@ -122,10 +130,11 @@ export default function PerformanceTab() {
 
       <div className="performance-topic-lists grid grid-cols-1 gap-4"><TopicList title="Pontos fortes" subtitle="Assuntos com aproveitamento de 70% ou mais" items={data?.strongTopics||[]} tone="strong" /><TopicList title="Pontos para revisar" subtitle="Assuntos com maior incidência de erros" items={data?.weakTopics||[]} tone="weak" /></div>
 
-      <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6"><h3 className="font-bold text-slate-900 mb-4">Desempenho por assunto</h3><div className="space-y-4">{data?.byTopic.map(item=><div key={item.topic}><div className="flex justify-between gap-3 text-sm mb-1.5"><span className="font-semibold text-slate-700 truncate">{item.topic}</span><span className="font-bold text-slate-900 shrink-0">{number(item.accuracy).toFixed(0)}%</span></div><div className="h-2.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full rounded-full ${number(item.accuracy)>=70?'bg-emerald-500':number(item.accuracy)>=50?'bg-amber-400':'bg-rose-400'}`} style={{width:`${number(item.accuracy)}%`}} /></div><p className="text-xs text-slate-400 mt-1">{item.correct} acertos • {item.wrong} erros • {item.answered} respostas</p></div>)}</div></section>
+      <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6"><h3 className="font-bold text-slate-900 mb-4">Desempenho por assunto</h3><div className="space-y-4">{data?.byTopic.map(item=><div key={item.topic}><div className="flex justify-between gap-3 text-sm mb-1.5"><span className="font-semibold text-slate-700 truncate">{item.topic}</span><span className="font-bold text-slate-900 shrink-0">{number(item.accuracy).toFixed(0)}%</span></div><div className="h-2.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full rounded-full ${number(item.accuracy)>=70?'bg-emerald-500':number(item.accuracy)>=50?'bg-amber-400':'bg-rose-400'}`} style={{width:`${number(item.accuracy)}%`}} /></div><p className="text-xs text-slate-400 mt-1">{item.correct} acertos • {item.wrong} erros • {item.answered} respostas{number(item.studied_seconds)>0?` • ${timeLabel(item.studied_seconds)}`:''}</p></div>)}</div></section>
     </>}
   </div>;
 }
 
 function Metric({label,value,icon,color}:{label:string;value:string|number;icon:ReactNode;color:string}) { const tones:Record<string,string>={indigo:'bg-indigo-50 text-indigo-600',emerald:'bg-emerald-50 text-emerald-600',rose:'bg-rose-50 text-rose-600',amber:'bg-amber-50 text-amber-600'};return <div className="bg-white border border-slate-200 rounded-2xl p-4"><div className={`w-9 h-9 rounded-xl ${tones[color]} flex items-center justify-center [&_svg]:w-5 [&_svg]:h-5`}>{icon}</div><p className="text-xs font-semibold text-slate-500 mt-3">{label}</p><p className="text-2xl font-extrabold text-slate-900 mt-0.5">{value}</p></div>; }
+function SourceMetric({title,value,detail}:{title:string;value:string;detail:string}) { return <article className="bg-slate-900 text-white rounded-2xl p-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-wide">{title}</p><strong className="text-lg block mt-2">{value}</strong><span className="text-xs text-slate-300 block mt-1">{detail}</span></article>; }
 function TopicList({title,subtitle,items,tone}:{title:string;subtitle:string;items:TopicStat[];tone:'strong'|'weak'}) { return <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6"><div className="flex items-center gap-2"><Award className={`w-5 h-5 ${tone==='strong'?'text-emerald-500':'text-rose-500'}`} /><h3 className="font-bold text-slate-900">{title}</h3></div><p className="text-xs text-slate-500 mt-1 mb-4">{subtitle}</p>{items.length===0?<p className="text-sm text-slate-400 py-4">Responda mais questões para gerar esta análise.</p>:<div className="space-y-2">{items.map(item=><div key={item.topic} className={`p-3 rounded-xl ${tone==='strong'?'bg-emerald-50':'bg-rose-50'}`}><div className="flex justify-between gap-2"><span className="text-sm font-bold text-slate-800">{item.topic}</span><span className={`text-sm font-extrabold ${tone==='strong'?'text-emerald-700':'text-rose-700'}`}>{number(item.accuracy).toFixed(0)}%</span></div><p className="text-xs text-slate-500 mt-1">{item.answered} respostas</p></div>)}</div>}</section>; }

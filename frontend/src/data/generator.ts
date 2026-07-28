@@ -12,6 +12,139 @@ export interface CourseTopic {
   subtopics: string[];
 }
 
+const COMMON_BASIC_TOPICS: CourseTopic[] = [
+  {
+    id: 'portugues',
+    title: 'Língua Portuguesa',
+    category: 'Português',
+    subtopics: [
+      '1. Compreensão e interpretação de textos de gêneros variados',
+      '2. Reconhecimento de tipos e gêneros textuais',
+      '3. Domínio da ortografia oficial',
+      '4. Domínio dos mecanismos de coesão textual',
+      '4.1 Emprego de referenciação, substituição, repetição, conectores e elementos de sequenciação textual',
+      '4.2 Emprego de tempos e modos verbais',
+      '5. Domínio da estrutura morfossintática do período',
+      '5.1 Emprego das classes de palavras',
+      '5.2 Relações de coordenação entre orações e entre termos da oração',
+      '5.3 Relações de subordinação entre orações e entre termos da oração',
+      '5.4 Emprego dos sinais de pontuação',
+      '5.5 Concordância verbal e nominal',
+      '5.6 Regência verbal e nominal',
+      '5.7 Emprego do sinal indicativo de crase',
+      '5.8 Colocação dos pronomes átonos',
+      '6. Reescrita de frases e parágrafos do texto',
+      '6.1 Significação das palavras',
+      '6.2 Substituição de palavras ou de trechos de texto',
+      '6.3 Reorganização da estrutura de orações e de períodos do texto',
+      '6.4 Reescrita de textos de diferentes gêneros e níveis de formalidade',
+    ],
+  },
+  {
+    id: 'ti_basica',
+    title: 'Noções de Informática',
+    category: 'TI Básica',
+    subtopics: [
+      '1. Noções de sistema operacional (ambiente Windows)',
+      '2. Edição de textos, planilhas e apresentações (ambiente Microsoft Office)',
+      '3. Redes de computadores',
+      '3.1 Conceitos, ferramentas, aplicativos e procedimentos de Internet e intranet',
+      '3.2 Navegadores: Microsoft Edge, Mozilla Firefox, Google Chrome e similares',
+      '3.3 Correio eletrônico: Microsoft Outlook',
+      '3.4 Sítios de busca e pesquisa na Internet',
+      '3.5 Grupos de discussão',
+      '3.6 Redes sociais',
+      '3.7 Computação na nuvem (cloud computing)',
+      '4. Organização e gerenciamento de informações, arquivos, pastas e programas',
+      '5. Segurança da informação',
+      '5.1 Procedimentos de segurança',
+      '5.2 Malware, vírus, worms e outras pragas virtuais',
+      '5.3 Aplicativos de segurança: antivírus, firewall, anti-spyware e similares',
+      '5.4 Procedimentos de backup',
+      '5.5 Armazenamento de dados na nuvem (cloud storage)',
+      'Criptografia e proteção de dados',
+    ],
+  },
+  {
+    id: 'marco_legal_cti',
+    title: 'Marco Legal de CT&I',
+    category: 'Ética e Compliance',
+    subtopics: [
+      '1. Fundamentos constitucionais de CT&I e inovação — EC nº 85/2015',
+      '2. Lei nº 10.973/2004 — Lei de Inovação',
+      '2.1 Objetivos, conceitos, atores e instrumentos da Lei de Inovação',
+      '3. Lei nº 13.243/2016 — Marco Legal de CT&I',
+      '3.1 Principais alterações e impactos práticos para parcerias e instrumentos',
+      '4. Decreto nº 9.283/2018 — regulamentação federal',
+      '4.1 Operacionalização dos instrumentos, salvaguardas e mecanismos de apoio',
+      '5. Encomenda Tecnológica (ETEC)',
+      '5.1 Conceito, risco tecnológico, elementos estruturantes e lógica da ETEC',
+      '6. Decreto nº 10.534/2020 — Política Nacional de Inovação',
+      '7. Instrumentos correlatos',
+      '7.1 Lei nº 11.196/2005 — Lei do Bem',
+      '7.2 Lei Complementar nº 182/2021 — Marco Legal das Startups',
+      '8. Legislação estadual correlata de CT&I e inovação em Alagoas',
+      '8.1 Lei Estadual nº 8.956/2023 — Política Estadual de CT&I e estrutura do Sistema Estadual',
+      '9. Decreto Estadual nº 95.265/2024 — mecanismos de estímulo à inovação',
+    ],
+  },
+  {
+    id: 'legislacao_especifica_fapeal',
+    title: 'Legislações Específicas — FAPEAL',
+    category: 'Ética e Compliance',
+    subtopics: [
+      '1. Lei nº 8.956/2023 — Política Estadual de Ciência, Tecnologia e Inovação de Alagoas',
+      '2. Lei Delegada nº 48/2022 — modelo de gestão estadual e estrutura de cargos da FAPEAL',
+      '3. Lei nº 7.117/2009 — incentivos à pesquisa, inovação e proteção da propriedade intelectual em Alagoas',
+      '4. Lei nº 6.527/2004 — carreira dos profissionais da FAPEAL',
+      '5. Lei Complementar nº 20/2002 — reestruturação da FAPEAL e transformação de sua natureza jurídica',
+      '6. Lei nº 5.247/1991 — Regime Jurídico Único dos servidores públicos civis de Alagoas',
+      '7. Lei Complementar nº 5/1990 — criação da FAPEAL',
+      '8. Decreto nº 4.137/2009 — Estatuto da FAPEAL',
+    ],
+  },
+  {
+    id: 'alagoas',
+    title: 'Conhecimentos do Estado de Alagoas',
+    category: 'Conhecimentos de Alagoas',
+    subtopics: [
+      '1. Formação histórica de Alagoas',
+      '1.1 Colonização portuguesa',
+      '1.2 Economia açucareira',
+      '1.3 Emancipação política da Capitania de Pernambuco em 1817',
+      '1.4 Elevação a província em 1821',
+      '2. Quilombo dos Palmares',
+      '2.1 Formação no período colonial',
+      '2.2 Resistência à escravidão',
+      '2.3 Liderança de Zumbi dos Palmares',
+      '3. Aspectos geográficos',
+      '3.1 Litoral, zona da mata, agreste e sertão',
+      '3.2 Rio São Francisco',
+      '4. Organização político-administrativa',
+      '4.1 Maceió como capital estadual',
+      '4.2 Municípios',
+      '4.3 Poderes Executivo, Legislativo e Judiciário',
+      '5. Economia estadual',
+      '5.1 Agroindústria canavieira',
+      '5.2 Turismo',
+      '5.3 Setor de serviços',
+      '6. Cultura e patrimônio',
+      '6.1 Manifestações culturais populares',
+      '6.2 Patrimônio histórico-cultural alagoano',
+    ],
+  },
+  {
+    id: 'ingles',
+    title: 'Língua Inglesa',
+    category: 'Língua Inglesa',
+    subtopics: [
+      '1. Compreensão de textos variados: vocabulário, estrutura, ideias explícitas e implícitas e relações textuais',
+      '2. Itens gramaticais relevantes para a compreensão de conteúdos semânticos',
+      '3. Conhecimento e uso das formas contemporâneas da língua inglesa',
+    ],
+  },
+];
+
 export const COURSES_CONFIG: {
   [key: string]: {
     name: string;
@@ -330,14 +463,117 @@ export const COURSES_CONFIG: {
     name: "Jornalismo",
     description: "Concurso público para provimento de vagas de Jornalista / Analista de Comunicação. Foco em Teorias da Comunicação, Técnicas de Redação, Assessoria de Imprensa, Webjornalismo, Mídias Sociais e Ética Jornalística.",
     topics: [
-      { id: 'teorias_com', title: 'Teorias da Comunicação', category: 'Teoria da Comunicação', subtopics: ['Agenda-Setting e Enquadramento', 'Gatekeeping e Newsmaking', 'Escola de Frankfurt e Indústria Cultural'] },
-      { id: 'redacao_jornalistica', title: 'Técnicas de Redação', category: 'Técnicas de Redação', subtopics: ['Lead, Sub-lead e Estrutura', 'Pirâmide Invertida e Objetividade', 'Gêneros Jornalísticos: Opinião e Notícia'] },
-      { id: 'assessoria_imprensa', title: 'Assessoria de Imprensa', category: 'Assessoria de Imprensa', subtopics: ['Press Release e Coletivas', 'Gerenciamento de Crises de Imagem', 'Media Training para Porta-vozes'] },
-      { id: 'jornalismo_digital', title: 'Jornalismo Digital e Web', category: 'Jornalismo Digital', subtopics: ['SEO para Redação Jornalística', 'Redes Sociais e Monitoramento', 'Fake News e Verificação de Fatos'] },
+      {
+        id: 'teorias_com',
+        title: 'Jornalismo e Meios de Comunicação de Massa',
+        category: 'Conhecimentos Específicos - Jornalismo',
+        subtopics: [
+          'História e conceitos do jornalismo e dos meios de comunicação de massa',
+          'Veículos de comunicação de massa no Brasil: história, estrutura e funcionamento',
+          'Características, linguagens e técnicas de produção, apuração, entrevista, redação e edição para jornal, revista, rádio, Internet, TV e vídeo',
+          'Condições de produção da notícia',
+          'Princípios e orientações gerais para redação de textos jornalísticos',
+        ],
+      },
+      {
+        id: 'redacao_jornalistica',
+        title: 'Imprensa Escrita, Redação e Editoração',
+        category: 'Conhecimentos Específicos - Jornalismo',
+        subtopics: [
+          'Gêneros de redação jornalística',
+          'Elaboração de notícia, reportagem, entrevista, editorial, crônica, coluna, pauta, informativo, comunicado, carta, release, relatório, anúncio e briefing em texto e imagem',
+          'Técnicas de redação jornalística',
+          'Lead, sub-lead e pirâmide invertida',
+          'Critérios de seleção, redação e edição',
+          'Processo gráfico',
+          'Editoração e preparação de originais',
+          'Projeto gráfico e tipologia',
+          'Caracteres e medidas, justificação, mancha gráfica e margens',
+          'Diagramação e retrancagem',
+          'Composição e impressão',
+          'Planejamento editorial',
+          'Ilustrações, cores, técnicas de impressão e apresentação visual da publicação',
+          'Redação e edição institucional: releases, relatórios públicos, guias do proponente, campanhas e peças digitais',
+        ],
+      },
+      {
+        id: 'assessoria_imprensa',
+        title: 'Jornalismo Institucional e Assessoria de Imprensa',
+        category: 'Conhecimentos Específicos - Jornalismo',
+        subtopics: [
+          'História, atribuições, organização, estrutura e funcionamento do jornalismo institucional',
+          'Notícia institucional',
+          'Estrutura e processo de construção da notícia',
+          'Notícia na mídia impressa',
+          'Notícia na mídia eletrônica',
+          'Notícia na mídia digital',
+          'Produção da notícia e rotinas da assessoria de imprensa',
+          'Papel do assessor de imprensa',
+          'Atendimento à imprensa',
+          'Sugestões de pauta, releases e artigos',
+          'Organização de entrevistas',
+          'Produtos de uma assessoria de imprensa',
+          'Mecanismos de controle da informação',
+          'Pauta institucional',
+          'Canais e estratégias de comunicação interna',
+          'Publicações jornalísticas empresariais: história, planejamento, conceitos e técnicas',
+          'Métodos e técnicas de pesquisa',
+        ],
+      },
+      {
+        id: 'jornalismo_digital',
+        title: 'Webjornalismo e Comunicação Digital',
+        category: 'Conhecimentos Específicos - Jornalismo',
+        subtopics: [
+          'Webjornalismo',
+          'Comunicação digital: estratégia e canais',
+          'Métricas e indicadores de alcance, engajamento e conversão',
+        ],
+      },
       { id: 'marco_legal_cti', title: 'Marco Legal de CT&I', category: 'Ética e Compliance', subtopics: ['Constituição e EC 85/2015', 'Lei 10.973/2004 (Lei de Inovação)', 'Lei 13.243/2016', 'Decreto 9.283/2018', 'Encomenda Tecnológica (ETEC)'] },
       { id: 'legislacao_especifica_fapeal', title: 'Legislações Específicas (FAPEAL)', category: 'Ética e Compliance', subtopics: ['Lei Delegada 48/2022', 'Lei 7.117/2009', 'Lei 6.527/2004', 'L.C. 20/2002 e 5/1990', 'Lei 5.247/1991 (RJU)', 'Decreto 4.137/2009'] },
-      { id: 'divulgacao_cientifica', title: 'Divulgação Científica e Sistemas de Inovação', category: 'Divulgação Científica', subtopics: ['Curadoria de Conteúdo de CT&I', 'Manual de Oslo', 'Análise Bibliométrica'] },
-      { id: 'etica_imprensa', title: 'Ética e Legislação dos Meios', category: 'Ética e Compliance', subtopics: ['Código de Ética dos Jornalistas Brasileiros', 'Segredo de Fonte e Direito à Informação', 'Direito de Resposta e Ofensa'] }
+      {
+        id: 'divulgacao_cientifica',
+        title: 'Divulgação Científica e Ecossistemas de Inovação',
+        category: 'Conhecimentos Específicos - Jornalismo',
+        subtopics: [
+          'Divulgação científica e da inovação',
+          'Tradução de conteúdo técnico, curadoria e roteirização',
+          'Data storytelling: narrativas baseadas em dados, indicadores e bibliometria',
+          'Ética e boas práticas em narrativas baseadas em dados',
+          'Sistemas nacionais, regionais e locais de inovação e políticas de CT&I',
+          'Atores, instituições e interações entre governo, empresas, universidades e sociedade',
+          'Avaliação do desempenho de sistemas de inovação',
+          'Inovação e desenvolvimento: invenção, inovação e difusão',
+          'Modelo linear e visão sistêmica da inovação',
+          'Inovação radical, incremental, de produto, de processo e organizacional',
+          'Inovação, território, desenvolvimento e tecnologia social',
+          'Ambientes promotores de inovação: parques, polos, incubadoras, aceleradoras, laboratórios abertos e cidades inteligentes',
+          'Governança e avaliação de resultados e impactos dos ambientes de inovação',
+          'Inteligência tecnológica e prospecção em CT&I',
+          'Monitoramento de tendências e serviços de informação para decisões de fomento e planejamento',
+          'Universidades e institutos de pesquisa no Brasil',
+          'Sistema de pesquisa, infraestruturas científicas, tecnológicas e multiusuário',
+          'Formação, produção científica e interação com empresas e governo',
+          'Redes de colaboração e intercâmbio de conhecimento científico',
+          'Cooperação nacional e internacional, produção conjunta e circulação do conhecimento',
+          'Indicadores de publicações científicas',
+          'Citações, fatores de impacto, rankings, comparabilidade entre áreas e posicionamento do Brasil',
+          'Inovação segundo o Manual de Oslo',
+        ],
+      },
+      {
+        id: 'etica_imprensa',
+        title: 'Comunicação Pública, LAI e LGPD',
+        category: 'Conhecimentos Específicos - Jornalismo',
+        subtopics: [
+          'Comunicação pública e institucional',
+          'Planejamento da comunicação pública',
+          'Linguagem cidadã, transparência ativa e prestação de informações',
+          'LAI aplicada à comunicação e à publicação de informações institucionais',
+          'LGPD aplicada à comunicação e à publicação de dados institucionais',
+        ],
+      }
     ],
     studySections: [
       {
@@ -651,6 +887,41 @@ COURSES_CONFIG.jornalismo.studySections.push(
 COURSES_CONFIG.jornalismo.topics = uniqueById(COURSES_CONFIG.jornalismo.topics);
 COURSES_CONFIG.jornalismo.studySections = uniqueById(COURSES_CONFIG.jornalismo.studySections);
 
+const commonBasicTopicIds = new Set(COMMON_BASIC_TOPICS.map(topic => topic.id));
+const commonBasicSectionIds = new Set([
+  'portugues',
+  'ingles',
+  'ti',
+  'marco_legal_cti',
+  'legislacao_especifica_fapeal',
+  'alagoas',
+]);
+const commonBasicSections = defaultSeplagSections.filter(section => commonBasicSectionIds.has(section.id));
+const commonBasicQuestionCategories = new Set([
+  'Português',
+  'Língua Inglesa',
+  'TI Básica',
+  'Ética e Compliance',
+  'Conhecimentos de Alagoas',
+]);
+const commonBasicQuestions = defaultSeplagQuestions.filter(question => commonBasicQuestionCategories.has(question.category));
+const withoutCurriculumNumber = (label: string) => label.replace(/^\d+(?:\.\d+)*\.?\s+/, '');
+
+// These subjects are reusable knowledge blocks, not tied to a single job profile.
+// Canonical lists replace the old abbreviated versions so equivalent entries are not duplicated.
+Object.values(COURSES_CONFIG).forEach(config => {
+  const specificTopics = config.topics.filter(topic => !commonBasicTopicIds.has(topic.id));
+  config.topics = [
+    ...COMMON_BASIC_TOPICS.map(topic => ({
+      ...topic,
+      subtopics: topic.subtopics.map(withoutCurriculumNumber),
+    })),
+    ...specificTopics,
+  ];
+  config.studySections = uniqueById([...commonBasicSections, ...config.studySections]);
+  config.quizQuestions = deduplicateQuestions([...config.quizQuestions, ...commonBasicQuestions]);
+});
+
 /**
  * Algorithmic generator of study weeks based on:
  * @param course selected course id
@@ -684,17 +955,10 @@ export function generateCustomPlan(
   });
   
   // 1. Filter the study sections by selected topics
-  const filteredSections = config.studySections.filter(section => 
-    selectedTopicIds.includes(section.id) || 
-    // Fallback for default SEPLAG where section names might map slightly differently
-    ((course === 'seplag_informatica' || course === 'jornalismo') && (
-      (section.id === 'portugues' && selectedTopicIds.includes('portugues')) ||
-      (section.id === 'ingles' && selectedTopicIds.includes('ingles')) ||
-      (section.id === 'ti' && selectedTopicIds.includes('ti_basica')) ||
-      (section.id === 'etica' && selectedTopicIds.includes('etica')) ||
-      (section.id === 'alagoas' && selectedTopicIds.includes('alagoas')) ||
-      (section.id === 'especifico' && (selectedTopicIds.includes('especificos_devops') || selectedTopicIds.includes('especificos_db')))
-    ))
+  const filteredSections = config.studySections.filter(section =>
+    selectedTopicIds.includes(section.id) ||
+    (section.id === 'ti' && selectedTopicIds.includes('ti_basica')) ||
+    (section.id === 'especifico' && (selectedTopicIds.includes('especificos_devops') || selectedTopicIds.includes('especificos_db')))
   );
 
   // If filtered sections are empty, fall back to showing all
@@ -707,10 +971,12 @@ export function generateCustomPlan(
     return categoriesToInclude.some(catTitle => 
       q.category.toLowerCase().includes(catTitle.toLowerCase()) || 
       catTitle.toLowerCase().includes(q.category.toLowerCase()) ||
+      // Reusable basic-knowledge mappings
+      (q.category === 'TI Básica' && selectedTopicIds.includes('ti_basica')) ||
+      (q.category === 'Português' && selectedTopicIds.includes('portugues')) ||
+      (q.category === 'Ética e Compliance' && (selectedTopicIds.includes('marco_legal_cti') || selectedTopicIds.includes('legislacao_especifica_fapeal'))) ||
       // SEPLAG-specific mappings
-      (course === 'seplag_informatica' && q.category === 'TI Básica' && selectedTopicIds.includes('ti_basica')) ||
-      (course === 'seplag_informatica' && q.category === 'Português' && selectedTopicIds.includes('portugues')) ||
-      (course === 'seplag_informatica' && q.category === 'Ética e Compliance' && (selectedTopicIds.includes('etica') || selectedTopicIds.includes('marco_legal_cti') || selectedTopicIds.includes('legislacao_especifica_fapeal'))) ||
+      (course === 'seplag_informatica' && q.category === 'Ética e Compliance' && (selectedTopicIds.includes('etica') || selectedTopicIds.includes('legislacao_especifica_fapeal'))) ||
       (course === 'seplag_informatica' && q.category === 'Conhecimentos Específicos' && (selectedTopicIds.includes('especificos_devops') || selectedTopicIds.includes('especificos_db'))) ||
       // Journalism-specific mappings
       (course === 'jornalismo' && q.category === 'Conhecimentos Específicos - Jornalismo' && (
@@ -792,6 +1058,7 @@ export function generateCustomPlan(
     const blocks: StudyBlock[] = [];
     const configuredTopic = config.topics.find(topic =>
       topic.id === activeSectionForWeek.id ||
+      (activeSectionForWeek.id === 'ti' && topic.id === 'ti_basica') ||
       topic.title.toLowerCase().includes(activeSectionForWeek.title.toLowerCase()) ||
       activeSectionForWeek.title.toLowerCase().includes(topic.title.toLowerCase())
     );

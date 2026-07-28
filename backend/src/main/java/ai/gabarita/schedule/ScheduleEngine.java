@@ -57,15 +57,15 @@ public class ScheduleEngine {
         for(var e:byWeek.entrySet()){var w=new LinkedHashMap<String,Object>();w.put("id","week-"+i);w.put("title","Semana "+(++i));w.put("dateRange",e.getKey().format(BR)+" - "+e.getKey().plusDays(6).format(BR));w.put("focus","Plano equilibrado conforme suas prioridades");w.put("blocks",e.getValue());result.add(w);} return result;
     }
 
-    @Transactional public Map<String,Object> regeneratePlan(UUID planId) {
-        var plan=jdbc.sql("SELECT exam_date,block_minutes,break_minutes,final_sprint_days FROM study_plans WHERE id=:p").param("p",planId).query().listOfRows().stream().findFirst().orElseThrow(()->new NoSuchElementException("Plano não encontrado"));
+    @Transactional public Map<String,Object> regeneratePlan(UUID planId,UUID userId) {
+        var plan=jdbc.sql("SELECT exam_date,block_minutes,break_minutes,final_sprint_days FROM study_plans WHERE id=:p AND user_id=:u").param("p",planId).param("u",userId).query().listOfRows().stream().findFirst().orElseThrow(()->new NoSuchElementException("Plano não encontrado"));
         var availability=jdbc.sql("SELECT weekday,start_time,end_time,COALESCE(block_minutes,:default) block_minutes,COALESCE(break_minutes,:break) break_minutes FROM availability WHERE plan_id=:p ORDER BY weekday,start_time").param("default",plan.get("block_minutes")).param("break",plan.get("break_minutes")).param("p",planId).query().listOfRows();
         if(availability.isEmpty()) throw new IllegalArgumentException("Configure a disponibilidade semanal antes de gerar o cronograma");
         var topics=jdbc.sql("""
           SELECT t.id,t.name,(COALESCE(pt.priority,t.weight*t.frequency*t.difficulty)) priority,
-          COALESCE((SELECT AVG(CASE WHEN a.correct THEN 1 ELSE 0 END) FROM answers a WHERE a.question_id IN(SELECT q.id FROM questions q WHERE q.topic_id=t.id)),0.5) performance
+          COALESCE((SELECT AVG(CASE WHEN a.correct THEN 1 ELSE 0 END) FROM answers a WHERE a.user_id=:u AND a.question_id IN(SELECT q.id FROM questions q WHERE q.topic_id=t.id)),0.5) performance
           FROM plan_topics pt JOIN topics t ON t.id=pt.topic_id WHERE pt.plan_id=:p AND pt.enabled ORDER BY priority DESC
-          """).param("p",planId).query().listOfRows();
+          """).param("p",planId).param("u",userId).query().listOfRows();
         if(topics.isEmpty()) throw new IllegalArgumentException("Selecione ao menos um assunto para gerar o cronograma");
         jdbc.sql("DELETE FROM schedule_blocks WHERE plan_id=:p AND status='PENDING'").param("p",planId).update();
         // Motor base: pontua prioridade e fraqueza individual, alterna assuntos e reserva revisões espaçadas.

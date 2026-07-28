@@ -1,5 +1,6 @@
 package ai.gabarita.question;
 
+import ai.gabarita.auth.CurrentUser;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.constraints.*;
 import java.util.*;
@@ -10,12 +11,14 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/questions")
 public class QuestionController {
     private final JdbcClient jdbc; private final ObjectMapper json;
-    QuestionController(JdbcClient jdbc,ObjectMapper json){this.jdbc=jdbc;this.json=json;}
-    public record LegacyQuestion(@NotNull Object id,@NotBlank String category,@NotBlank String text,
+    private final CurrentUser currentUser;
+    QuestionController(JdbcClient jdbc,ObjectMapper json,CurrentUser currentUser){this.jdbc=jdbc;this.json=json;this.currentUser=currentUser;}
+    public record LegacyQuestion(@NotNull Object id,@NotBlank String category,String topic,@NotBlank String text,
       @NotBlank String correct,String explanation,String reference,String passageId){}
     @GetMapping("/course/{courseId}") public List<Map<String,Object>> byCourse(@PathVariable String courseId) {
       return jdbc.sql("""
-        SELECT q.id::text id,COALESCE(q.metadata->>'category',s.name,'Geral') category,q.statement text,
+        SELECT q.id::text id,COALESCE(q.metadata->>'category',s.name,'Geral') category,
+        COALESCE(NULLIF(q.metadata->>'topic',''),q.metadata->>'category',s.name,'Geral') topic,q.statement text,
         CASE WHEN q.status='ANNULLED' THEN 'Anulada' ELSE q.correct_answer #>> '{}' END correct,
         COALESCE(q.explanation,'') explanation,COALESCE(q.metadata->>'reference',q.board,'') reference,
         COALESCE(q.passage_id::text,NULLIF(q.metadata->>'passageId','')) passage_id,
@@ -25,13 +28,14 @@ public class QuestionController {
         """).param("course",courseId).query().listOfRows();
     }
     @PostMapping("/import/legacy") public Map<String,Object> importLegacy(@RequestParam String courseId,@RequestBody List<LegacyQuestion> questions){
+      currentUser.requireAdmin();
       int imported=0,updated=0;
       for(var q:questions){
         String legacyId=String.valueOf(q.id());
         var existing=jdbc.sql("SELECT id FROM questions WHERE metadata->>'courseId'=:course AND metadata->>'legacyId'=:legacy LIMIT 1")
           .param("course",courseId).param("legacy",legacyId).query(UUID.class).list();
         String answer;try{answer=json.writeValueAsString(q.correct());}catch(Exception e){throw new IllegalArgumentException("Gabarito inválido");}
-        String metadata;try{metadata=json.writeValueAsString(Map.of("courseId",courseId,"legacyId",legacyId,"category",q.category(),"topic",q.category(),"reference",q.reference()==null?"":q.reference(),"passageId",q.passageId()==null?"":q.passageId()));}catch(Exception e){throw new IllegalArgumentException("Metadados inválidos");}
+        String metadata;try{metadata=json.writeValueAsString(Map.of("courseId",courseId,"legacyId",legacyId,"category",q.category(),"topic",q.topic()==null||q.topic().isBlank()?q.category():q.topic(),"reference",q.reference()==null?"":q.reference(),"passageId",q.passageId()==null?"":q.passageId()));}catch(Exception e){throw new IllegalArgumentException("Metadados inválidos");}
         String status="Anulada".equalsIgnoreCase(q.correct())?"ANNULLED":"ACTIVE";
         if(existing.isEmpty()){
           jdbc.sql("INSERT INTO questions(id,board,type,statement,explanation,status,correct_answer,metadata) VALUES(gen_random_uuid(),'CEBRASPE','TRUE_FALSE',:text,:explanation,:status,CAST(:answer AS jsonb),CAST(:metadata AS jsonb))")

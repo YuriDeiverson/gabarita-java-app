@@ -2,6 +2,8 @@ server:
   port: ${PORT:3001}
   forward-headers-strategy: framework
 spring:
+  config:
+    import: optional:file:.env[.properties]
   application.name: gabarita-api
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/gabarita}
@@ -14,3 +16,7 @@ spring:
 management.endpoints.web.exposure.include: health,info
 app:
   cors-origins: ${CORS_ORIGINS:http://localhost:3000}
+  auth:
+    supabase-url: ${SUPABASE_URL:}
+    jwks-url: ${SUPABASE_JWKS_URL:}
+    jwt-secret: ${SUPABASE_JWT_SECRET:}

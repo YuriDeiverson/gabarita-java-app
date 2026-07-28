@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, MouseEvent } from 'react';
+import { useState, useEffect, useMemo, useRef, MouseEvent } from 'react';
 import { COURSES_CONFIG, generateCustomPlan } from '../data/generator';
 import { API_BASE_URL, studyPlansApi, scheduleApi, questionsApi } from '../services/api';
 import { 
@@ -17,6 +17,7 @@ import {
   Trash2, 
   Play, 
   Check,
+  Search,
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
@@ -29,6 +30,34 @@ const getTodayIso = () => {
 
 const EXAM_BOARDS = ['CEBRASPE', 'FGV', 'FCC', 'VUNESP', 'Instituto AOCP', 'IBFC', 'IDECAN', 'Quadrix'];
 
+const CONTEST_OPTIONS = [
+  { value: 'seplag', label: 'SEPLAG' },
+  { value: 'fapeal', label: 'FAPEAL' },
+  { value: 'al_previdencia', label: 'AL PREVIDÊNCIA' },
+  { value: 'sesau_al', label: 'SESAU AL' },
+] as const;
+
+type ContestId = typeof CONTEST_OPTIONS[number]['value'];
+const contestLabel = (contest: ContestId) => CONTEST_OPTIONS.find(option => option.value === contest)?.label || contest;
+
+const CONTEST_TOPIC_IDS: Record<ContestId, string[]> = {
+  seplag: [],
+  fapeal: ['legislacao_especifica_fapeal'],
+  al_previdencia: [],
+  sesau_al: [],
+};
+
+const ALL_CONTEST_TOPIC_IDS = new Set(Object.values(CONTEST_TOPIC_IDS).flat());
+const topicsForContest = <T extends { id: string }>(topics: T[], contest: ContestId) => topics.filter(topic =>
+  !ALL_CONTEST_TOPIC_IDS.has(topic.id) || CONTEST_TOPIC_IDS[contest].includes(topic.id)
+);
+
+const inferLegacyContest = (courseId: string, selectedTopicIds: string[] = []): ContestId => {
+  if (selectedTopicIds.includes('legislacao_especifica_fapeal')) return 'fapeal';
+  if (courseId === 'tecnico_enfermagem') return 'sesau_al';
+  return 'seplag';
+};
+
 const ROLE_OPTIONS = [
   { value: 'seplag_informatica', label: 'Especialista em Gestão Pública - Tecnologia da Informação' },
   { value: 'seplag_informatica', label: 'Analista de Tecnologia da Informação' },
@@ -37,9 +66,56 @@ const ROLE_OPTIONS = [
   { value: 'tecnico_enfermagem', label: 'Enfermeiro' },
   { value: 'jornalismo', label: 'Jornalista / Analista de Comunicação' },
   { value: 'jornalismo', label: 'Assessor de Comunicação' },
+  { value: 'jornalismo', label: 'Gestor Especializado em Ciência e Tecnologia - Jornalismo' },
 ];
 
+const SORTED_ROLE_OPTIONS = [...ROLE_OPTIONS].sort((first, second) =>
+  first.label.localeCompare(second.label, 'pt-BR', { sensitivity: 'base' })
+);
+
+const normalizeSearchText = (value: string) => value
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLocaleLowerCase('pt-BR');
+
+const formatIsoDateToBr = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+};
+
+const maskBrDate = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+};
+
+const parseBrDateToIso = (value: string) => {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
+  if (!match) return '';
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return '';
+  return `${match[3]}-${match[2]}-${match[1]}`;
+};
+
 const subtopicKey = (topicId: string, subtopic: string) => `${topicId}::${subtopic}`;
+
+const reconcileSavedSubtopics = (
+  topics: Array<{ id: string; subtopics: string[] }>,
+  selectedTopicIds: string[],
+  savedSubtopicIds: string[],
+) => topics.flatMap(topic => {
+  if (!selectedTopicIds.includes(topic.id)) return [];
+  const currentKeys = topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic));
+  const validSavedKeys = savedSubtopicIds.filter(key => currentKeys.includes(key));
+  if (validSavedKeys.length > 0) return validSavedKeys;
+
+  const hadPreviousCurriculumSelection = savedSubtopicIds.some(key => key.startsWith(`${topic.id}::`));
+  return hadPreviousCurriculumSelection ? currentKeys : [];
+});
 
 interface HomeTabProps {
   onPlanGenerated: (courseId: string) => void;
@@ -53,8 +129,13 @@ export default function HomeTab({ onPlanGenerated, onPlansChanged }: HomeTabProp
 
   // Configuration States (loaded dynamically per course when configuring)
   const [examDate, setExamDate] = useState<string>(getTodayIso);
+  const [examDateDisplay, setExamDateDisplay] = useState<string>(() => formatIsoDateToBr(getTodayIso()));
+  const nativeDatePickerRef = useRef<HTMLInputElement>(null);
   const [examBoard, setExamBoard] = useState<string>('CEBRASPE');
+  const [selectedContest, setSelectedContest] = useState<ContestId>('seplag');
   const [targetRole, setTargetRole] = useState<string>('Jornalista / Analista de Comunicação');
+  const [roleSearch, setRoleSearch] = useState('');
+  const [rolePickerOpen, setRolePickerOpen] = useState(false);
   const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([1, 2, 3, 4, 5]); // Monday to Friday
   const [hoursPerDayInput, setHoursPerDayInput] = useState<string>('4');
   const [hoursByWeekday, setHoursByWeekday] = useState<Record<number, number>>({});
@@ -122,6 +203,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
     let totalDaysNum = 0;
     let weekdaysArr: number[] = [];
     let examBoardStr = '';
+    let contestStr: ContestId = 'seplag';
     let targetRoleStr = '';
 
     try {
@@ -131,6 +213,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
       totalDaysNum = parsed.totalDays;
       weekdaysArr = parsed.selectedWeekdays || [1, 2, 3, 4, 5];
       examBoardStr = parsed.examBoard || 'CEBRASPE';
+      contestStr = parsed.contest || inferLegacyContest(courseId, parsed.selectedTopics);
       targetRoleStr = parsed.targetRole || '';
     } catch (e) {}
 
@@ -158,6 +241,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
       totalDays: totalDaysNum,
       selectedWeekdays: weekdaysArr,
       examBoard: examBoardStr,
+      contest: contestStr,
       targetRole: targetRoleStr,
       totalBlocks,
       completedBlocks,
@@ -238,6 +322,23 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
     return calculateStudyDays(examDate, selectedWeekdays);
   }, [examDate, selectedWeekdays]);
 
+  const filteredRoleOptions = useMemo(() => {
+    const query = normalizeSearchText(roleSearch.trim());
+    if (!query) return SORTED_ROLE_OPTIONS;
+    return SORTED_ROLE_OPTIONS.filter(role => normalizeSearchText(role.label).includes(query));
+  }, [roleSearch]);
+
+  const applyExamDate = (isoDate: string) => {
+    setExamDate(isoDate);
+    setExamDateDisplay(formatIsoDateToBr(isoDate));
+  };
+
+  const handleExamDateChange = (value: string) => {
+    const maskedValue = maskBrDate(value);
+    setExamDateDisplay(maskedValue);
+    setExamDate(parseBrDateToIso(maskedValue));
+  };
+
   const normalizedHoursPerDay = useMemo(() => {
     const parsed = Number(hoursPerDayInput);
     if (!Number.isFinite(parsed)) return 1;
@@ -288,38 +389,52 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
     if (savedConfigStr) {
       try {
         const parsed = JSON.parse(savedConfigStr);
-        setExamDate(parsed.examDate || getTodayIso());
+        const savedTopicIds: string[] = parsed.selectedTopics || config.topics.map(topic => topic.id);
+        const restoredContest = CONTEST_OPTIONS.find(option => option.value === parsed.contest)?.value
+          || inferLegacyContest(courseId, savedTopicIds);
+        const contestTopics = topicsForContest(config.topics, restoredContest);
+        const validTopicIds = new Set(contestTopics.map(topic => topic.id));
+        const restoredTopicIds = savedTopicIds.filter(topicId => validTopicIds.has(topicId));
+        const restoredSubtopicIds = parsed.selectedSubtopics || contestTopics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic)));
+        applyExamDate(parsed.examDate || getTodayIso());
         setExamBoard(parsed.examBoard || 'CEBRASPE');
+        setSelectedContest(restoredContest);
         setTargetRole(parsed.targetRole || defaultRole);
         setSelectedWeekdays(parsed.selectedWeekdays || [1, 2, 3, 4, 5]);
         setHoursPerDayInput(String(Math.max(1, parsed.hoursPerDay || 4)));
         setHoursByWeekday(parsed.hoursByWeekday || {});
         setBlockMinutes(parsed.blockMinutes || 60);
-        setSelectedTopicIds(parsed.selectedTopics || config.topics.map(t => t.id));
-        setSelectedSubtopicIds(parsed.selectedSubtopics || config.topics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))));
+        setSelectedTopicIds(restoredTopicIds);
+        setSelectedSubtopicIds(reconcileSavedSubtopics(contestTopics, restoredTopicIds, restoredSubtopicIds));
       } catch (e) {
         // Fallbacks
-        setExamDate(getTodayIso());
+        const contest: ContestId = 'seplag';
+        const contestTopics = topicsForContest(config.topics, contest);
+        applyExamDate(getTodayIso());
         setExamBoard('CEBRASPE');
+        setSelectedContest(contest);
         setTargetRole(defaultRole);
         setSelectedWeekdays([1, 2, 3, 4, 5]);
         setHoursPerDayInput('4');
         setHoursByWeekday({});
         setBlockMinutes(60);
-        setSelectedTopicIds(config.topics.map(t => t.id));
-        setSelectedSubtopicIds(config.topics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))));
+        setSelectedTopicIds(contestTopics.map(topic => topic.id));
+        setSelectedSubtopicIds(contestTopics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))));
       }
     } else {
       // Defaults
-      setExamDate(getTodayIso());
+      const contest: ContestId = 'seplag';
+      const contestTopics = topicsForContest(config.topics, contest);
+      applyExamDate(getTodayIso());
       setExamBoard('CEBRASPE');
+      setSelectedContest(contest);
       setTargetRole(defaultRole);
       setSelectedWeekdays([1, 2, 3, 4, 5]);
       setHoursPerDayInput('4');
       setHoursByWeekday({});
       setBlockMinutes(60);
-      setSelectedTopicIds(config.topics.map(t => t.id));
-      setSelectedSubtopicIds(config.topics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))));
+      setSelectedTopicIds(contestTopics.map(topic => topic.id));
+      setSelectedSubtopicIds(contestTopics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))));
     }
     setConfigStep(1);
     setScreen('configure');
@@ -334,8 +449,27 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
     setHoursByWeekday(prev => ({ ...prev, [value]: prev[value] || normalizedHoursPerDay }));
   };
 
+  const handleContestChange = (contest: ContestId) => {
+    const previousTopics = topicsForContest(activeCourseConfig.topics, selectedContest);
+    const nextTopics = topicsForContest(activeCourseConfig.topics, contest);
+    const previousTopicIds = new Set(previousTopics.map(topic => topic.id));
+    const nextTopicIds = new Set(nextTopics.map(topic => topic.id));
+    const newlyAvailableTopics = nextTopics.filter(topic => !previousTopicIds.has(topic.id));
+
+    setSelectedContest(contest);
+    setSelectedTopicIds(current => Array.from(new Set([
+      ...current.filter(topicId => nextTopicIds.has(topicId)),
+      ...newlyAvailableTopics.map(topic => topic.id),
+    ])));
+    setSelectedSubtopicIds(current => Array.from(new Set([
+      ...current.filter(key => nextTopics.some(topic => key.startsWith(`${topic.id}::`))),
+      ...newlyAvailableTopics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))),
+    ])));
+    setExpandedTopicIds(current => current.filter(topicId => nextTopicIds.has(topicId)));
+  };
+
   const handleTopicToggle = (topicId: string) => {
-    const topic = activeCourseConfig.topics.find(item => item.id === topicId);
+    const topic = availableTopics.find(item => item.id === topicId);
     if (!topic) return;
     const keys = topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic));
     const shouldSelect = !keys.every(key => selectedSubtopicIds.includes(key));
@@ -353,7 +487,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
     const key = subtopicKey(topicId, subtopic);
     setSelectedSubtopicIds(current => {
       const next = current.includes(key) ? current.filter(item => item !== key) : [...current, key];
-      const topic = activeCourseConfig.topics.find(item => item.id === topicId);
+      const topic = availableTopics.find(item => item.id === topicId);
       const topicHasSelection = topic?.subtopics.some(item => next.includes(subtopicKey(topicId, item)));
       setSelectedTopicIds(ids => topicHasSelection
         ? Array.from(new Set([...ids, topicId]))
@@ -367,11 +501,14 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
     const option = ROLE_OPTIONS.find(role => role.label === roleLabel);
     if (!option) return;
     const config = COURSES_CONFIG[option.value];
+    const contestTopics = topicsForContest(config.topics, selectedContest);
     setTargetRole(option.label);
     setSelectedCourse(option.value);
-    setSelectedTopicIds(config.topics.map(topic => topic.id));
-    setSelectedSubtopicIds(config.topics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))));
+    setSelectedTopicIds(contestTopics.map(topic => topic.id));
+    setSelectedSubtopicIds(contestTopics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))));
     setExpandedTopicIds([]);
+    setRoleSearch('');
+    setRolePickerOpen(false);
   };
 
   const handleCreatePlan = async () => {
@@ -411,7 +548,6 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
       );
 
       if (result.success) {
-        localStorage.removeItem('study_plan_deleted');
         let scheduleWeeks = result.weeks;
         let studyPlanId: string | null = null;
 
@@ -441,7 +577,12 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
               totalWeeks: scheduleWeeks.length,
               blockMinutes,
               studySections: result.sections,
-              scheduleWeeks
+              scheduleWeeks,
+              settings: {
+                contest: selectedContest,
+                examBoard,
+                targetRole,
+              },
             };
 
             let existingPlanId: string | null = null;
@@ -462,10 +603,11 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
               console.warn('Plano salvo, mas a importação das questões será tentada novamente depois.', importError);
             }
           } catch (apiError) {
-            console.warn('Remote study plan API unavailable; using local generated plan.', apiError);
+            throw apiError;
           }
         }
 
+        localStorage.removeItem('study_plan_deleted');
         // 1. Save to course-specific prefixed keys (safe storage)
         localStorage.setItem(`${selectedCourse}_study_sections`, JSON.stringify(result.sections));
         localStorage.setItem(`${selectedCourse}_quiz_questions`, JSON.stringify(result.questions));
@@ -473,6 +615,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
         localStorage.setItem(`${selectedCourse}_study_config`, JSON.stringify({
           examDate,
           examBoard,
+          contest: selectedContest,
           targetRole,
           totalDays: calculatedDays,
           hoursPerDay,
@@ -494,6 +637,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
         localStorage.setItem('study_config', JSON.stringify({
           examDate,
           examBoard,
+          contest: selectedContest,
           targetRole,
           totalDays: calculatedDays,
           hoursPerDay,
@@ -521,7 +665,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
       }
     } catch (error) {
       console.error('Error creating study plan:', error);
-      alert('Erro ao criar plano de estudo. Tente novamente.');
+      alert(error instanceof Error ? error.message : 'Erro ao criar plano de estudo. Tente novamente.');
     }
   };
 
@@ -614,6 +758,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
   };
 
   const activeCourseConfig = COURSES_CONFIG[selectedCourse] || COURSES_CONFIG.jornalismo;
+  const availableTopics = topicsForContest(activeCourseConfig.topics, selectedContest);
 
   return (
     <div id="home-tab-container" className="space-y-8 animate-fade-in">
@@ -692,7 +837,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                           </span>
                         </div>
                         <h4 className="font-extrabold text-slate-800 text-sm lg:text-base">{plan.targetRole || config.name}</h4>
-                        <p className="text-xs font-bold text-slate-500">{plan.examBoard || 'CEBRASPE'}</p>
+                        <p className="text-xs font-bold text-slate-500">{contestLabel(plan.contest || 'seplag')} · {plan.examBoard || 'CEBRASPE'}</p>
                         
                         <div className="text-[11px] text-slate-500 space-y-1">
                           <p className="flex items-center gap-1">
@@ -798,20 +943,56 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                   </div>
                   <div>
                     <h3 className="font-extrabold text-slate-850 text-base">Reconfigurar o estudo</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">Etapa {configStep} de 4 · {activeCourseConfig.name}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Etapa {configStep} de 4 · {contestLabel(selectedContest)}</p>
                   </div>
                 </div>
 
                 {configStep === 1 && (
-                  <div className="wizard-step-panel space-y-5">
+                  <div className="wizard-step-panel contest-data-step space-y-5">
                     <div>
                       <h2 className="text-xl font-bold">Dados do concurso</h2>
                       <p className="text-sm text-slate-500 mt-1">Defina a prova que orientará todo o plano.</p>
                     </div>
-                    <div className="contest-fields grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="contest-fields grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       <label className="wizard-field space-y-1.5">
                         <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Data da prova</span>
-                        <input id="exam-date" type="date" min={getTodayIso()} value={examDate} onChange={(e) => setExamDate(e.target.value)} className="w-full px-3 text-sm font-semibold" />
+                        <div className="date-input-with-picker">
+                          <input
+                            id="exam-date"
+                            type="text"
+                            inputMode="numeric"
+                            autoComplete="off"
+                            placeholder="DD/MM/AAAA"
+                            maxLength={10}
+                            value={examDateDisplay}
+                            onChange={(event) => handleExamDateChange(event.target.value)}
+                            aria-invalid={examDateDisplay.length === 10 && !examDate}
+                            className="w-full px-3 text-sm font-semibold"
+                          />
+                          <button
+                            type="button"
+                            className="date-picker-trigger"
+                            aria-label="Abrir calendário da data da prova"
+                            onClick={() => {
+                              const picker = nativeDatePickerRef.current;
+                              if (!picker) return;
+                              if (typeof picker.showPicker === 'function') picker.showPicker();
+                              else picker.click();
+                            }}
+                          >
+                            <Calendar aria-hidden="true" />
+                          </button>
+                          <input
+                            ref={nativeDatePickerRef}
+                            type="date"
+                            min={getTodayIso()}
+                            value={examDate}
+                            onChange={event => applyExamDate(event.target.value)}
+                            className="date-native-picker"
+                            tabIndex={-1}
+                            aria-hidden="true"
+                          />
+                        </div>
                       </label>
                       <label className="wizard-field space-y-1.5">
                         <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Banca</span>
@@ -821,17 +1002,68 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                         </select>
                       </label>
                       <label className="wizard-field space-y-1.5">
-                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Cargo</span>
-                        <select value={targetRole} onChange={(e) => handleRoleChange(e.target.value)} className="w-full px-3 text-sm font-semibold">
-                          {!ROLE_OPTIONS.some(role => role.label === targetRole) && <option value={targetRole}>{targetRole}</option>}
-                          {ROLE_OPTIONS.map(role => <option key={`${role.value}-${role.label}`} value={role.label}>{role.label}</option>)}
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Concurso</span>
+                        <select value={selectedContest} onChange={event => handleContestChange(event.target.value as ContestId)} className="w-full px-3 text-sm font-semibold">
+                          {CONTEST_OPTIONS.map(contest => <option key={contest.value} value={contest.value}>{contest.label}</option>)}
                         </select>
                       </label>
-                    </div>
-                    <div className="wizard-course-context p-4 border border-slate-200 bg-slate-50">
-                      <p className="text-xs font-bold text-slate-500 uppercase">Concurso selecionado</p>
-                      <p className="font-bold mt-1">{activeCourseConfig.name}</p>
-                      <p className="text-sm text-slate-500 mt-1">{activeCourseConfig.description}</p>
+                      <div className="wizard-field space-y-1.5">
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Cargo</span>
+                        <div
+                          className={`role-picker ${rolePickerOpen ? 'is-open' : ''}`}
+                          onBlur={(event) => {
+                            if (!event.currentTarget.contains(event.relatedTarget as Node)) setRolePickerOpen(false);
+                          }}
+                        >
+                          <button
+                            type="button"
+                            className="role-picker-trigger"
+                            aria-haspopup="listbox"
+                            aria-expanded={rolePickerOpen}
+                            onClick={() => {
+                              setRoleSearch('');
+                              setRolePickerOpen(open => !open);
+                            }}
+                          >
+                            <span>{targetRole}</span>
+                            <ChevronDown aria-hidden="true" />
+                          </button>
+                          {rolePickerOpen && (
+                            <div className="role-picker-popover">
+                              <div className="role-picker-search">
+                                <Search aria-hidden="true" />
+                                <input
+                                  autoFocus
+                                  type="search"
+                                  value={roleSearch}
+                                  onChange={event => setRoleSearch(event.target.value)}
+                                  onKeyDown={event => {
+                                    if (event.key === 'Escape') setRolePickerOpen(false);
+                                  }}
+                                  placeholder="Pesquisar cargo..."
+                                  aria-label="Pesquisar cargo"
+                                />
+                              </div>
+                              <div className="role-picker-options" role="listbox" aria-label="Cargos disponíveis">
+                                {filteredRoleOptions.map(role => (
+                                  <button
+                                    type="button"
+                                    role="option"
+                                    aria-selected={role.label === targetRole}
+                                    className={role.label === targetRole ? 'is-selected' : ''}
+                                    key={`${role.value}-${role.label}`}
+                                    onClick={() => handleRoleChange(role.label)}
+                                  >
+                                    <span>{role.label}</span>
+                                    {role.label === targetRole && <Check aria-hidden="true" />}
+                                  </button>
+                                ))}
+                                {filteredRoleOptions.length === 0 && <p>Nenhum cargo encontrado.</p>}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -918,8 +1150,8 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                       <button
                         type="button"
                         onClick={() => {
-                          setSelectedTopicIds(activeCourseConfig.topics.map(topic => topic.id));
-                          setSelectedSubtopicIds(activeCourseConfig.topics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))));
+                          setSelectedTopicIds(availableTopics.map(topic => topic.id));
+                          setSelectedSubtopicIds(availableTopics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))));
                         }}
                         className="text-[10px] text-indigo-600 font-bold hover:underline"
                       >
@@ -937,7 +1169,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                   </div>
 
                   <div className="subject-accordion space-y-2">
-                    {activeCourseConfig.topics.map(topic => {
+                    {availableTopics.map(topic => {
                       const topicKeys = topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic));
                       const selectedCount = topicKeys.filter(key => selectedSubtopicIds.includes(key)).length;
                       const isChecked = selectedCount === topicKeys.length && topicKeys.length > 0;
@@ -981,6 +1213,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                     </div>
                     <dl className="wizard-review-grid grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div><dt>Prova</dt><dd>{new Date(`${examDate}T00:00:00`).toLocaleDateString('pt-BR')}</dd></div>
+                      <div><dt>Concurso</dt><dd>{contestLabel(selectedContest)}</dd></div>
                       <div><dt>Banca e cargo</dt><dd>{examBoard} · {targetRole}</dd></div>
                       <div><dt>Disponibilidade</dt><dd>{selectedWeekdays.length} dias · {weeklyHours}h por semana</dd></div>
                       <div><dt>Conteúdo</dt><dd>{selectedSubtopicIds.length} subtópicos em {selectedTopicIds.length} matérias</dd></div>
@@ -988,7 +1221,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                     <div className="border-t border-slate-200 pt-4">
                       <p className="text-xs font-bold uppercase text-slate-500 mb-3">Prioridades selecionadas</p>
                       <div className="flex flex-wrap gap-2">
-                        {activeCourseConfig.topics.filter(topic => selectedTopicIds.includes(topic.id)).map(topic => (
+                        {availableTopics.filter(topic => selectedTopicIds.includes(topic.id)).map(topic => (
                           <span key={topic.id} className="px-3 py-2 border border-slate-200 bg-slate-50 text-sm font-semibold">{topic.title}</span>
                         ))}
                       </div>
@@ -1042,7 +1275,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                   </div>
                   <div>
                     <span className="text-slate-400 block font-bold">Banca e cargo:</span>
-                    <span className="text-sm font-extrabold text-white">{examBoard} · {targetRole}</span>
+                    <span className="text-sm font-extrabold text-white">{contestLabel(selectedContest)} · {examBoard} · {targetRole}</span>
                   </div>
                   <div>
                     <span className="text-slate-400 block font-bold font-mono">Dias de Estudo Ativo:</span>

@@ -3,7 +3,19 @@ import { quizQuestions } from '../data/quizData';
 import { QuestionCategory, Question } from '../types';
 import { passages } from '../data/passagesData';
 import { questionsApi, quizProgressApi } from '../services/api';
-import { CheckCircle2, XCircle, Award, Filter, Sparkles, AlertCircle, Info, Bookmark, Flag, Grid2X2, X } from 'lucide-react';
+import { CheckCircle2, XCircle, Filter, Sparkles, AlertCircle, Info, Bookmark, Flag, Target } from 'lucide-react';
+import { ActiveStudyContext, findContextCard, normalizeStudyText, questionRelevance } from '../studyContext';
+import { COURSES_CONFIG } from '../data/generator';
+import { studySections } from '../data/studyData';
+
+interface QuizTabProps {
+  mode?: 'session'|'all';
+  studyContext?: ActiveStudyContext | null;
+  onQuestionAnswered?: (question:Question,correct:boolean)=>void|Promise<void>;
+  onReviewComplete?: (result:GuidedReviewResult)=>void;
+}
+
+export interface GuidedReviewResult { topicTitle:string; subjectName:string; answered:number; correct:number; wrong:number; accuracy:number; }
 
 const normalizeQuestionText = (value: string) => value
   .normalize('NFD')
@@ -24,6 +36,7 @@ const preservePassages = (remoteQuestions: Question[], localQuestions: Question[
 
     return {
       ...question,
+      topic: question.topic && question.topic !== question.category ? question.topic : (localQuestion?.topic || question.topic),
       passageId,
       passageTitle: question.passageTitle || localQuestion?.passageTitle || catalogPassage?.title,
       passageContent: question.passageContent || localQuestion?.passageContent || catalogPassage?.content,
@@ -31,17 +44,111 @@ const preservePassages = (remoteQuestions: Question[], localQuestions: Question[
   });
 };
 
-export default function QuizTab() {
+const mergeQuestionBanks=(primary:Question[],secondary:Question[])=>{
+  const seen=new Set<string>();
+  return [...primary,...secondary].filter(question=>{const key=normalizeQuestionText(question.text);if(seen.has(key))return false;seen.add(key);return true;});
+};
+
+const topicGeneratedQuestions=(context:ActiveStudyContext):Question[]=>{
+  let sections=studySections;
+  try{const saved=localStorage.getItem('custom_study_sections');if(saved)sections=JSON.parse(saved);}catch{}
+  const match=findContextCard(sections,context);
+  if(!match)return [];
+  const plain=String(match.card.content||'').replace(/<[^>]+>/g,' ').replace(/&[a-z]+;/gi,' ')
+    .replace(/\s+/g,' ').trim();
+  const contentFacts=plain.split(/(?<=[.!?;:])\s+/).map(value=>value.trim()).filter(value=>value.length>=35&&value.length<=360);
+  const facts=[...(match.card.keyTakeaways||[]),...contentFacts].map(String).filter(Boolean);
+  if(facts.length===0)return [];
+  const key=String(context.roadmapTopicId||normalizeStudyText(context.topicTitle)).replace(/[^a-zA-Z0-9-]/g,'-');
+  return Array.from({length:200},(_,index)=>{
+    const fact=facts[index%facts.length];
+    const correct=index%2===0;
+    const round=Math.floor(index/facts.length)+1;
+    return {
+      id:`guided-${key}-${index+1}`,category:context.subjectName,topic:context.topicTitle,
+      text:correct
+        ? `[${context.topicTitle}] Julgue o item ${round}: ${fact}`
+        : `[${context.topicTitle}] Julgue o item ${round}: o enunciado “${fact}” não integra os fundamentos deste assunto e deve ser desconsiderado.`,
+      correct:correct?'Certo':'Errado',
+      explanation:correct
+        ? `Certo. Esse ponto faz parte do conteúdo estudado em ${context.topicTitle}.`
+        : `Errado. O enunciado citado integra diretamente os fundamentos de ${context.topicTitle}.`,
+      reference:`Revisão guiada — ${context.topicTitle}`
+    } as Question;
+  });
+};
+
+const belongsToExactTopic=(question:Question,context:ActiveStudyContext)=>{
+  const searchable=normalizeStudyText([question.topic,question.reference,question.text].filter(Boolean).join(' '));
+  const topic=normalizeStudyText(context.topicTitle);
+  if(question.topic&&normalizeStudyText(question.topic)===topic)return true;
+  const legalAnchors=(context.topicTitle.match(/\d+/g)||[]).filter(value=>value.length>=2);
+  if(legalAnchors.length>0)return legalAnchors.every(anchor=>searchable.split(' ').includes(anchor));
+  return questionRelevance(question,context)>=60;
+};
+
+const guidedReviewQuestionIds=()=>{
+  try{return new Set<string>(JSON.parse(localStorage.getItem('guided_review_question_ids')||'[]'));}
+  catch{return new Set<string>();}
+};
+
+interface GuidedReviewDraft {
+  answers: Record<string,'Certo'|'Errado'>;
+  questionIds: string[];
+  reviewGoal: number;
+  visibleQuestions: number;
+  updatedAt: string;
+}
+
+const guidedReviewDraftKey=(context:ActiveStudyContext)=>{
+  let planId='local';
+  try{planId=String(JSON.parse(localStorage.getItem('study_config')||'{}').studyPlanId||'local');}catch{}
+  const course=localStorage.getItem('active_course')||'default';
+  const topic=String(context.roadmapTopicId||normalizeStudyText(context.topicTitle)).replace(/[^a-zA-Z0-9_-]/g,'-');
+  return `guided_review_draft:${course}:${planId}:${topic}`;
+};
+
+const readGuidedReviewDraft=(key:string|null):GuidedReviewDraft|null=>{
+  if(!key)return null;
+  try{
+    const parsed=JSON.parse(localStorage.getItem(key)||'null') as Partial<GuidedReviewDraft>|null;
+    if(!parsed||typeof parsed!=='object')return null;
+    const answers=Object.fromEntries(Object.entries(parsed.answers||{}).filter(([,answer])=>answer==='Certo'||answer==='Errado')) as GuidedReviewDraft['answers'];
+    return {
+      answers,
+      questionIds:Array.isArray(parsed.questionIds)?parsed.questionIds.map(String):[],
+      reviewGoal:[10,15,20].includes(Number(parsed.reviewGoal))?Number(parsed.reviewGoal):10,
+      visibleQuestions:Math.max(10,Number(parsed.visibleQuestions||20)),
+      updatedAt:String(parsed.updatedAt||new Date().toISOString())
+    };
+  }catch{return null;}
+};
+
+const writeGuidedReviewDraft=(key:string|null,draft:Omit<GuidedReviewDraft,'updatedAt'>)=>{
+  if(!key)return;
+  try{localStorage.setItem(key,JSON.stringify({...draft,updatedAt:new Date().toISOString()}));}
+  catch(error){console.warn('Não foi possível salvar o progresso local da revisão.',error);}
+};
+
+export default function QuizTab({mode='session',studyContext,onQuestionAnswered,onReviewComplete}:QuizTabProps) {
+  const reviewDraftKey=useMemo(()=>mode==='session'&&studyContext?guidedReviewDraftKey(studyContext):null,
+    [mode,studyContext?.roadmapTopicId,studyContext?.topicTitle]);
+  const initialReviewDraft=useMemo(()=>readGuidedReviewDraft(reviewDraftKey),[reviewDraftKey]);
   const [questions, setQuestions] = useState<Question[]>(() => {
     const saved = localStorage.getItem('custom_quiz_questions');
+    let selectedQuestions:Question[]=[];
     if (saved) {
       try {
-        return JSON.parse(saved);
+        selectedQuestions=JSON.parse(saved);
       } catch (e) {
         console.error(e);
       }
     }
-    return quizQuestions;
+    if(mode==='all'){
+      const course=localStorage.getItem('active_course')||'seplag_informatica';
+      return mergeQuestionBanks(selectedQuestions,(COURSES_CONFIG[course]?.quizQuestions||quizQuestions) as Question[]);
+    }
+    return selectedQuestions.length?selectedQuestions:quizQuestions;
   });
 
   const [answers, setAnswers] = useState<{ [key: string]: 'Certo' | 'Errado' }>(() => {
@@ -49,25 +156,25 @@ export default function QuizTab() {
     return saved ? JSON.parse(saved) : {};
   });
 
-  const [scoreMode, setScoreMode] = useState<'tradicional' | 'simples'>(() => {
-    const saved = localStorage.getItem('quiz_score_mode');
-    return (saved as 'tradicional' | 'simples') || 'tradicional';
-  });
-
   const [categoryFilter, setCategoryFilter] = useState<QuestionCategory | 'Todos'>('Todos');
   const [statusFilter, setStatusFilter] = useState<'Todos' | 'Respondidas' | 'Não Respondidas' | 'Corretas' | 'Incorretas' | 'Anuladas'>('Todos');
-  const [visibleQuestions, setVisibleQuestions] = useState(10);
-  const [questionMapOpen, setQuestionMapOpen] = useState(false);
-  const [pendingQuestionId, setPendingQuestionId] = useState<string | null>(null);
+  const [visibleQuestions, setVisibleQuestions] = useState(()=>initialReviewDraft?.visibleQuestions||10);
   const [favoriteQuestions, setFavoriteQuestions] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('quiz_favorite_questions') || '[]')); } catch { return new Set(); }
   });
+  const [cycleAnswers,setCycleAnswers]=useState<{[key:string]:'Certo'|'Errado'}>(()=>initialReviewDraft?.answers||{});
+  const [draftQuestionIds,setDraftQuestionIds]=useState<string[]>(()=>initialReviewDraft?.questionIds||[]);
+  const [usedBeforeCycle,setUsedBeforeCycle]=useState<Set<string>>(()=>{
+    const reviewed=guidedReviewQuestionIds();
+    initialReviewDraft?.questionIds.forEach(id=>reviewed.delete(id));
+    return reviewed;
+  });
+  const [reviewGoal,setReviewGoal]=useState(()=>initialReviewDraft?.reviewGoal||10);
+  const activeAnswers=mode==='session'?cycleAnswers:answers;
   const [reportedQuestions, setReportedQuestions] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('quiz_reported_questions') || '[]')); } catch { return new Set(); }
   });
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
-  const questionMapCloseRef = useRef<HTMLButtonElement | null>(null);
-  const questionMapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const courseId = localStorage.getItem('active_course');
@@ -76,12 +183,26 @@ export default function QuizTab() {
       if (remoteQuestions.length > 0) {
         setQuestions(localQuestions => {
           const reconciledQuestions = preservePassages(remoteQuestions, localQuestions);
-          localStorage.setItem('active_quiz_questions_cache', JSON.stringify(reconciledQuestions));
-          return reconciledQuestions;
+          const available=mergeQuestionBanks(reconciledQuestions,localQuestions);
+          localStorage.setItem('active_quiz_questions_cache', JSON.stringify(available));
+          return available;
         });
       }
     }).catch(error => console.warn('Banco de questões indisponível; usando conteúdo offline.', error));
   }, []);
+
+  useEffect(()=>{
+    if(mode!=='session')return;
+    const draft=readGuidedReviewDraft(reviewDraftKey);
+    const reviewed=guidedReviewQuestionIds();
+    draft?.questionIds.forEach(id=>reviewed.delete(id));
+    setCycleAnswers(draft?.answers||{});
+    setDraftQuestionIds(draft?.questionIds||[]);
+    setUsedBeforeCycle(reviewed);
+    setReviewGoal(draft?.reviewGoal||10);
+    setStatusFilter('Todos');
+    setVisibleQuestions(draft?.visibleQuestions||20);
+  },[mode,reviewDraftKey]);
 
   // Sync answers with localStorage
   useEffect(() => {
@@ -109,53 +230,9 @@ export default function QuizTab() {
     }
   }, []);
 
-  // Sync scoreMode with localStorage
   useEffect(() => {
-    localStorage.setItem('quiz_score_mode', scoreMode);
-  }, [scoreMode]);
-
-  useEffect(() => {
-    setVisibleQuestions(10);
-  }, [categoryFilter, statusFilter]);
-
-  useEffect(() => {
-    if (!questionMapOpen) return;
-    const previousFocus = document.activeElement as HTMLElement | null;
-    questionMapCloseRef.current?.focus();
-    document.body.classList.add('mobile-sheet-open');
-    const handleDialogKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setQuestionMapOpen(false);
-        return;
-      }
-      if (event.key !== 'Tab' || !questionMapRef.current) return;
-      const focusable = Array.from(questionMapRef.current.querySelectorAll<HTMLElement>('button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])'));
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener('keydown', handleDialogKeyDown);
-    return () => {
-      document.body.classList.remove('mobile-sheet-open');
-      window.removeEventListener('keydown', handleDialogKeyDown);
-      previousFocus?.focus();
-    };
-  }, [questionMapOpen]);
-
-  useEffect(() => {
-    if (!pendingQuestionId) return;
-    const target = document.getElementById(`q-card-${pendingQuestionId}`);
-    if (!target) return;
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    setPendingQuestionId(null);
-  }, [pendingQuestionId, visibleQuestions]);
+    if(mode==='all')setVisibleQuestions(10);
+  }, [categoryFilter, statusFilter, mode]);
 
   const toggleFavorite = (questionId: number | string) => {
     const id = String(questionId);
@@ -177,23 +254,29 @@ export default function QuizTab() {
     });
   };
 
-  const jumpToQuestion = (questionId: number | string, index: number) => {
-    setVisibleQuestions(current => Math.max(current, index + 1));
-    setPendingQuestionId(String(questionId));
-    setQuestionMapOpen(false);
-  };
-
   const handleAnswer = async (questionId: number | string, option: 'Certo' | 'Errado') => {
-    const question = questions.find(q => String(q.id) === String(questionId));
+    const question = questions.find(q => String(q.id) === String(questionId))
+      || (mode==='session'&&studyContext
+        ? topicGeneratedQuestions(studyContext).find(q=>String(q.id)===String(questionId))
+        : undefined);
     if (!question) return;
     if (question.correct === 'Anulada') return;
 
-    setAnswers(prev => ({
-      ...prev,
-      [questionId]: option
-    }));
+    if(mode==='session'){
+      setCycleAnswers(prev=>{
+        const next={...prev,[String(questionId)]:option};
+        writeGuidedReviewDraft(reviewDraftKey,{answers:next,questionIds:draftQuestionIds,reviewGoal,visibleQuestions});
+        return next;
+      });
+      const reviewed=guidedReviewQuestionIds();
+      reviewed.add(String(questionId));
+      localStorage.setItem('guided_review_question_ids',JSON.stringify([...reviewed]));
+    }else{
+      setAnswers(prev => ({...prev,[questionId]: option}));
+    }
+    void onQuestionAnswered?.(question,option===question.correct);
 
-    try {
+    if(mode==='all')try {
       const savedHistory = JSON.parse(localStorage.getItem('quiz_answer_history') || '{}');
       savedHistory[String(questionId)] = { answer: option, answeredAt: new Date().toISOString() };
       localStorage.setItem('quiz_answer_history', JSON.stringify(savedHistory));
@@ -208,7 +291,7 @@ export default function QuizTab() {
 
     // Save to API if study plan ID exists
     const config = localStorage.getItem('study_config');
-    if (config) {
+    if (mode==='all'&&config) {
       try {
         const parsed = JSON.parse(config);
         if (parsed.studyPlanId && !String(parsed.studyPlanId).startsWith('local-')) {
@@ -226,36 +309,45 @@ export default function QuizTab() {
     }
   };
 
-  const handleReset = async () => {
-    if (window.confirm(`Tem certeza que deseja reiniciar todo o simulado com as ${questions.length} questões? Seu progresso atual será apagado.`)) {
-      setAnswers({});
-      localStorage.removeItem('quiz_answers');
-      localStorage.removeItem('quiz_answer_history');
-      localStorage.removeItem('quiz_answer_events');
-      try {
-        const config = JSON.parse(localStorage.getItem('study_config') || '{}');
-        if (config.studyPlanId && !String(config.studyPlanId).startsWith('local-')) {
-          await quizProgressApi.deleteByStudyPlan(config.studyPlanId);
-        }
-      } catch (error) {
-        console.warn('O simulado local foi reiniciado, mas o progresso remoto não foi removido.', error);
-      }
-    }
-  };
+  const questionPool = useMemo(() => {
+    if(mode==='all')return questions;
+    if(!studyContext)return [];
+    const precise=questions.filter(question=>question.correct!=='Anulada'&&belongsToExactTopic(question,studyContext))
+      .map(question=>({question,score:questionRelevance(question,studyContext)}))
+      .sort((a,b)=>b.score-a.score).map(item=>item.question);
+    const available=mergeQuestionBanks(precise,topicGeneratedQuestions(studyContext));
+    const byId=new Map(available.map(question=>[String(question.id),question]));
+    const restored=draftQuestionIds.map(id=>byId.get(id)).filter((question):question is Question=>Boolean(question));
+    const restoredIds=new Set(restored.map(question=>String(question.id)));
+    const fresh=available.filter(question=>!restoredIds.has(String(question.id))&&!usedBeforeCycle.has(String(question.id)));
+    return [...restored,...fresh].slice(0,20);
+  },[mode,questions,studyContext,usedBeforeCycle,draftQuestionIds]);
+
+  useEffect(()=>{
+    if(mode!=='session'||!reviewDraftKey||draftQuestionIds.length>0||questionPool.length===0)return;
+    setDraftQuestionIds(questionPool.map(question=>String(question.id)));
+  },[mode,reviewDraftKey,draftQuestionIds.length,questionPool]);
+
+  useEffect(()=>{
+    if(mode!=='session'||!reviewDraftKey)return;
+    writeGuidedReviewDraft(reviewDraftKey,{answers:cycleAnswers,questionIds:draftQuestionIds,reviewGoal,visibleQuestions});
+  },[mode,reviewDraftKey,cycleAnswers,draftQuestionIds,reviewGoal,visibleQuestions]);
+
+  const scopedQuestions=useMemo(()=>mode==='session'?questionPool.slice(0,reviewGoal):questionPool,[mode,questionPool,reviewGoal]);
 
   // Calculate statistics
   const stats = useMemo(() => {
-    const validQuestions = questions.filter(q => q.correct !== 'Anulada');
+    const validQuestions = scopedQuestions.filter(q => q.correct !== 'Anulada');
     const total = validQuestions.length;
-    const answeredCount = Object.keys(answers).filter(id => {
-      const question = questions.find(q => String(q.id) === id);
+    const answeredCount = Object.keys(activeAnswers).filter(id => {
+      const question = scopedQuestions.find(q => String(q.id) === id);
       return question && question.correct !== 'Anulada';
     }).length;
     let correctCount = 0;
     let incorrectCount = 0;
 
     validQuestions.forEach(q => {
-      const userAnswer = answers[q.id];
+      const userAnswer = activeAnswers[q.id];
       if (userAnswer) {
         if (userAnswer === q.correct) {
           correctCount++;
@@ -283,17 +375,17 @@ export default function QuizTab() {
       cebraspePercentage,
       unansweredCount: total - answeredCount
     };
-  }, [answers, questions]);
+  }, [activeAnswers, scopedQuestions]);
 
   // Filter questions based on selected filters
   const filteredQuestions = useMemo(() => {
-    return questions.filter(q => {
+    return scopedQuestions.filter(q => {
       // Category filter
       const categoryMatch = categoryFilter === 'Todos' || q.category === categoryFilter;
 
       // Status filter
       let statusMatch = true;
-      const userAnswer = answers[q.id];
+      const userAnswer = activeAnswers[q.id];
       const isAnnulled = q.correct === 'Anulada';
       const isCorrect = !isAnnulled && userAnswer === q.correct;
 
@@ -311,7 +403,15 @@ export default function QuizTab() {
 
       return categoryMatch && statusMatch;
     });
-  }, [categoryFilter, statusFilter, answers, questions]);
+  }, [categoryFilter, statusFilter, activeAnswers, scopedQuestions]);
+
+  const completeReview=()=>{
+    if(mode!=='session'||stats.answeredCount<reviewGoal||!studyContext)return;
+    if(reviewDraftKey)localStorage.removeItem(reviewDraftKey);
+    onReviewComplete?.({topicTitle:studyContext.topicTitle,subjectName:studyContext.subjectName,
+      answered:stats.answeredCount,correct:stats.correctCount,wrong:stats.incorrectCount,
+      accuracy:stats.answeredCount?Math.round(stats.correctCount*100/stats.answeredCount):0});
+  };
 
   useEffect(() => {
     const sentinel = loadMoreRef.current;
@@ -330,194 +430,60 @@ export default function QuizTab() {
     return () => observer.disconnect();
   }, [visibleQuestions, filteredQuestions.length]);
 
-  // Performance Vibe Level
-  const performanceVibe = useMemo(() => {
-    const currentScore = scoreMode === 'tradicional' ? stats.cebraspePercentage : stats.percentage;
-    if (stats.answeredCount === 0) return { title: 'Inicie o Simulado', color: 'text-slate-500', desc: 'Responda as questões para avaliar seu nível.' };
-    if (currentScore >= 80) return { title: 'Excelente! Nível Aprovado (80%+)', color: 'text-emerald-600 bg-emerald-50 border-emerald-200', desc: 'Sua pontuação estimada garante 80%+ de aproveitamento. Excelente ritmo!' };
-    if (currentScore >= 60) return { title: 'Bom Desempenho (60% a 79%)', color: 'text-blue-600 bg-blue-50 border-blue-200', desc: 'Ritmo sólido, mas preste atenção nas questões erradas que anulam as certas.' };
-    return { title: 'Precisa Ajustar (<60%)', color: 'text-rose-600 bg-rose-50 border-rose-200', desc: 'Abaixo da nota de corte estimada. Revise os resumos na aba Estudar.' };
-  }, [stats, scoreMode]);
+  const selectedExamBoard=useMemo(()=>{
+    const course=localStorage.getItem('active_course')||'seplag_informatica';
+    for(const key of ['study_config',`${course}_study_config`]){
+      try{const value=JSON.parse(localStorage.getItem(key)||'{}').examBoard;if(value)return String(value);}catch{}
+    }
+    return 'CEBRASPE';
+  },[]);
+  const usesCebraspeScoring=/cebraspe|cespe/i.test(selectedExamBoard);
+  const currentScore=usesCebraspeScoring?stats.cebraspeScore:stats.simpleScore;
+  const currentAccuracy=stats.answeredCount?Math.round(stats.correctCount*100/stats.answeredCount):0;
 
   return (
     <div id="quiz-tab-container" className="quiz-layout space-y-7">
-      {/* Quiz Header & Score Card */}
-      <div className="quiz-overview grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-4">
-        {/* Performance Overview */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between space-y-5">
-          <div className="quiz-heading flex items-start justify-between gap-4">
-            <div className="space-y-1 min-w-0">
-              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-amber-500" />
-                Simulado em sequência
-              </h2>
-              <p className="text-xs text-slate-500">Uma questão por linha, sem colunas competindo pela atenção.</p>
-            </div>
-            <button id="btn-reset-quiz" onClick={handleReset} className="shrink-0 text-xs flex items-center justify-center gap-1 text-slate-500 hover:text-slate-800 border border-slate-200 hover:bg-slate-50 px-3 py-2 rounded-lg transition cursor-pointer">Resetar</button>
-          </div>
-
-          <div className="quiz-stats grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-slate-50 p-3 rounded-lg text-center">
-              <span className="text-xs text-slate-500 block">Respondidas</span>
-              <span className="text-xl font-bold text-slate-800">{stats.answeredCount} / {stats.total}</span>
-            </div>
-            <div className="bg-emerald-50 p-3 rounded-lg text-center">
-              <span className="text-xs text-emerald-800 font-bold">Acertos</span>
-              <p className="text-xl font-bold text-emerald-600 mt-1">
-                {Object.keys(answers).filter(id => {
-                  const q = questions.find(q => String(q.id) === id);
-                  return q && q.correct !== 'Anulada' && answers[id] === q.correct;
-                }).length}
-              </p>
-            </div>
-            <div className="bg-rose-50 p-3 rounded-lg text-center">
-              <span className="font-bold text-rose-800 text-xs">Erros</span>
-              <p className="text-rose-600 mt-1 text-xl font-bold font-mono">
-                {Object.keys(answers).filter(id => {
-                  const q = questions.find(q => String(q.id) === id);
-                  return q && q.correct !== 'Anulada' && answers[id] !== q.correct;
-                }).length}
-              </p>
-            </div>
-            <div className="bg-slate-50 p-3 rounded-lg text-center">
-              <span className="font-bold text-slate-800 text-xs">Aproveitamento</span>
-              <p className="text-slate-900 mt-1 text-base font-bold">
-                {stats.answeredCount > 0
-                  ? Math.round(
-                      (Object.keys(answers).filter(id => {
-                        const q = questions.find(q => String(q.id) === id);
-                        return q && q.correct !== 'Anulada' && answers[id] === q.correct;
-                      }).length /
-                        stats.answeredCount) *
-                        100
-                    )
-                  : 0}
-                %
-              </p>
-            </div>
-          </div>
-
-          {/* CEBRASPE Scoring Mode Selector */}
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2">
-              <Info className="w-4 h-4 text-blue-500 shrink-0" />
-              <p className="text-slate-600">
-                <strong>Método de Pontuação:</strong> No estilo CEBRASPE tradicional, cada erro anula um acerto (peso -1).
-              </p>
-            </div>
-            <div className="flex bg-slate-200 p-0.5 rounded-lg shrink-0">
-              <button
-                onClick={() => setScoreMode('tradicional')}
-                className={`px-3 py-1 rounded-md font-medium transition cursor-pointer ${scoreMode === 'tradicional' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                CEBRASPE (-1)
-              </button>
-              <button
-                onClick={() => setScoreMode('simples')}
-                className={`px-3 py-1 rounded-md font-medium transition cursor-pointer ${scoreMode === 'simples' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                Direto (+1)
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Score Estimator / Cut-off Badge */}
-        <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-sm flex flex-col justify-between relative overflow-hidden border border-slate-800">
-          <div className="absolute -right-10 -bottom-10 opacity-5">
-            <Award className="w-48 h-48" />
-          </div>
-
-          <div className="relative z-10 space-y-2">
-            <div className="flex items-center gap-2">
-              <Award className="w-5 h-5 text-amber-500" />
-              <span className="text-xs text-slate-300 font-bold tracking-wider uppercase">Pontuação Estimada</span>
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-extrabold font-mono tracking-tight text-white">
-                {scoreMode === 'tradicional' ? stats.cebraspeScore : stats.simpleScore}
-              </span>
-              <span className="text-slate-400 text-sm">/ {stats.total} pts</span>
-            </div>
-            <p className="text-xs text-slate-400 leading-normal">
-              {scoreMode === 'tradicional' 
-                ? 'Nota líquida calculada no critério padrão CEBRASPE (Acertos menos Erros).'
-                : 'Nota direta (apenas acertos contabilizados, erros não anulam).'}
-            </p>
-          </div>
-
-          <div className={`mt-4 p-3 rounded-xl border relative z-10 text-xs ${performanceVibe.color}`}>
-            <p className="font-bold">{performanceVibe.title}</p>
-            <p className="mt-0.5 text-slate-500 leading-relaxed">{performanceVibe.desc}</p>
+      {mode==='session'&&studyContext&&<div className="session-context-banner"><Target aria-hidden="true"/><div><span>REVISÃO DO ASSUNTO ATUAL</span><strong>{studyContext.topicTitle}</strong><p>{studyContext.subjectName} · meta de {reviewGoal} questões</p></div></div>}
+      <div className="quiz-overview quiz-overview-compact">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-5">
+          {mode==='session'&&<div className="quiz-heading">
+            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Sparkles className="w-5 h-5 text-amber-500"/>Revisão da sessão</h2>
+          </div>}
+          <div className="quiz-stats grid grid-cols-2 md:grid-cols-4 gap-3" aria-label={`Pontuação calculada pela banca ${selectedExamBoard}`}>
+            <div className="bg-slate-50 p-3 rounded-lg text-center"><span className="text-xs text-slate-500 block">Pontuação</span><strong className="text-xl font-bold text-slate-800">{currentScore}</strong></div>
+            <div className="bg-emerald-50 p-3 rounded-lg text-center"><span className="text-xs text-emerald-800 font-bold">Acertos</span><strong className="text-xl font-bold text-emerald-600 block mt-1">{stats.correctCount}</strong></div>
+            <div className="bg-rose-50 p-3 rounded-lg text-center"><span className="font-bold text-rose-800 text-xs">Erros</span><strong className="text-rose-600 block mt-1 text-xl font-bold">{stats.incorrectCount}</strong></div>
+            <div className="bg-slate-50 p-3 rounded-lg text-center"><span className="font-bold text-slate-800 text-xs">Aproveitamento</span><strong className="text-slate-900 block mt-1 text-xl font-bold">{currentAccuracy}%</strong></div>
           </div>
         </div>
       </div>
 
-      <div className="mobile-quiz-toolbar" aria-label="Progresso do simulado">
-        <div className="mobile-quiz-progress">
-          <div className="flex items-center justify-between gap-3">
-            <span>{stats.answeredCount} de {stats.total} respondidas</span>
-            <strong>{stats.total > 0 ? Math.round((stats.answeredCount / stats.total) * 100) : 0}%</strong>
-          </div>
-          <div className="mobile-progress-track" aria-hidden="true"><span style={{ width: `${stats.total > 0 ? (stats.answeredCount / stats.total) * 100 : 0}%` }} /></div>
-        </div>
-        <button type="button" onClick={() => setQuestionMapOpen(true)} aria-haspopup="dialog" aria-expanded={questionMapOpen}>
-          <Grid2X2 aria-hidden="true" />
-          Mapa
-        </button>
-      </div>
-
-      {questionMapOpen && <div className="mobile-sheet-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setQuestionMapOpen(false)}>
-        <div ref={questionMapRef} className="mobile-question-sheet" role="dialog" aria-modal="true" aria-labelledby="question-map-title">
-          <div className="mobile-sheet-handle" aria-hidden="true" />
-          <div className="mobile-sheet-header">
-            <div>
-              <h2 id="question-map-title">Mapa de questões</h2>
-              <p>Toque em um número para ir até a questão.</p>
-            </div>
-            <button ref={questionMapCloseRef} type="button" onClick={() => setQuestionMapOpen(false)} aria-label="Fechar mapa de questões"><X /></button>
-          </div>
-          <div className="mobile-question-grid">
-            {filteredQuestions.map((question, index) => {
-              const answer = answers[question.id];
-              const correct = answer && answer === question.correct;
-              return <button
-                type="button"
-                key={question.id}
-                onClick={() => jumpToQuestion(question.id, index)}
-                className={question.correct === 'Anulada' ? 'is-annulled' : answer ? (correct ? 'is-correct' : 'is-wrong') : ''}
-                aria-label={`Ir para questão ${index + 1}${answer ? ', respondida' : ', não respondida'}`}
-              >
-                {index + 1}
-                {question.correct === 'Anulada'
-                  ? <span className="question-map-status" aria-hidden="true">–</span>
-                  : answer && <span className="question-map-status" aria-hidden="true">{correct ? '✓' : '×'}</span>}
-              </button>;
-            })}
-          </div>
-        </div>
-      </div>}
+      {mode==='session'&&<section className="bg-white border border-indigo-200 rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div><span className="text-xs font-extrabold text-indigo-600 uppercase tracking-wider">Meta da revisão</span><h3 className="font-bold text-slate-900 mt-1">Responda entre 10 e 20 questões</h3><p className="text-xs text-slate-500 mt-1">A conclusão será liberada quando todas as questões da meta forem respondidas.</p></div>
+        <div className="flex flex-wrap items-center gap-2">{[10,15,20].map(goal=><button type="button" key={goal} disabled={questionPool.length<goal} onClick={()=>setReviewGoal(goal)} className={`min-h-10 px-4 rounded-xl text-sm font-extrabold border ${reviewGoal===goal?'bg-indigo-600 border-indigo-600 text-white':'bg-white border-slate-200 text-slate-600'} disabled:opacity-35`}>{goal}</button>)}<button type="button" disabled={stats.answeredCount<reviewGoal||questionPool.length<10} onClick={completeReview} className="min-h-10 px-5 rounded-xl bg-emerald-600 text-white text-sm font-extrabold disabled:opacity-40">{stats.answeredCount<reviewGoal?`Faltam ${Math.max(0,reviewGoal-stats.answeredCount)}`:'Concluir revisão'}</button></div>
+        {questionPool.length<10&&<p className="text-xs text-rose-600 font-semibold">Este assunto possui apenas {questionPool.length} questões pertinentes. Cadastre pelo menos 10 para liberar a revisão.</p>}
+      </section>}
 
       {/* Question Filters Row */}
       <div className="quiz-filters flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-2 text-sm font-bold text-slate-700 shrink-0">
           <Filter className="w-4 h-4 text-slate-400" />
-          <span>Filtros do Simulado:</span>
+          <span>{mode==='session'?'Questões da sessão:':'Filtros do banco:'}</span>
         </div>
 
         <div className="flex flex-wrap gap-2 grow justify-start md:justify-end">
           {/* Category Selector */}
-          <select
+          {mode==='all'&&<select
             id="select-category-filter"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value as any)}
             className="bg-slate-50 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-slate-400 transition"
           >
             <option value="Todos">Todas as Disciplinas</option>
-            {Array.from(new Set(questions.map(q => q.category))).map(cat => (
+            {Array.from(new Set(scopedQuestions.map(q => q.category))).map(cat => (
               <option key={cat} value={cat}>{cat}</option>
             ))}
-          </select>
+          </select>}
 
           {/* Status Selector */}
           <select
@@ -544,7 +510,7 @@ export default function QuizTab() {
           </div>
         ) : (
           filteredQuestions.slice(0, visibleQuestions).map((q, index) => {
-            const userAnswer = answers[q.id];
+            const userAnswer = activeAnswers[q.id];
             const isAnswered = !!userAnswer;
             const isAnnulled = q.correct === 'Anulada';
             const isCorrect = !isAnnulled && userAnswer === q.correct;
@@ -568,7 +534,7 @@ export default function QuizTab() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-bold text-slate-400">Questão {index + 1} de {filteredQuestions.length}</span>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
-                      {q.category}
+                      {mode==='session'&&studyContext?studyContext.topicTitle:q.category}
                     </span>
                     {q.passageId && <span className="passage-available">Texto de apoio</span>}
                   </div>
@@ -694,6 +660,8 @@ export default function QuizTab() {
           })
         )}
       </div>
+
+      {mode==='session'&&stats.answeredCount>=reviewGoal&&<div className="sticky bottom-20 md:bottom-4 z-20 flex justify-center"><button type="button" onClick={completeReview} className="min-h-12 px-7 rounded-full bg-emerald-600 text-white text-sm font-extrabold shadow-lg shadow-emerald-900/20">Concluir revisão e ver resultado</button></div>}
 
       <div ref={loadMoreRef} className="h-px" aria-hidden="true" />
     </div>

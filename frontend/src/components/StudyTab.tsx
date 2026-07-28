@@ -1,8 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { studySections } from '../data/studyData';
-import { BookOpen, Cpu, Shield, MapPin, Terminal, AlertTriangle, ChevronDown, ChevronUp, CheckCircle, HelpCircle, Clock, Target, Zap } from 'lucide-react';
+import { BookOpen, Cpu, Shield, MapPin, Terminal, AlertTriangle, ChevronDown, ChevronUp, CheckCircle, HelpCircle, Clock, Target, Zap, ArrowRight, MoveHorizontal } from 'lucide-react';
+import { ActiveStudyContext, findContextCard } from '../studyContext';
 
-export default function StudyTab() {
+interface StudyTabProps { studyContext?:ActiveStudyContext|null; onCurrentActivityComplete?:()=>void; }
+
+export default function StudyTab({studyContext,onCurrentActivityComplete}:StudyTabProps) {
   const sections = useMemo(() => {
     const saved = localStorage.getItem('custom_study_sections');
     if (saved) {
@@ -16,12 +19,18 @@ export default function StudyTab() {
   }, []);
 
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  const sectionFiltersRef=useRef<HTMLDivElement>(null);
 
   const [expandedCards, setExpandedCards] = useState<{ [key: string]: boolean }>({});
   const [completedCards, setCompletedCards] = useState<{ [key: string]: boolean }>(() => {
     const saved = localStorage.getItem('completed_study_cards');
     return saved ? JSON.parse(saved) : {};
   });
+
+  useEffect(()=>{
+    const activeButton=sectionFiltersRef.current?.querySelector<HTMLElement>('[data-section-active="true"]');
+    activeButton?.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+  },[activeSectionId]);
 
   const iconMap: { [key: string]: any } = {
     BookOpen: BookOpen,
@@ -69,10 +78,19 @@ export default function StudyTab() {
     }
   };
 
+  const contextMatch=useMemo(()=>findContextCard(sections,studyContext),[sections,studyContext]);
+
+  useEffect(()=>{
+    if(!contextMatch)return;
+    setActiveSectionId(contextMatch.section.id);
+    setExpandedCards(current=>({...current,[contextMatch.card.id]:true}));
+    window.setTimeout(()=>document.getElementById(`card-${contextMatch.card.id}`)?.scrollIntoView({behavior:'smooth',block:'center'}),80);
+  },[contextMatch?.section.id,contextMatch?.card.id]);
+
   const activeSection = useMemo(() => {
-    const currentId = activeSectionId || (sections[0] ? sections[0].id : '');
+    const currentId = activeSectionId || contextMatch?.section.id || (sections[0] ? sections[0].id : '');
     return sections.find(s => s.id === currentId) || sections[0];
-  }, [activeSectionId, sections]);
+  }, [activeSectionId, contextMatch, sections]);
 
   const toggleCard = (cardId: string) => {
     setExpandedCards(prev => ({
@@ -83,11 +101,22 @@ export default function StudyTab() {
 
   const toggleComplete = (cardId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const completing=!completedCards[cardId];
     setCompletedCards(prev => {
       const updated = { ...prev, [cardId]: !prev[cardId] };
       localStorage.setItem('completed_study_cards', JSON.stringify(updated));
       return updated;
     });
+    if(completing&&cardId===contextMatch?.card.id)onCurrentActivityComplete?.();
+  };
+
+  const completeCurrentContent=(cardId:string)=>{
+    setCompletedCards(prev=>{
+      const updated={...prev,[cardId]:true};
+      localStorage.setItem('completed_study_cards',JSON.stringify(updated));
+      return updated;
+    });
+    onCurrentActivityComplete?.();
   };
 
   const completedCount = Object.values(completedCards).filter(Boolean).length;
@@ -106,6 +135,7 @@ export default function StudyTab() {
 
   return (
     <div id="study-tab-container" className="study-layout space-y-7">
+      {studyContext&&<div className="session-context-banner"><Target aria-hidden="true"/><div><span>CONTEÚDO DA SESSÃO ATUAL</span><strong>{studyContext.topicTitle}</strong><p>{studyContext.subjectName} · este resumo foi aberto automaticamente</p></div></div>}
       {/* Subject Selector and Search Row */}
       <div className="study-filter-shell bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
         <div className="study-filter-heading flex items-center justify-between gap-3 mb-3">
@@ -113,20 +143,24 @@ export default function StudyTab() {
           <BookOpen className="w-5 h-5 text-indigo-300 shrink-0" />
         </div>
         <div className="study-filter-row">
-        <div className="study-section-filters">
+        <div ref={sectionFiltersRef} className="study-section-filters" role="tablist" aria-label="Disciplinas do caderno de leitura">
           {sections.map(section => {
             const IconComponent = iconMap[section.icon] || HelpCircle;
             const colors = colorMap[section.color] || colorMap.slate;
             const isActive = section.id === activeSection.id;
+            const isContextSection = !contextMatch || section.id===contextMatch.section.id;
 
             return (
               <button
                 key={section.id}
                 id={`btn-tab-${section.id}`}
+                role="tab"
+                aria-selected={isActive}
+                data-section-active={isActive}
                 onClick={() => {
                   setActiveSectionId(section.id);
                 }}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${!isContextSection?'study-context-muted':''} ${
                   isActive 
                     ? colors.activeBg + ' shadow-sm'
                     : 'text-slate-600 bg-slate-50 hover:bg-slate-100'
@@ -141,7 +175,7 @@ export default function StudyTab() {
             );
           })}
         </div>
-
+        <p className="study-filter-scroll-hint"><MoveHorizontal aria-hidden="true"/> Deslize para ver todas as disciplinas</p>
         </div>
       </div>
 
@@ -198,12 +232,13 @@ export default function StudyTab() {
             const isExpanded = !!expandedCards[card.id];
             const isCompleted = !!completedCards[card.id];
             const colors = colorMap[activeSection.color];
+            const isContextCard=!contextMatch||card.id===contextMatch.card.id;
 
             return (
               <div 
                 key={card.id} 
                 id={`card-${card.id}`}
-                className={`bg-white rounded-lg border transition-all ${
+                className={`study-context-card bg-white rounded-lg border transition-all ${!isContextCard?'is-context-muted':'is-context-current'} ${
                   isCompleted ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200'
                 } ${isExpanded ? 'shadow-sm' : 'shadow-xs'}`}
               >
@@ -281,6 +316,7 @@ export default function StudyTab() {
                         ))}
                       </ul>
                     </div>
+                    {studyContext&&card.id===contextMatch?.card.id&&<button type="button" onClick={()=>completeCurrentContent(card.id)} className="mt-4 w-full min-h-12 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-extrabold flex items-center justify-center gap-2 transition-colors">Concluir e iniciar revisão <ArrowRight className="w-4 h-4"/></button>}
                   </div>
                 )}
               </div>

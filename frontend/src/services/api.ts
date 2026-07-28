@@ -1,4 +1,21 @@
+import { supabase } from '../auth/supabase';
+
 export const API_BASE_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
+
+const nativeFetch=globalThis.fetch.bind(globalThis);
+const fetch=async(input:RequestInfo|URL,init:RequestInit={}):Promise<Response>=>{
+  const {data}=await supabase.auth.getSession();
+  const headers=new Headers(init.headers);
+  if(data.session?.access_token)headers.set('Authorization',`Bearer ${data.session.access_token}`);
+  let response=await nativeFetch(input,{...init,headers});
+  if(response.status===401&&data.session){
+    const refreshed=await supabase.auth.refreshSession();
+    const token=refreshed.data.session?.access_token;
+    if(token&&token!==data.session.access_token){headers.set('Authorization',`Bearer ${token}`);response=await nativeFetch(input,{...init,headers});}
+    if(response.status===401)window.dispatchEvent(new Event('gabarita:unauthorized'));
+  }
+  return response;
+};
 
 const getApiErrorMessage = async (response: Response, fallback: string) => {
   try {
@@ -40,6 +57,32 @@ export interface ScheduleProgress {
   completed_at: string | null;
 }
 
+export interface DailyTask {
+  id: string; plan_id: string; roadmap_topic_id: string; task_date: string; position: number;
+  activity_type: string; planned_minutes: number; completed_minutes: number; question_goal: number;
+  questions_answered: number; correct_answers: number; minimum_accuracy: number; achieved_accuracy?: number;
+  priority: number; status: string; topic_title: string; subject_name: string; objective?: string;
+  topic_status: string; mastery: number;
+}
+
+export interface StudySession {
+  id: string; user_id: string; plan_id: string; daily_task_id?: string; roadmap_topic_id?: string; status: 'RUNNING'|'PAUSED'|'COMPLETED'|'CANCELLED';
+  mode: 'FREE'|'POMODORO'; started_at: string; elapsed_seconds: number; effective_seconds: number;
+  planned_minutes: number; topic_title: string; subject_name: string; paused_at?: string;
+  pomodoro_cycle?: number; pomodoro_config?: string; pause_reason?: string;
+  session_kind?: 'STUDY'|'QUESTIONS'; questions_answered?: number; correct_answers?: number; context_title?: string;
+}
+
+export interface StudyDashboardData {
+  plan: StudyPlan & { daily_goal_minutes: number };
+  today: { date: string; goal_minutes: number; planned_minutes: number; completed_minutes: number; remaining_minutes: number;
+    progress_percentage: number; total_tasks: number; completed_tasks: number; question_goal: number; questions_answered: number };
+  tasks: DailyTask[]; active_session: Partial<StudySession>; streak: Record<string, any>;
+  experience: { total_xp: number; level: number; level_name: string; current_level_xp: number; next_level_xp: number };
+  reviews: Record<string, any>[]; next: Record<string, any>; roadmap: Record<string, any>[];
+  notifications: Record<string, any>[]; unread_notifications: number;
+}
+
 // Study Plans API
 export const studyPlansApi = {
   getAll: async (includeArchived = false): Promise<StudyPlan[]> => {
@@ -70,13 +113,14 @@ export const studyPlansApi = {
     blockMinutes?: number;
     studySections: any[];
     scheduleWeeks: any[];
+    settings?: Record<string, unknown>;
   }): Promise<StudyPlan> => {
     const response = await fetch(`${API_BASE_URL}/study-plans`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!response.ok) throw new Error('Failed to create study plan');
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Não foi possível salvar o plano'));
     return response.json();
   },
 
@@ -90,13 +134,14 @@ export const studyPlansApi = {
     blockMinutes?: number;
     studySections: any[];
     scheduleWeeks: any[];
+    settings?: Record<string, unknown>;
   }): Promise<StudyPlan> => {
     const response = await fetch(`${API_BASE_URL}/study-plans/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!response.ok) throw new Error('Failed to update study plan');
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Não foi possível atualizar o plano'));
     return response.json();
   },
 
@@ -113,7 +158,7 @@ export const studyPlansApi = {
     const response = await fetch(`${API_BASE_URL}/study-plans/${id}/activate`, {
       method: 'PATCH',
     });
-    if (!response.ok) throw new Error('Failed to activate study plan');
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Não foi possível ativar o plano'));
   },
 
   duplicate: async (id: string, title?: string): Promise<StudyPlan> => {
@@ -161,6 +206,8 @@ export const quizProgressApi = {
     questionId: number | string;
     answer: string;
     isCorrect: boolean;
+    roadmapTopicId?: string;
+    topicTitle?: string;
   }): Promise<QuizProgress> => {
     const response = await fetch(`${API_BASE_URL}/quiz-progress`, {
       method: 'POST',
@@ -262,7 +309,7 @@ export const scheduleApi = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  if (!response.ok) throw new Error('Failed to generate schedule');
+  if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Não foi possível gerar o cronograma'));
   return response.json();
 },
 
@@ -328,4 +375,43 @@ export const analyticsApi = {
     if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to fetch dashboard'));
     return response.json();
   },
+};
+
+const jsonRequest = async <T>(path: string, options?: RequestInit): Promise<T> => {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
+  });
+  if (!response.ok) throw new Error(await getApiErrorMessage(response, 'A operação não foi concluída'));
+  return response.json();
+};
+
+export const dailyStudyApi = {
+  today: () => jsonRequest<StudyDashboardData>('/study/today'),
+  start: (taskId: string, data: { mode: 'FREE'|'POMODORO'; pomodoro?: Record<string, unknown>; device?: string }) =>
+    jsonRequest<StudySession>(`/study/tasks/${taskId}/start`, { method: 'POST', body: JSON.stringify(data) }),
+  startReview: (topicId: string, data: { mode: 'FREE'|'POMODORO'; pomodoro?: Record<string, unknown>; device?: string }) =>
+    jsonRequest<StudySession>(`/study/topics/${topicId}/review/start`, { method: 'POST', body: JSON.stringify(data) }),
+  pause: (id: string, reason?: string) => jsonRequest<StudySession>(`/study/sessions/${id}/pause`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  resume: (id: string) => jsonRequest<StudySession>(`/study/sessions/${id}/resume`, { method: 'POST' }),
+  finish: (id: string, data: { questionsAnswered: number; correctAnswers: number; notes?: string }) =>
+    jsonRequest<{ session: StudySession; feedback: string[]; experience: StudyDashboardData['experience'] }>(`/study/sessions/${id}/finish`, { method: 'POST', body: JSON.stringify(data) }),
+  cancel: (id: string, notes?: string) => jsonRequest<StudySession>(`/study/sessions/${id}/cancel`, { method: 'POST', body: JSON.stringify({ notes }) }),
+  rebalance: (availableMinutes: number) => jsonRequest<StudyDashboardData>('/study/today/rebalance', { method: 'POST', body: JSON.stringify({ availableMinutes }) }),
+  active: () => jsonRequest<Partial<StudySession>>('/study/sessions/active'),
+  startQuestionPractice: (planId:string,focusMinutes:number) => jsonRequest<StudySession>('/study/sessions/questions', {
+    method:'POST',body:JSON.stringify({planId,focusMinutes,device:navigator.userAgent.slice(0,150)})
+  }),
+  recordQuestion: (sessionId:string,questionId:string,correct:boolean) => jsonRequest<StudySession>(`/study/sessions/${sessionId}/questions`, {
+    method:'POST',body:JSON.stringify({questionId,correct})
+  }),
+  finishQuestionPractice: (sessionId:string,notes?:string) => jsonRequest<{session:StudySession;feedback:string[]}>(`/study/sessions/${sessionId}/finish-questions`, {
+    method:'POST',body:JSON.stringify({notes})
+  }),
+};
+
+export const notificationsApi = {
+  all: () => jsonRequest<Record<string, any>[]>('/notifications?unreadOnly=true'),
+  read: (id: string) => jsonRequest(`/notifications/${id}/read`, { method: 'PATCH' }),
+  readAll: () => jsonRequest<{ updated: number }>('/notifications/read-all', { method: 'PATCH' }),
 };
