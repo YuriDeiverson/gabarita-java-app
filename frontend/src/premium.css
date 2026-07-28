@@ -1301,3 +1301,138 @@ footer { border-color: var(--line) !important; background: transparent !importan
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Structural responsive safeguards. Keep this final: it resolves the shell
+   after the visual layers above without relying on Tailwind utility order. */
+*, *::before, *::after { box-sizing: border-box; }
+
+html,
+body,
+#root,
+.app-shell {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+body,
+.app-shell { overflow-x: clip; }
+
+.app-header-inner,
+.app-main,
+.app-content,
+.app-content > *,
+#home-tab-container,
+.home-selection-flow,
+.home-course-section,
+.create-plan-entry {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-main > .app-content {
+  grid-column: auto;
+  width: 100%;
+}
+
+.no-plan .app-main,
+.no-plan.sidebar-collapsed .app-main {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.no-plan .app-main > .app-content {
+  grid-column: 1 / -1 !important;
+  width: 100%;
+}
+
+.no-plan .app-content > * {
+  width: min(100%, 1220px);
+  margin-inline: auto;
+}
+
+.create-plan-entry > div { min-width: 0; }
+.create-plan-entry p,
+.home-hero p { overflow-wrap: anywhere; }
+.create-plan-button { max-width: 100%; }
+
+@media (min-width: 901px) {
+  .has-plan .app-main > .app-content { grid-column: 2; }
+}
+
+@media (max-width: 900px) {
+  .has-plan .app-main > .app-content,
+  .no-plan .app-main > .app-content { grid-column: 1; }
+}
+
+/* The available content width can be much smaller than the viewport when the
+   sidebar is open. Container queries prevent cards from overflowing there. */
+@container (max-width: 920px) {
+  .daily-main-grid,
+  .quiz-overview,
+  .schedule-overview,
+  .performance-topic-lists,
+  .plan-config-grid.is-review {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .plan-config-grid.is-review .wizard-main,
+  .plan-config-grid.is-review > div:last-child {
+    grid-column: 1 !important;
+  }
+
+  .performance-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .question-pomodoro-body,
+  .question-pomodoro-compact .question-pomodoro-body {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .question-pomodoro-time,
+  .question-pomodoro-compact .question-pomodoro-time { justify-self: start; }
+
+  .question-pomodoro-actions,
+  .question-pomodoro-compact .question-pomodoro-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
+@container (max-width: 640px) {
+  .daily-kpis,
+  .performance-metrics,
+  .quiz-stats,
+  .daily-secondary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .focus-card-top,
+  .card-heading { min-width: 0; }
+
+  .timer-stage {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .timer-ring { margin-inline: auto !important; }
+
+  .timer-details,
+  .timer-actions,
+  .question-pomodoro-actions,
+  .question-pomodoro-compact .question-pomodoro-actions {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@container (max-width: 430px) {
+  .daily-kpis,
+  .performance-metrics,
+  .quiz-stats,
+  .daily-secondary-grid,
+  .question-pomodoro-stats {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}

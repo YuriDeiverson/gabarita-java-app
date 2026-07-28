@@ -535,7 +535,7 @@ export default function App() {
       </header>
 
       {/* Main Container */}
-      <main id="main-content" className="app-main px-4 sm:px-6 xl:px-8 2xl:px-10 py-6 flex-grow w-full flex flex-col space-y-6" tabIndex={-1}>
+      <main id="main-content" className="app-main" tabIndex={-1}>
         
         {/* Navigation */}
           {hasPlan && <nav className="app-navigation desktop-app-navigation flex space-x-1 lg:space-x-2 bg-slate-100 p-1.5 rounded-xl self-start w-full md:w-auto" aria-label="Navegação principal">

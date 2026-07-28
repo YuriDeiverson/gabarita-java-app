@@ -867,7 +867,7 @@ footer {
     border-radius: 4px !important;
   }
   .app-main > .app-navigation button svg { width: 18px; height: 18px; }
-  .app-content { grid-column: 2; width: 100%; }
+  .has-plan .app-content { grid-column: 2; width: 100%; }
   .home-hero { min-height: clamp(210px, 16vw, 250px); }
   .home-hero h2 { font-size: clamp(3.2rem, 4vw, 4.6rem) !important; }
   .course-card { min-height: 290px; padding: clamp(26px, 2vw, 38px) !important; }
