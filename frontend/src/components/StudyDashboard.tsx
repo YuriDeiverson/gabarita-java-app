@@ -12,7 +12,8 @@ interface Props {
   onOpenStudy: (context?: ActiveStudyContext) => void;
   onOpenQuestions: () => void;
   onStudyContextChange: (context: ActiveStudyContext) => void;
-  onSessionChange?: () => void;
+  onSessionChange?: (session?: Partial<StudySession> | null) => void;
+  initialData?: StudyDashboardData | null;
 }
 
 const duration = (minutes: number) => {
@@ -39,18 +40,17 @@ const pomodoroConfig = (session: StudySession | null) => {
   catch{return null;}
 };
 
-export default function StudyDashboard({ onManagePlans, onOpenStudy, onOpenQuestions, onStudyContextChange, onSessionChange }: Props) {
-  const [data, setData] = useState<StudyDashboardData | null>(null);
+export default function StudyDashboard({ onManagePlans, onOpenStudy, onOpenQuestions, onStudyContextChange, onSessionChange, initialData }: Props) {
+  const [data, setData] = useState<StudyDashboardData | null>(initialData || null);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialData);
   const [busy, setBusy] = useState(false);
-  const [timerMode, setTimerMode] = useState<'FREE'|'POMODORO'>('FREE');
-  const [pomodoroPreset, setPomodoroPreset] = useState<'25/5'|'50/10'>('25/5');
+  const [pomodoroPreset, setPomodoroPreset] = useState<'25/10'|'50/10'>('50/10');
   const [feedback, setFeedback] = useState<string[]>([]);
   const [mobileInsightsOpen, setMobileInsightsOpen] = useState(false);
   const [tick, setTick] = useState(0);
   const [loadedAt, setLoadedAt] = useState(Date.now());
-  const automaticPause = useRef('');
+  const hadInitialData = useRef(Boolean(initialData));
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -68,7 +68,7 @@ export default function StudyDashboard({ onManagePlans, onOpenStudy, onOpenQuest
     } finally { if (!quiet) setLoading(false); }
   }, [onStudyContextChange]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(hadInitialData.current); }, [load]);
   useEffect(() => {
     const interval = window.setInterval(() => setTick(value => value + 1), 1000);
     const reconcile = window.setInterval(() => load(true), 30000);
@@ -91,49 +91,73 @@ export default function StudyDashboard({ onManagePlans, onOpenStudy, onOpenQuest
     return data.tasks.find(task => ['AVAILABLE','IN_PROGRESS'].includes(task.status)) || data.tasks.find(task => task.status !== 'COMPLETED') || null;
   }, [active, data]);
   const isPomoBreak=active?.mode==='POMODORO'&&active.status==='PAUSED'&&active.pause_reason==='POMODORO_FOCUS_COMPLETE'&&Boolean(pomo);
-  const selectedFocusMinutes=pomodoroPreset==='25/5'?25:50;
+  const selectedFocusMinutes=pomodoroPreset==='25/10'?25:50;
   const focusSeconds=Math.max(1,number(pomo?.focusMinutes)*60);
   const focusElapsed=pomo?Math.max(0,elapsed-cycle*focusSeconds):0;
   const focusRemaining=pomo?Math.max(0,focusSeconds-focusElapsed):selectedFocusMinutes*60;
-  const timerDisplay=isPomoBreak?breakRemaining:active?.mode==='POMODORO'||(!active&&timerMode==='POMODORO')?focusRemaining:elapsed;
-  const timerCaption=isPomoBreak?'de pausa':active?.mode==='POMODORO'||(!active&&timerMode==='POMODORO')
+  const timerDisplay=isPomoBreak?breakRemaining:active?.mode==='POMODORO'||!active?focusRemaining:elapsed;
+  const timerCaption=isPomoBreak?`restantes no descanso de ${Math.round(breakSeconds/60)} min`:active?.mode==='POMODORO'||!active
     ? `restantes no foco de ${pomo?.focusMinutes||selectedFocusMinutes} min`
     : `de ${currentTask?.planned_minutes || 0}:00`;
-  const timerProgress=active?.mode==='POMODORO'&&pomo
+  const timerProgress=isPomoBreak
+    ? Math.min(100,pauseSeconds/Math.max(1,breakSeconds)*100)
+    : active?.mode==='POMODORO'&&pomo
     ? Math.min(100,focusElapsed/focusSeconds*100)
     : Math.min(100,elapsed/Math.max(1,number(currentTask?.planned_minutes)*60)*100);
 
-  useEffect(()=>{
-    if(!active||active.mode!=='POMODORO'||active.status!=='RUNNING'||!pomo)return;
-    const threshold=(cycle+1)*pomo.focusMinutes*60;
-    const key=`${active.id}:${cycle}`;
-    if(elapsed<threshold||automaticPause.current===key)return;
-    automaticPause.current=key; setBusy(true);
-    dailyStudyApi.pause(active.id,'POMODORO_FOCUS_COMPLETE').then(()=>{
-      setFeedback([`Ciclo ${cycle+1} concluído. Sua pausa começou agora.`]); onSessionChange?.(); return load(true);
-    }).catch(requestError=>setError(requestError instanceof Error?requestError.message:'Não foi possível iniciar a pausa.'))
-      .finally(()=>setBusy(false));
-  },[active?.id,active?.status,cycle,elapsed,pomo?.focusMinutes]);
-
-  const action = async (operation: () => Promise<unknown>) => {
+  const syncSession = (session: Partial<StudySession> | null) => {
+    setData(current => current ? { ...current, active_session: session || {} } : current);
+    setLoadedAt(Date.now());
+    onSessionChange?.(session);
+  };
+  const action = async (operation: () => Promise<unknown>, optimisticSession?: Partial<StudySession>) => {
     setBusy(true); setFeedback([]);
-    try { await operation(); await load(true); onSessionChange?.(); }
-    catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'A operação não foi concluída.'); }
+    if(optimisticSession)syncSession(optimisticSession);
+    try {
+      const result=await operation();
+      if(result&&typeof result==='object'&&'id' in result&&'status' in result)syncSession(result as Partial<StudySession>);
+      else if(result&&typeof result==='object'&&'tasks' in result)setData(result as StudyDashboardData);
+      else onSessionChange?.();
+      void load(true);
+    }
+    catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'A operação não foi concluída.');
+      void load(true);onSessionChange?.();
+    }
     finally { setBusy(false); }
   };
-  const start = () => currentTask && action(async() => {
-    await dailyStudyApi.start(currentTask.id, {
-      mode: timerMode,
-      pomodoro: timerMode === 'POMODORO' ? {
-        focusMinutes: pomodoroPreset === '25/5' ? 25 : 50,
-        shortBreakMinutes: pomodoroPreset === '25/5' ? 5 : 10,
-        longBreakMinutes: 15, cycles: 4
-      } : undefined,
-      device: navigator.userAgent.slice(0,150)
+  const start = () => {
+    if(!currentTask)return;
+    if('Notification' in window&&Notification.permission==='default'){
+      void Notification.requestPermission().catch(()=>{});
+    }
+    void action(async() => {
+      const started=await dailyStudyApi.start(currentTask.id, {
+        mode: 'POMODORO',
+        pomodoro: {
+          focusMinutes: pomodoroPreset === '25/10' ? 25 : 50,
+          shortBreakMinutes: 10,
+          longBreakMinutes: 10,
+          cycles: 4
+        },
+        device: navigator.userAgent.slice(0,150)
+      });
+      onOpenStudy({roadmapTopicId:currentTask.roadmap_topic_id,topicTitle:currentTask.topic_title,
+        subjectName:currentTask.subject_name,source:'session'});
+      return started;
     });
-    onOpenStudy({roadmapTopicId:currentTask.roadmap_topic_id,topicTitle:currentTask.topic_title,
-      subjectName:currentTask.subject_name,source:'session'});
-  });
+  };
+  const pauseActive=()=>{
+    if(!active)return;
+    const optimisticSession:Partial<StudySession>={...active,status:'PAUSED',elapsed_seconds:elapsed,
+      paused_at:new Date().toISOString(),pause_reason:'Pausa manual'};
+    void action(()=>dailyStudyApi.pause(active.id,'Pausa manual'),optimisticSession);
+  };
+  const resumeActive=()=>{
+    if(!active)return;
+    const optimisticSession:Partial<StudySession>={...active,status:'RUNNING',paused_at:undefined,pause_reason:undefined};
+    void action(()=>dailyStudyApi.resume(active.id),optimisticSession);
+  };
   const rebalance = () => {
     const answer=window.prompt('Quanto tempo você tem hoje? Informe os minutos (mínimo 30).','60');
     if(answer===null)return;
@@ -205,15 +229,14 @@ export default function StudyDashboard({ onManagePlans, onOpenStudy, onOpenQuest
               <p><span>Domínio atual</span><strong>{Math.round(number(currentTask.mastery))}%</strong></p>
             </div>
           </div>
-          {!active&&<div className="timer-mode">
-            <button className={timerMode==='FREE'?'is-active':''} onClick={()=>setTimerMode('FREE')}>Timer livre</button>
-            <button className={timerMode==='POMODORO'?'is-active':''} onClick={()=>setTimerMode('POMODORO')}>Pomodoro</button>
-            {timerMode==='POMODORO'&&<select value={pomodoroPreset} onChange={event=>setPomodoroPreset(event.target.value as '25/5'|'50/10')} aria-label="Duração do pomodoro"><option value="25/5">25 min + 5 min</option><option value="50/10">50 min + 10 min</option></select>}
+          {!active&&<div className="timer-mode" role="group" aria-label="Duração do Pomodoro">
+            <button className={pomodoroPreset==='50/10'?'is-active':''} onClick={()=>setPomodoroPreset('50/10')}>50 min + 10 min</button>
+            <button className={pomodoroPreset==='25/10'?'is-active':''} onClick={()=>setPomodoroPreset('25/10')}>25 min + 10 min</button>
           </div>}
           <div className="timer-actions">
             {!active&&<button className="primary-study-action" disabled={busy} onClick={start}><Play /> Começar agora</button>}
-            {active?.status==='RUNNING'&&<button className="secondary-study-action" disabled={busy} onClick={()=>action(()=>dailyStudyApi.pause(active.id,'Pausa manual'))}><Pause /> Pausar</button>}
-            {active?.status==='PAUSED'&&<button className="primary-study-action" disabled={busy} onClick={()=>action(()=>dailyStudyApi.resume(active.id))}><Play /> Continuar</button>}
+            {active?.status==='RUNNING'&&<button className="secondary-study-action" disabled={busy} onClick={pauseActive}><Pause /> Pausar</button>}
+            {active?.status==='PAUSED'&&<button className="primary-study-action" disabled={busy} onClick={resumeActive}><Play /> {isPomoBreak&&breakRemaining>0?'Pular descanso':'Continuar'}</button>}
             {active&&<button className="finish-study-action" disabled={busy} onClick={()=>onOpenStudy({roadmapTopicId:currentTask.roadmap_topic_id,topicTitle:currentTask.topic_title,subjectName:currentTask.subject_name,source:'session'})}><BookOpen /> Continuar conteúdo</button>}
           </div>
         </>:questionPractice?<button className="primary-study-action" onClick={onOpenQuestions}><ListChecks /> Continuar questões</button>:<button className="primary-study-action" onClick={()=>onOpenStudy()}><BookOpen /> Revisar conteúdos</button>}

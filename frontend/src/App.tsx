@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import HomeTab from './components/HomeTab';
 import StudyTab from './components/StudyTab';
 import QuizTab, { GuidedReviewResult } from './components/QuizTab';
@@ -9,7 +9,7 @@ import QuestionBankTab from './components/QuestionBankTab';
 import { dailyStudyApi, notificationsApi, studyPlansApi, StudyDashboardData, StudySession } from './services/api';
 import { ActiveStudyContext } from './studyContext';
 import { useAuth } from './auth/AuthContext';
-import { Bell, BookOpen, BookOpenCheck, Calendar, Sparkles, Target, Home as HomeIcon, ChartNoAxesCombined, PanelLeftClose, PanelLeftOpen, ListChecks, Award, X, LogOut, UserRound, Settings2, Flame, Star, ShieldCheck, Clock3, ChevronRight, CheckCheck, RefreshCw } from 'lucide-react';
+import { Bell, BookOpen, BookOpenCheck, Calendar, Sparkles, Target, Home as HomeIcon, ChartNoAxesCombined, PanelLeftClose, PanelLeftOpen, ListChecks, Award, X, LogOut, UserRound, Settings2, Flame, Star, ShieldCheck, Clock3, ChevronRight, CheckCheck, RefreshCw, Play, TimerReset } from 'lucide-react';
 
 type AppTab = 'home' | 'study' | 'quiz' | 'questions' | 'schedule' | 'performance';
 
@@ -52,6 +52,73 @@ export default function App() {
   const [headerStudyData,setHeaderStudyData]=useState<StudyDashboardData|null>(null);
   const [headerTimerLoadedAt,setHeaderTimerLoadedAt]=useState(Date.now());
   const [headerTimerTick,setHeaderTimerTick]=useState(0);
+  const [newPlanSessionPrompt,setNewPlanSessionPrompt]=useState<Partial<StudySession>|null>(null);
+  const [newPlanSessionBusy,setNewPlanSessionBusy]=useState(false);
+  const [newPlanSessionError,setNewPlanSessionError]=useState('');
+  const newPlanDecisionRef=useRef<((proceed:boolean)=>void)|null>(null);
+  const [breakNotice,setBreakNotice]=useState<{title:string;minutes:number}|null>(null);
+  const [completedBreakPrompt,setCompletedBreakPrompt]=useState<{sessionId:string;title:string}|null>(null);
+  const [completedBreakBusy,setCompletedBreakBusy]=useState(false);
+  const [completedBreakError,setCompletedBreakError]=useState('');
+  const breakAlertedRef=useRef('');
+  const completedBreakAlertedRef=useRef('');
+  const globalAutomaticPauseRef=useRef('');
+  const audioContextRef=useRef<AudioContext|null>(null);
+
+  const ensureAudioContext=useCallback(()=>{
+    try{
+      const context=audioContextRef.current||new AudioContext();
+      audioContextRef.current=context;
+      if(context.state==='suspended')void context.resume();
+      return context;
+    }catch{return null;}
+  },[]);
+
+  const playGentleBreakChime=useCallback(()=>{
+    const context=ensureAudioContext();
+    if(!context)return;
+    const play=()=>{
+      const startAt=context.currentTime+0.03;
+      [523.25,659.25,783.99].forEach((frequency,index)=>{
+        const oscillator=context.createOscillator();
+        const gain=context.createGain();
+        const toneStart=startAt+index*0.2;
+        oscillator.type='sine';
+        oscillator.frequency.setValueAtTime(frequency,toneStart);
+        gain.gain.setValueAtTime(0.0001,toneStart);
+        gain.gain.exponentialRampToValueAtTime(0.14,toneStart+0.035);
+        gain.gain.exponentialRampToValueAtTime(0.0001,toneStart+0.38);
+        oscillator.connect(gain);gain.connect(context.destination);
+        oscillator.start(toneStart);oscillator.stop(toneStart+0.4);
+      });
+    };
+    if(context.state==='suspended')void context.resume().then(play).catch(()=>{});
+    else play();
+    if('vibrate' in navigator)navigator.vibrate([120,80,120]);
+  },[ensureAudioContext]);
+
+  const playBreakCompletedChime=useCallback(()=>{
+    const context=ensureAudioContext();
+    if(!context)return;
+    const play=()=>{
+      const startAt=context.currentTime+0.03;
+      [783.99,659.25,783.99,1046.5].forEach((frequency,index)=>{
+        const oscillator=context.createOscillator();
+        const gain=context.createGain();
+        const toneStart=startAt+index*0.18;
+        oscillator.type='sine';
+        oscillator.frequency.setValueAtTime(frequency,toneStart);
+        gain.gain.setValueAtTime(0.0001,toneStart);
+        gain.gain.exponentialRampToValueAtTime(0.16,toneStart+0.025);
+        gain.gain.exponentialRampToValueAtTime(0.0001,toneStart+0.34);
+        oscillator.connect(gain);gain.connect(context.destination);
+        oscillator.start(toneStart);oscillator.stop(toneStart+0.36);
+      });
+    };
+    if(context.state==='suspended')void context.resume().then(play).catch(()=>{});
+    else play();
+    if('vibrate' in navigator)navigator.vibrate([180,90,180,90,260]);
+  },[ensureAudioContext]);
 
   const [activeCourse, setActiveCourse] = useState<string>(() => {
     return localStorage.getItem('active_course') || 'seplag_informatica';
@@ -89,6 +156,15 @@ export default function App() {
     catch{/* O dashboard continua responsável por exibir erros de carregamento ao usuário. */}
   },[hasPlan]);
 
+  const handleSessionChange=useCallback((session?:Partial<StudySession>|null)=>{
+    if(session!==undefined&&headerStudyData){
+      setHeaderStudyData(current=>current?{...current,active_session:session||{}}:current);
+      setHeaderTimerLoadedAt(Date.now());
+      return;
+    }
+    void loadHeaderStudyData();
+  },[headerStudyData,loadHeaderStudyData]);
+
   useEffect(()=>{
     void loadHeaderStudyData();
     const interval=window.setInterval(loadHeaderStudyData,30_000);
@@ -99,6 +175,34 @@ export default function App() {
     const interval=window.setInterval(()=>setHeaderTimerTick(value=>value+1),1_000);
     return()=>window.clearInterval(interval);
   },[]);
+
+  useEffect(()=>{
+    const unlockAudio=()=>{
+      const context=ensureAudioContext();
+      if(!context)return;
+      const prime=()=>{
+        const oscillator=context.createOscillator();
+        const gain=context.createGain();
+        gain.gain.setValueAtTime(0.0001,context.currentTime);
+        oscillator.connect(gain);gain.connect(context.destination);
+        oscillator.start();oscillator.stop(context.currentTime+0.02);
+      };
+      if(context.state==='suspended')void context.resume().then(prime).catch(()=>{});
+      else prime();
+    };
+    window.addEventListener('pointerdown',unlockAudio,{once:true});
+    window.addEventListener('keydown',unlockAudio,{once:true});
+    return()=>{
+      window.removeEventListener('pointerdown',unlockAudio);
+      window.removeEventListener('keydown',unlockAudio);
+    };
+  },[ensureAudioContext]);
+
+  useEffect(()=>{
+    if(!breakNotice)return;
+    const timeout=window.setTimeout(()=>setBreakNotice(null),9_000);
+    return()=>window.clearTimeout(timeout);
+  },[breakNotice]);
 
   useEffect(()=>{
     const closeMenus=(event:PointerEvent)=>{
@@ -348,9 +452,11 @@ export default function App() {
     { id: 'quiz' as AppTab, label: 'Revisão', mobileLabel: 'Revisão', icon: Sparkles },
     { id: 'schedule' as AppTab, label: 'Cronograma', mobileLabel: 'Cronograma', icon: Calendar },
     { id: 'questions' as AppTab, label: 'Questões', mobileLabel: 'Questões', icon: ListChecks },
-    { id: 'performance' as AppTab, label: 'Desempenho', mobileLabel: 'Progresso', icon: ChartNoAxesCombined },
   ];
-  const activeNavigationItem = navigationItems.find(item => item.id === activeTab) || navigationItems[0];
+  const activeNavigationItem = navigationItems.find(item => item.id === activeTab)
+    || (activeTab === 'performance'
+      ? { id: 'performance' as AppTab, label: 'Desempenho', mobileLabel: 'Progresso', icon: ChartNoAxesCombined }
+      : navigationItems[0]);
   const userFirstName=String(user?.user_metadata?.full_name||user?.user_metadata?.name||user?.email?.split('@')[0]||'Estudante').trim().split(/\s+/)[0];
   const normalizedFirstName=userFirstName?`${userFirstName.charAt(0).toLocaleUpperCase('pt-BR')}${userFirstName.slice(1)}`:'Estudante';
   const currentHour=new Date().getHours();
@@ -377,24 +483,142 @@ export default function App() {
   void headerTimerTick;
   const headerPomodoro=(()=>{
     if(!activeHeaderSession?.pomodoro_config)return null;
-    try{return JSON.parse(activeHeaderSession.pomodoro_config) as {focusMinutes?:number};}catch{return null;}
+    try{return JSON.parse(activeHeaderSession.pomodoro_config) as {focusMinutes?:number;shortBreakMinutes?:number;longBreakMinutes?:number;cycles?:number};}catch{return null;}
   })();
-  const headerFocusSeconds=Math.max(1,Number(headerPomodoro?.focusMinutes||25))*60;
+  const headerFocusSeconds=Math.max(1,Number(headerPomodoro?.focusMinutes||50))*60;
   const headerCycle=Math.max(0,Number(activeHeaderSession?.pomodoro_cycle||0));
-  const headerTimerSeconds=activeHeaderSession?.mode==='POMODORO'
+  const headerIsBreak=activeHeaderSession?.mode==='POMODORO'&&activeHeaderSession.status==='PAUSED'&&activeHeaderSession.pause_reason==='POMODORO_FOCUS_COMPLETE';
+  const headerBreakMinutes=headerCycle>0&&headerCycle%Math.max(1,Number(headerPomodoro?.cycles||4))===0
+    ? Number(headerPomodoro?.longBreakMinutes||10)
+    : Number(headerPomodoro?.shortBreakMinutes||10);
+  const headerPauseSeconds=headerIsBreak&&activeHeaderSession.paused_at
+    ? Math.max(0,Math.floor((Date.now()-new Date(activeHeaderSession.paused_at).getTime())/1_000))
+    : 0;
+  const headerTimerSeconds=headerIsBreak
+    ? Math.max(0,headerBreakMinutes*60-headerPauseSeconds)
+    : activeHeaderSession?.mode==='POMODORO'
     ? Math.max(0,headerFocusSeconds-Math.max(0,headerElapsed-headerCycle*headerFocusSeconds))
     : headerElapsed;
 
+  useEffect(()=>{
+    if(!activeHeaderSession?.id||activeHeaderSession.session_kind==='QUESTIONS'||activeHeaderSession.mode!=='POMODORO'||activeHeaderSession.status!=='RUNNING'||headerTimerSeconds>0)return;
+    const key=`${activeHeaderSession.id}:${headerCycle}`;
+    if(globalAutomaticPauseRef.current===key)return;
+    globalAutomaticPauseRef.current=key;
+    dailyStudyApi.pause(String(activeHeaderSession.id),'POMODORO_FOCUS_COMPLETE').then(updated=>{
+      setHeaderStudyData(current=>current?{...current,active_session:updated}:current);
+      setHeaderTimerLoadedAt(Date.now());
+      setDashboardVersion(value=>value+1);
+    }).catch(error=>{
+      globalAutomaticPauseRef.current='';
+      console.warn('Não foi possível iniciar o descanso do Pomodoro.',error);
+    });
+  },[activeHeaderSession?.id,activeHeaderSession?.mode,activeHeaderSession?.session_kind,activeHeaderSession?.status,headerCycle,headerTimerSeconds]);
+
+  useEffect(()=>{
+    if(!headerIsBreak||!activeHeaderSession?.id)return;
+    const key=`${activeHeaderSession.id}:${headerCycle}`;
+    if(breakAlertedRef.current===key)return;
+    breakAlertedRef.current=key;
+    const minutes=Math.max(1,Math.round(headerBreakMinutes));
+    const title=String(activeHeaderSession.topic_title||activeHeaderSession.context_title||'Sessão atual');
+    setBreakNotice({title,minutes});
+    playGentleBreakChime();
+    if('Notification' in window&&Notification.permission==='granted'){
+      try{new Notification('Momento de descanso',{body:`Seu foco terminou. Faça uma pausa de ${minutes} minutos.`,tag:key});}catch{}
+    }
+  },[activeHeaderSession?.context_title,activeHeaderSession?.id,activeHeaderSession?.topic_title,headerBreakMinutes,headerCycle,headerIsBreak,playGentleBreakChime]);
+
+  useEffect(()=>{
+    if(!headerIsBreak||headerTimerSeconds>0||!activeHeaderSession?.id)return;
+    const key=`${activeHeaderSession.id}:${headerCycle}`;
+    if(completedBreakAlertedRef.current===key)return;
+    completedBreakAlertedRef.current=key;
+    const title=String(activeHeaderSession.topic_title||activeHeaderSession.context_title||'Sessão atual');
+    setCompletedBreakError('');
+    setCompletedBreakPrompt({sessionId:String(activeHeaderSession.id),title});
+    playBreakCompletedChime();
+    if('Notification' in window&&Notification.permission==='granted'){
+      try{new Notification('Descanso concluído',{body:'O intervalo terminou. Sua próxima sessão de foco está pronta.',tag:`break-complete:${key}`});}catch{}
+    }
+  },[
+    activeHeaderSession?.context_title,
+    activeHeaderSession?.id,
+    activeHeaderSession?.topic_title,
+    headerCycle,
+    headerIsBreak,
+    headerTimerSeconds,
+    playBreakCompletedChime,
+  ]);
+
+  const resumeAfterCompletedBreak=async()=>{
+    if(!completedBreakPrompt||completedBreakBusy)return;
+    setCompletedBreakBusy(true);setCompletedBreakError('');
+    try{
+      const updated=await dailyStudyApi.resume(completedBreakPrompt.sessionId);
+      setHeaderStudyData(current=>current?{...current,active_session:updated}:current);
+      setHeaderTimerLoadedAt(Date.now());
+      setCompletedBreakPrompt(null);
+      setDashboardVersion(value=>value+1);
+    }catch(error){
+      setCompletedBreakError(error instanceof Error?error.message:'Não foi possível iniciar a próxima sessão.');
+    }finally{setCompletedBreakBusy(false);}
+  };
+
+  const requestNewPlanConfiguration=useCallback(async()=>{
+    let session=headerStudyData?.active_session?.id
+      ? headerStudyData.active_session as Partial<StudySession>
+      : null;
+    try{
+      const latestSession=await dailyStudyApi.active();
+      session=latestSession.id?latestSession:null;
+    }catch(error){
+      console.warn('Não foi possível atualizar a sessão antes de criar o plano.',error);
+    }
+    if(!session?.id)return true;
+    return new Promise<boolean>(resolve=>{
+      newPlanDecisionRef.current=resolve;
+      setNewPlanSessionError('');
+      setNewPlanSessionPrompt(session);
+    });
+  },[headerStudyData]);
+
+  const keepCurrentSession=()=>{
+    if(newPlanSessionBusy)return;
+    newPlanDecisionRef.current?.(false);
+    newPlanDecisionRef.current=null;
+    setNewPlanSessionPrompt(null);
+    setNewPlanSessionError('');
+  };
+
+  const leaveSessionForNewPlan=async()=>{
+    if(!newPlanSessionPrompt?.id||newPlanSessionBusy)return;
+    setNewPlanSessionBusy(true);setNewPlanSessionError('');
+    try{
+      await dailyStudyApi.cancel(String(newPlanSessionPrompt.id),'Sessão cancelada pelo usuário antes de configurar um novo plano.');
+      setHeaderStudyData(current=>current?{...current,active_session:{}}:current);
+      setHeaderTimerLoadedAt(Date.now());
+      setStudyContext(null);
+      localStorage.removeItem('active_study_context');
+      setDashboardVersion(value=>value+1);
+      newPlanDecisionRef.current?.(true);
+      newPlanDecisionRef.current=null;
+      setNewPlanSessionPrompt(null);
+    }catch(error){
+      setNewPlanSessionError(error instanceof Error?error.message:'Não foi possível encerrar a sessão atual.');
+    }finally{setNewPlanSessionBusy(false);}
+  };
+
   const globalSessionTimer=(mobile=false)=>activeHeaderSession&&<div
     className={`${mobile?'mobile-global-session-timer':'global-session-timer'} ${activeHeaderSession.status==='PAUSED'?'is-paused':''}`}
-    aria-label={`${activeHeaderSession.mode==='POMODORO'?'Pomodoro':'Tempo de estudo'}: ${formatClock(headerTimerSeconds)}${activeHeaderSession.status==='PAUSED'?', pausado':''}`}
+    aria-label={`${headerIsBreak?'Descanso':activeHeaderSession.mode==='POMODORO'?'Pomodoro':'Tempo de estudo'}: ${formatClock(headerTimerSeconds)}${activeHeaderSession.status==='PAUSED'?', pausado':''}`}
   >
     <span className="global-timer-icon"><Clock3/></span>
     <div>
-      <small>{activeHeaderSession.session_kind==='QUESTIONS'?'Pomodoro de questões':activeHeaderSession.mode==='POMODORO'?'Pomodoro':'Tempo estudando'}</small>
+      <small>{headerIsBreak?'Descanso':activeHeaderSession.session_kind==='QUESTIONS'?'Pomodoro de questões':activeHeaderSession.mode==='POMODORO'?'Pomodoro':'Tempo estudando'}</small>
       <strong>{formatClock(headerTimerSeconds)}</strong>
     </div>
-    <span className="global-timer-state">{activeHeaderSession.status==='PAUSED'?'Pausado':'Em andamento'}</span>
+    <span className="global-timer-state">{headerIsBreak?'Intervalo':activeHeaderSession.status==='PAUSED'?'Pausado':'Em andamento'}</span>
   </div>;
 
   const openPlanManager=()=>{
@@ -576,12 +800,12 @@ export default function App() {
 
         {/* Tab Content Rendering */}
         <div className="app-content min-w-0 flex-grow transition-all duration-300">
-          {activeTab === 'home' && hasPlan && homeMode === 'dashboard' && <StudyDashboard key={dashboardVersion} onManagePlans={()=>setHomeMode('plans')} onOpenStudy={openStudyContext} onOpenQuestions={()=>setActiveTab('questions')} onStudyContextChange={updateStudyContext} onSessionChange={loadHeaderStudyData} />}
-          {activeTab === 'home' && (!hasPlan || homeMode === 'plans') && <HomeTab onPlanGenerated={handlePlanGenerated} onPlansChanged={handlePlansChanged} />}
+          {activeTab === 'home' && hasPlan && homeMode === 'dashboard' && <StudyDashboard key={dashboardVersion} initialData={headerStudyData} onManagePlans={()=>setHomeMode('plans')} onOpenStudy={openStudyContext} onOpenQuestions={()=>setActiveTab('questions')} onStudyContextChange={updateStudyContext} onSessionChange={handleSessionChange} />}
+          {activeTab === 'home' && (!hasPlan || homeMode === 'plans') && <HomeTab onPlanGenerated={handlePlanGenerated} onPlansChanged={handlePlansChanged} onBeforeCreatePlan={requestNewPlanConfiguration} />}
           {hasPlan && activeTab === 'study' && <StudyTab studyContext={studyContext} onCurrentActivityComplete={openCurrentReview} />}
           {hasPlan && activeTab === 'quiz' && <QuizTab mode="session" studyContext={studyContext} onReviewComplete={showReviewResult} />}
           {hasPlan && activeTab === 'schedule' && <ScheduleTab studyContext={studyContext} onOpenStudy={openStudyContext} />}
-          {hasPlan && activeTab === 'questions' && <QuestionBankTab onSessionChange={loadHeaderStudyData} />}
+          {hasPlan && activeTab === 'questions' && <QuestionBankTab onSessionChange={handleSessionChange} />}
           {hasPlan && activeTab === 'performance' && <PerformanceTab />}
         </div>
       </main>
@@ -603,6 +827,41 @@ export default function App() {
           </div>
           {cycleError&&<p role="alert" className="!mt-3 !mb-0 !text-rose-700">{cycleError}</p>}
           <button type="button" className="primary-study-action mt-5" disabled={advancingCycle} onClick={advanceAfterReview}>{advancingCycle?'Preparando próximo assunto…':'Continuar para o próximo assunto'}</button>
+        </section>
+      </div>}
+
+      {newPlanSessionPrompt&&<div className="finish-modal-backdrop" role="presentation">
+        <section className="finish-modal" role="alertdialog" aria-modal="true" aria-labelledby="new-plan-session-title" aria-describedby="new-plan-session-description">
+          <span className="finish-icon !bg-amber-50 !text-amber-700"><Clock3/></span>
+          <h3 id="new-plan-session-title">Existe uma sessão em andamento</h3>
+          <p id="new-plan-session-description">
+            Você iniciou {newPlanSessionPrompt.session_kind==='QUESTIONS'?'um Pomodoro de questões':newPlanSessionPrompt.mode==='POMODORO'?'um Pomodoro':'uma sessão de estudo'}{newPlanSessionPrompt.topic_title?` em “${newPlanSessionPrompt.topic_title}”`:''}. Para configurar um novo plano, essa sessão será cancelada e o cronômetro voltará a zero. Depois, será necessário iniciar novamente o assunto e a sessão.
+          </p>
+          {newPlanSessionError&&<p role="alert" className="!mb-0 !text-rose-700">{newPlanSessionError}</p>}
+          <div className="mt-5 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
+            <button type="button" disabled={newPlanSessionBusy} onClick={keepCurrentSession} className="min-h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-bold disabled:opacity-50">Continuar estudando</button>
+            <button type="button" disabled={newPlanSessionBusy} onClick={()=>void leaveSessionForNewPlan()} className="min-h-11 px-4 rounded-xl bg-rose-600 text-white text-sm font-extrabold disabled:opacity-50">{newPlanSessionBusy?'Encerrando sessão…':'Sair e zerar sessão'}</button>
+          </div>
+        </section>
+      </div>}
+
+      {breakNotice&&<aside className="pomodoro-break-notice" role="alert" aria-live="assertive">
+        <span className="pomodoro-break-notice-icon" aria-hidden="true"><Clock3/></span>
+        <div><strong>Momento de descanso</strong><p>O foco em “{breakNotice.title}” terminou. Descanse por {breakNotice.minutes} minutos.</p></div>
+        <button type="button" onClick={()=>setBreakNotice(null)} aria-label="Fechar aviso de descanso"><X/></button>
+      </aside>}
+
+      {completedBreakPrompt&&<div className="pomodoro-rest-complete-backdrop" role="presentation">
+        <section className="pomodoro-rest-complete-modal" role="alertdialog" aria-modal="true" aria-labelledby="pomodoro-rest-complete-title" aria-describedby="pomodoro-rest-complete-description">
+          <span className="pomodoro-rest-complete-icon" aria-hidden="true"><TimerReset /></span>
+          <p className="pomodoro-rest-complete-eyebrow">Pomodoro · próxima etapa</p>
+          <h3 id="pomodoro-rest-complete-title">Descanso concluído</h3>
+          <p id="pomodoro-rest-complete-description">Os 10 minutos de descanso terminaram. Deseja iniciar a próxima sessão de foco em “{completedBreakPrompt.title}” agora?</p>
+          {completedBreakError&&<p className="pomodoro-rest-complete-error" role="alert">{completedBreakError}</p>}
+          <div className="pomodoro-rest-complete-actions">
+            <button type="button" className="secondary-study-action" disabled={completedBreakBusy} onClick={()=>setCompletedBreakPrompt(null)}>Agora não</button>
+            <button type="button" className="primary-study-action" disabled={completedBreakBusy} onClick={()=>void resumeAfterCompletedBreak()}><Play /> {completedBreakBusy?'Iniciando…':'Ir para a próxima sessão'}</button>
+          </div>
         </section>
       </div>}
 

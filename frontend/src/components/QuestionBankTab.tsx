@@ -6,7 +6,7 @@ import { Question } from '../types';
 
 const clock=(seconds:number)=>`${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;
 
-interface Props { onSessionChange?: () => void; }
+interface Props { onSessionChange?: (session?: Partial<StudySession> | null) => void; }
 
 export default function QuestionBankTab({onSessionChange}:Props){
   const [session,setSession]=useState<StudySession|null>(null);
@@ -43,20 +43,20 @@ export default function QuestionBankTab({onSessionChange}:Props){
     const key=`${session.id}:${cycle}`;
     if(elapsed<(cycle+1)*config.focusMinutes*60||autoPauseKey.current===key)return;
     autoPauseKey.current=key;setBusy(true);
-    dailyStudyApi.pause(session.id,'POMODORO_FOCUS_COMPLETE').then(updated=>{setSession(updated);setLoadedAt(Date.now());setSummary(`Ciclo ${cycle+1} concluído. Faça uma pausa antes de continuar.`);onSessionChange?.();})
+    dailyStudyApi.pause(session.id,'POMODORO_FOCUS_COMPLETE').then(updated=>{setSession(updated);setLoadedAt(Date.now());setSummary(`Ciclo ${cycle+1} concluído. Faça uma pausa antes de continuar.`);onSessionChange?.(updated);})
       .catch(requestError=>setError(requestError instanceof Error?requestError.message:'Não foi possível pausar.')).finally(()=>setBusy(false));
   },[session?.id,session?.status,cycle,elapsed,config.focusMinutes]);
 
   const start=async()=>{
     if(!planId||String(planId).startsWith('local-')){setError('Salve e ative o plano no servidor para usar o Pomodoro persistente.');return;}
     setBusy(true);setError('');setSummary('');
-    try{const started=await dailyStudyApi.startQuestionPractice(planId,focusMinutes);setSession(started);setLoadedAt(Date.now());onSessionChange?.();}
+    try{const started=await dailyStudyApi.startQuestionPractice(planId,focusMinutes);setSession(started);setLoadedAt(Date.now());onSessionChange?.(started);}
     catch(requestError){setError(requestError instanceof Error?requestError.message:'Não foi possível iniciar o Pomodoro.');}
     finally{setBusy(false);}
   };
-  const pause=async()=>{if(!session)return;setBusy(true);try{setSession(await dailyStudyApi.pause(session.id,'Pausa manual'));setLoadedAt(Date.now());onSessionChange?.();}catch(e){setError(e instanceof Error?e.message:'Não foi possível pausar.');}finally{setBusy(false);}};
-  const resume=async()=>{if(!session)return;setBusy(true);try{setSession(await dailyStudyApi.resume(session.id));setLoadedAt(Date.now());onSessionChange?.();}catch(e){setError(e instanceof Error?e.message:'Não foi possível continuar.');}finally{setBusy(false);}};
-  const finish=async()=>{if(!session)return;setBusy(true);try{const result=await dailyStudyApi.finishQuestionPractice(session.id);setSummary(result.feedback?.[0]||'Sessão registrada.');setSession(null);onSessionChange?.();}catch(e){setError(e instanceof Error?e.message:'Não foi possível finalizar.');}finally{setBusy(false);}};
+  const pause=async()=>{if(!session)return;const optimistic={...session,status:'PAUSED' as const,elapsed_seconds:elapsed,paused_at:new Date().toISOString(),pause_reason:'Pausa manual'};setSession(optimistic);setLoadedAt(Date.now());onSessionChange?.(optimistic);setBusy(true);try{const updated=await dailyStudyApi.pause(session.id,'Pausa manual');setSession(updated);setLoadedAt(Date.now());onSessionChange?.(updated);}catch(e){setError(e instanceof Error?e.message:'Não foi possível pausar.');void loadActive();onSessionChange?.();}finally{setBusy(false);}};
+  const resume=async()=>{if(!session)return;const optimistic={...session,status:'RUNNING' as const,paused_at:undefined,pause_reason:undefined};setSession(optimistic);setLoadedAt(Date.now());onSessionChange?.(optimistic);setBusy(true);try{const updated=await dailyStudyApi.resume(session.id);setSession(updated);setLoadedAt(Date.now());onSessionChange?.(updated);}catch(e){setError(e instanceof Error?e.message:'Não foi possível continuar.');void loadActive();onSessionChange?.();}finally{setBusy(false);}};
+  const finish=async()=>{if(!session)return;setBusy(true);try{const result=await dailyStudyApi.finishQuestionPractice(session.id);setSummary(result.feedback?.[0]||'Sessão registrada.');setSession(null);onSessionChange?.(null);}catch(e){setError(e instanceof Error?e.message:'Não foi possível finalizar.');}finally{setBusy(false);}};
   const recordAnswer=async(question:Question,correct:boolean)=>{
     if(!session||session.status!=='RUNNING')return;
     try{

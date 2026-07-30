@@ -1,88 +1,666 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BookOpen, CalendarDays, Check, Clock3, RefreshCw } from 'lucide-react';
-import { dailyStudyApi, StudyDashboardData } from '../services/api';
-import { ActiveStudyContext } from '../studyContext';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import ReactCalendar from "react-calendar";
+import "react-calendar/dist/Calendar.css";
+import {
+  BarChart3,
+  BookOpen,
+  CalendarDays,
+  Check,
+  ChevronDown,
+  CircleHelp,
+  Clock3,
+  RefreshCw,
+  Target,
+  X,
+} from "lucide-react";
+import {
+  dailyStudyApi,
+  scheduleApi,
+  ScheduleAgendaDay,
+  ScheduleAgendaItem,
+  StudyDashboardData,
+} from "../services/api";
+import { ActiveStudyContext } from "../studyContext";
+import "./ScheduleTab.css";
 
 interface Props {
   studyContext: ActiveStudyContext | null;
   onOpenStudy: (context?: ActiveStudyContext) => void;
 }
-interface UpcomingStudy { topic_id:unknown; title:unknown; module_name:unknown; planned_minutes:unknown; recommended_questions:unknown; plannedDate:Date; }
 
-const statusLabel: Record<string,string> = {
-  COMPLETED: 'Concluído', IN_PROGRESS: 'Em andamento', AVAILABLE: 'Próximo', PENDING: 'Depois',
-  NEEDS_REVIEW: 'Revisar', LOCKED: 'Bloqueado', MOVED: 'Reagendado', SKIPPED: 'Ignorado'
+const statusLabel: Record<string, string> = {
+  COMPLETED: "Concluído",
+  IN_PROGRESS: "Em andamento",
+  AVAILABLE: "Disponível",
+  PENDING: "Planejado",
+  PLANNED: "Planejado",
+  MISSED: "Não realizado",
+  MOVED: "Reagendado",
+  SKIPPED: "Ignorado",
 };
 
-const dateLabel = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR', {
-  weekday: 'long', day: '2-digit', month: 'long'
-});
+const activityLabel: Record<string, string> = {
+  THEORY: "Teoria",
+  QUESTIONS: "Questões",
+  REVIEW: "Revisão",
+  REVISION: "Revisão",
+  SIMULATION: "Simulado",
+  READING: "Leitura",
+  FLASHCARDS: "Flashcards",
+  PLANNED: "Estudo",
+};
+
+const number = (value: unknown) => Number(value || 0);
+const isoDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+const localDate = (value: string) => new Date(`${value}T12:00:00`);
+const firstOfMonth = (date: Date) =>
+  new Date(date.getFullYear(), date.getMonth(), 1, 12);
+const monthKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+const isInMonth = (value: string, month: Date) => {
+  const date = localDate(value);
+  return (
+    date.getFullYear() === month.getFullYear() &&
+    date.getMonth() === month.getMonth()
+  );
+};
+const calendarRange = (month: Date) => {
+  const start = firstOfMonth(month);
+  start.setDate(start.getDate() - start.getDay());
+  const end = new Date(month.getFullYear(), month.getMonth() + 1, 0, 12);
+  end.setDate(end.getDate() + (6 - end.getDay()));
+  return { start: isoDate(start), end: isoDate(end) };
+};
+const duration = (minutes: number) => {
+  const hours = Math.floor(minutes / 60),
+    rest = minutes % 60;
+  return hours ? `${hours}h${rest ? ` ${rest}min` : ""}` : `${rest}min`;
+};
+const longDate = (value: string) =>
+  localDate(value).toLocaleDateString("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+
+interface AgendaTopicAccordionProps {
+  item: ScheduleAgendaItem;
+  index: number;
+  expanded: boolean;
+  current: boolean;
+  onToggle: () => void;
+  onOpen: () => void;
+}
+
+function AgendaTopicAccordion({
+  item,
+  index,
+  expanded,
+  current,
+  onToggle,
+  onOpen,
+}: AgendaTopicAccordionProps) {
+  const questions = number(item.questions_answered),
+    correct = number(item.correct_answers);
+  const accuracy =
+    item.accuracy == null
+      ? questions
+        ? Math.round((correct / questions) * 100)
+        : 0
+      : Math.round(number(item.accuracy));
+  const points = Array.isArray(item.review_points) ? item.review_points : [];
+  const contentId = `agenda-modal-topic-${String(item.id).replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  return (
+    <article
+      className={`agenda-modal-topic ${expanded ? "is-expanded" : ""} ${current ? "is-current" : ""}`}
+    >
+      <button
+        type="button"
+        className="agenda-modal-topic-trigger"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        aria-controls={contentId}
+      >
+        <span className="agenda-modal-topic-index">
+          {String(index + 1).padStart(2, "0")}
+        </span>
+        <span className="agenda-modal-topic-name">
+          <small>{item.subject_name}</small>
+          <strong>{item.title}</strong>
+        </span>
+        <span className="agenda-modal-topic-brief">
+          <em>{duration(number(item.planned_minutes))}</em>
+          <em>{activityLabel[item.activity_type] || item.activity_type}</em>
+          <span className={`agenda-status status-${item.status.toLowerCase()}`}>
+            {statusLabel[item.status] || item.status}
+          </span>
+        </span>
+        <ChevronDown aria-hidden="true" />
+      </button>
+      {expanded && (
+        <div id={contentId} className="agenda-modal-topic-body">
+          <div className="agenda-modal-topic-overview">
+            <section>
+              <small>OBJETIVO DO ESTUDO</small>
+              <p>
+                {item.objective ||
+                  "Consolidar os conceitos centrais deste assunto e aplicá-los em questões de prova."}
+              </p>
+            </section>
+            <section className="agenda-modal-review">
+              <small>REVISÃO RESUMIDA</small>
+              {points.length > 0 ? (
+                <ul>
+                  {points.map((point) => (
+                    <li key={point}>{point}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p>
+                  Revise os conceitos centrais, as exceções e os pontos com
+                  maior incidência em prova.
+                </p>
+              )}
+            </section>
+          </div>
+          <div className="agenda-modal-topic-metrics">
+            <span>
+              <Clock3 />
+              <small>Tempo realizado</small>
+              <strong>{duration(number(item.studied_minutes))}</strong>
+            </span>
+            <span>
+              <Target />
+              <small>Tempo planejado</small>
+              <strong>{duration(number(item.planned_minutes))}</strong>
+            </span>
+            <span>
+              <CircleHelp />
+              <small>Questões</small>
+              <strong>
+                {questions}
+                {number(item.question_goal) > 0
+                  ? ` / ${number(item.question_goal)}`
+                  : ""}
+              </strong>
+            </span>
+            <span>
+              <Check />
+              <small>Desempenho</small>
+              <strong>
+                {questions
+                  ? `${correct} acertos · ${accuracy}%`
+                  : "Ainda não realizado"}
+              </strong>
+            </span>
+          </div>
+          {item.roadmap_topic_id && (
+            <div className="agenda-modal-topic-action">
+              <button type="button" onClick={onOpen}>
+                <BookOpen />{" "}
+                {item.status === "COMPLETED"
+                  ? "Revisar assunto"
+                  : "Abrir assunto para estudar"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </article>
+  );
+}
 
 export default function ScheduleTab({ studyContext, onOpenStudy }: Props) {
-  const [data,setData]=useState<StudyDashboardData|null>(null);
-  const [loading,setLoading]=useState(true);
-  const [error,setError]=useState('');
-  const [upcomingFilter,setUpcomingFilter]=useState<'next'|'week'>('next');
-  const load=useCallback(async()=>{
+  const today = isoDate(new Date());
+  const [dashboard, setDashboard] = useState<StudyDashboardData | null>(null);
+  const [agenda, setAgenda] = useState<ScheduleAgendaDay[]>([]);
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [activeMonth, setActiveMonth] = useState(() =>
+    firstOfMonth(new Date()),
+  );
+  const [loading, setLoading] = useState(true);
+  const [agendaLoading, setAgendaLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [modalDate, setModalDate] = useState<string | null>(null);
+  const [expandedModalItems, setExpandedModalItems] = useState<string[]>([]);
+  const agendaRequestRef = useRef(0);
+  const agendaLoadingCountRef = useRef(0);
+  const selectFirstPlannedMonthRef = useRef<string | null>(null);
+
+  const requestAgenda = useCallback(
+    async (planId: string, month: Date, silent = false) => {
+      const requestId = ++agendaRequestRef.current;
+      const range = calendarRange(month);
+      if (!silent) {
+        agendaLoadingCountRef.current += 1;
+        setAgendaLoading(true);
+      }
+      try {
+        const response = await scheduleApi.getAgenda(
+          planId,
+          range.start,
+          range.end,
+        );
+        if (requestId !== agendaRequestRef.current) return;
+        const days = response.days || [];
+        setAgenda(days);
+        setError("");
+        const requestedMonth = monthKey(month);
+        if (selectFirstPlannedMonthRef.current === requestedMonth) {
+          const firstPlanned = days.find(
+            (day) => day.items.length > 0 && isInMonth(day.date, month),
+          );
+          setSelectedDate(firstPlanned?.date || isoDate(firstOfMonth(month)));
+          selectFirstPlannedMonthRef.current = null;
+        }
+      } catch (requestError) {
+        if (requestId !== agendaRequestRef.current) return;
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Não foi possível carregar a agenda.",
+        );
+      } finally {
+        if (!silent) {
+          agendaLoadingCountRef.current = Math.max(
+            0,
+            agendaLoadingCountRef.current - 1,
+          );
+          if (agendaLoadingCountRef.current === 0) setAgendaLoading(false);
+        }
+      }
+    },
+    [],
+  );
+
+  const loadDashboard = useCallback(async () => {
     setLoading(true);
-    try{setData(await dailyStudyApi.today());setError('');}
-    catch(requestError){setError(requestError instanceof Error?requestError.message:'Não foi possível carregar o cronograma.');}
-    finally{setLoading(false);}
-  },[]);
-  useEffect(()=>{load();},[load]);
+    try {
+      const response = await dailyStudyApi.today();
+      setDashboard(response);
+      const current = String(response.today.date || today);
+      setSelectedDate(current);
+      setActiveMonth(firstOfMonth(localDate(current)));
+      setError("");
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Não foi possível carregar o cronograma.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [today]);
 
-  const activeTask=useMemo(()=>{
-    if(!data)return null;
-    const sessionTask=data.active_session?.daily_task_id
-      ? data.tasks.find(task=>task.id===data.active_session.daily_task_id)
-      : undefined;
-    return sessionTask
-      || data.tasks.find(task=>task.roadmap_topic_id===studyContext?.roadmapTopicId&&['AVAILABLE','IN_PROGRESS'].includes(task.status))
-      || data.tasks.find(task=>['AVAILABLE','IN_PROGRESS'].includes(task.status))
-      || null;
-  },[data,studyContext]);
+  useEffect(() => {
+    void loadDashboard();
+  }, [loadDashboard]);
+  useEffect(() => {
+    const planId = dashboard?.plan?.id;
+    if (planId) void requestAgenda(String(planId), activeMonth);
+  }, [activeMonth, dashboard?.plan?.id, requestAgenda]);
+  useEffect(() => {
+    const planId = dashboard?.plan?.id;
+    if (!planId) return;
+    const sync = () => {
+      if (document.visibilityState === "visible")
+        void requestAgenda(String(planId), activeMonth, true);
+    };
+    const syncWhenVisible = () => {
+      if (document.visibilityState === "visible") sync();
+    };
+    const timer = window.setInterval(sync, 60_000);
+    window.addEventListener("focus", sync);
+    document.addEventListener("visibilitychange", syncWhenVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", sync);
+      document.removeEventListener("visibilitychange", syncWhenVisible);
+    };
+  }, [activeMonth, dashboard?.plan?.id, requestAgenda]);
 
-  const upcomingStudies=useMemo<UpcomingStudy[]>(()=>{
-    if(!data)return [];
-    const tomorrow=new Date();tomorrow.setHours(12,0,0,0);tomorrow.setDate(tomorrow.getDate()+1);
-    return data.roadmap.filter(topic=>String(topic.status)!=='COMPLETED'&&String(topic.topic_id)!==activeTask?.roadmap_topic_id)
-      .slice(0,7).map((topic,index)=>{const date=new Date(tomorrow);date.setDate(tomorrow.getDate()+index);return {
-        topic_id:topic.topic_id,title:topic.title,module_name:topic.module_name,planned_minutes:topic.planned_minutes,
-        recommended_questions:topic.recommended_questions,plannedDate:date
-      };});
-  },[data,activeTask?.roadmap_topic_id]);
-  const visibleUpcoming=upcomingFilter==='next'?upcomingStudies.slice(0,1):upcomingStudies;
+  const agendaByDate = useMemo(
+    () => new Map(agenda.map((day) => [day.date, day])),
+    [agenda],
+  );
+  const modalDay = modalDate ? agendaByDate.get(modalDate) : undefined;
+  const monthDays = useMemo(
+    () =>
+      agenda.filter((day) => {
+        return isInMonth(day.date, activeMonth);
+      }),
+    [agenda, activeMonth],
+  );
+  const plannedMonthDays = useMemo(
+    () => monthDays.filter((day) => day.items.length > 0),
+    [monthDays],
+  );
+  const nextPlannedDay = useMemo(
+    () =>
+      plannedMonthDays.find((day) => day.date > selectedDate) ||
+      plannedMonthDays[0],
+    [plannedMonthDays, selectedDate],
+  );
+  const monthStats = useMemo(
+    () =>
+      monthDays.reduce(
+        (stats, day) => ({
+          studied: stats.studied + number(day.studied_minutes),
+          questions: stats.questions + number(day.questions_answered),
+          completed:
+            stats.completed +
+            day.items.filter((item) => item.status === "COMPLETED").length,
+        }),
+        { studied: 0, questions: 0, completed: 0 },
+      ),
+    [monthDays],
+  );
 
-  if(loading&&!data)return <div className="daily-dashboard-loading"><span/><p>Sincronizando cronograma com sua sessão…</p></div>;
-  if(error&&!data)return <section className="daily-dashboard-error" role="alert"><CalendarDays/><h2>Não foi possível carregar seu cronograma</h2><p>{error}</p><button onClick={load}>Tentar novamente</button></section>;
-  if(!data)return null;
+  const openAgendaDay = (date: Date | string) => {
+    const value = typeof date === "string" ? date : isoDate(date);
+    selectFirstPlannedMonthRef.current = null;
+    setSelectedDate(value);
+    setModalDate(value);
+    const day = agendaByDate.get(value);
+    setExpandedModalItems(day?.items[0] ? [String(day.items[0].id)] : []);
+  };
+  const closeAgendaModal = () => {
+    setModalDate(null);
+    setExpandedModalItems([]);
+  };
+  const toggleModalItem = (id: string) =>
+    setExpandedModalItems((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id],
+    );
 
-  return <div id="schedule-tab-container" className="space-y-6 animate-fade-in">
-    <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-      <div><span className="text-xs font-extrabold text-indigo-600 uppercase tracking-wider">Cronograma conectado</span><h2 className="text-2xl font-extrabold text-slate-900 mt-1">{dateLabel(String(data.today.date))}</h2><p className="text-sm text-slate-500 mt-1">A sessão, o conteúdo, a revisão e esta agenda usam o mesmo assunto.</p></div>
-      <button onClick={load} className="h-11 px-4 rounded-xl bg-white border border-slate-200 text-sm font-bold text-slate-600 flex items-center justify-center gap-2"><RefreshCw className={`w-4 h-4 ${loading?'animate-spin':''}`}/> Atualizar</button>
-    </header>
-    {error&&<div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-700">{error}</div>}
+  useEffect(() => {
+    if (!modalDate) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeAgendaModal();
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [modalDate]);
 
-    <section className="bg-indigo-950 text-white rounded-3xl p-5 sm:p-7 grid lg:grid-cols-[1fr_auto] gap-5 items-center">
-      <div><span className="text-xs font-bold text-indigo-300 uppercase tracking-wider">{data.active_session?.id?'Sessão em andamento':'Próxima sessão'}</span><h3 className="text-xl sm:text-2xl font-extrabold mt-2">{activeTask?.topic_title||'Rotina concluída por hoje'}</h3><p className="text-indigo-200 mt-1">{activeTask?.subject_name||'Seu histórico e suas metas foram atualizados.'}</p>{activeTask?.objective&&<p className="schedule-current-objective text-sm text-indigo-100/80 mt-4 max-w-3xl">{activeTask.objective}</p>}</div>
-      {activeTask&&<div className="flex flex-col sm:flex-row lg:flex-col gap-2 lg:min-w-44"><span className="bg-white/10 rounded-xl px-4 py-3 flex items-center gap-2 font-bold"><Clock3 className="w-4 h-4 text-amber-400"/>{activeTask.planned_minutes} min</span><button onClick={()=>onOpenStudy({roadmapTopicId:activeTask.roadmap_topic_id,topicTitle:activeTask.topic_title,subjectName:activeTask.subject_name,source:'schedule'})} className="bg-white text-indigo-950 rounded-xl px-4 py-3 flex items-center justify-center gap-2 font-extrabold"><BookOpen className="w-4 h-4"/> Ver conteúdo</button></div>}
-    </section>
+  if (loading && !dashboard)
+    return (
+      <div className="daily-dashboard-loading">
+        <span />
+        <p>Montando sua agenda de estudos…</p>
+      </div>
+    );
+  if (!dashboard)
+    return (
+      <section className="daily-dashboard-error" role="alert">
+        <CalendarDays />
+        <h2>Não foi possível carregar sua agenda</h2>
+        <p>{error}</p>
+        <button onClick={loadDashboard}>Tentar novamente</button>
+      </section>
+    );
 
-    <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6">
-      <div className="flex items-center justify-between gap-3 mb-5"><div><h3 className="font-extrabold text-slate-900">Rota do dia</h3><p className="text-sm text-slate-500">A ordem é atualizada quando uma sessão é finalizada.</p></div><strong className="text-indigo-600">{Number(data.today.completed_tasks||0)}/{Number(data.today.total_tasks||0)}</strong></div>
-      <ol className="space-y-3">{data.tasks.map((task,index)=>{
-        const current=task.id===activeTask?.id,complete=task.status==='COMPLETED';
-        return <li key={task.id} className={`p-4 rounded-2xl border flex items-start gap-3 ${current?'bg-indigo-50 border-indigo-300 ring-2 ring-indigo-100':complete?'bg-emerald-50/50 border-emerald-100':'bg-slate-50 border-slate-100'}`}>
-          <span className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center ${complete?'bg-emerald-600 text-white':current?'bg-indigo-600 text-white':'bg-white border border-slate-200 text-slate-400'}`}>{complete?<Check className="w-4 h-4"/>:<span className="text-xs font-extrabold">{index+1}</span>}</span>
-          <div className="grow min-w-0"><div className="flex flex-wrap justify-between gap-2"><strong className="text-sm text-slate-900">{task.topic_title}</strong><span className={`text-xs font-bold ${current?'text-indigo-700':complete?'text-emerald-700':'text-slate-500'}`}>{statusLabel[task.status]||task.status}</span></div><p className="text-xs text-slate-500 mt-1">{task.subject_name} · {task.planned_minutes} min · {task.question_goal} questões</p></div>
-        </li>;
-      })}</ol>
-    </section>
+  return (
+    <div id="schedule-tab-container" className="study-agenda animate-fade-in">
+      <header className="study-agenda-header">
+        <h2>Cronograma</h2>
+      </header>
 
-    <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5"><div><h3 className="font-extrabold text-slate-900">Próximos estudos</h3><p className="text-sm text-slate-500">Os assuntos são intercalados entre disciplinas e planejados em dias consecutivos, começando amanhã.</p></div><div className="flex bg-slate-100 rounded-xl p-1 shrink-0"><button type="button" onClick={()=>setUpcomingFilter('next')} className={`min-h-9 px-3 rounded-lg text-xs font-extrabold ${upcomingFilter==='next'?'bg-white text-indigo-700 shadow-sm':'text-slate-500'}`}>Próximo dia</button><button type="button" onClick={()=>setUpcomingFilter('week')} className={`min-h-9 px-3 rounded-lg text-xs font-extrabold ${upcomingFilter==='week'?'bg-white text-indigo-700 shadow-sm':'text-slate-500'}`}>Semana</button></div></div>
-      {visibleUpcoming.length===0?<div className="rounded-xl bg-emerald-50 border border-emerald-100 p-5 text-sm text-emerald-800"><strong>Planejamento concluído.</strong><p className="mt-1">Não há novos assuntos pendentes nesta trilha.</p></div>:<ol className="grid gap-3">{visibleUpcoming.map((topic,index)=><li key={String(topic.topic_id)} className="rounded-2xl border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center gap-4"><div className="sm:w-40 shrink-0"><span className="text-xs font-extrabold text-indigo-600 uppercase">{index===0?'Próximo estudo':topic.plannedDate.toLocaleDateString('pt-BR',{weekday:'long'})}</span><strong className="block text-sm text-slate-900 mt-1">{topic.plannedDate.toLocaleDateString('pt-BR',{day:'2-digit',month:'long'})}</strong></div><div className="grow min-w-0 sm:border-l sm:border-slate-200 sm:pl-4"><strong className="block text-sm text-slate-900">{String(topic.title)}</strong><p className="text-xs text-slate-500 mt-1">{String(topic.module_name)} · {Number(topic.planned_minutes||0)} min · {Number(topic.recommended_questions||10)} questões</p></div><span className="text-xs font-bold text-slate-500 bg-slate-100 rounded-full px-3 py-1.5">Dia +{index+1}</span></li>)}</ol>}
-    </section>
-  </div>;
+      {error && (
+        <div className="agenda-error" role="alert">
+          {error}
+        </div>
+      )}
+
+      <div className="agenda-layout">
+        <section
+          className="agenda-calendar-card"
+          aria-label="Calendário mensal de estudos"
+        >
+          <section className="agenda-calendar-kpis" aria-label="Resumo do mês">
+            <article>
+              <CalendarDays />
+              <span>
+                <small>Dias planejados</small>
+                <strong>{monthDays.length}</strong>
+              </span>
+            </article>
+            <article>
+              <Clock3 />
+              <span>
+                <small>Tempo estudado</small>
+                <strong>{duration(monthStats.studied)}</strong>
+              </span>
+            </article>
+            <article>
+              <CircleHelp />
+              <span>
+                <small>Questões feitas</small>
+                <strong>{monthStats.questions}</strong>
+              </span>
+            </article>
+            <article>
+              <Check />
+              <span>
+                <small>Etapas concluídas</small>
+                <strong>{monthStats.completed}</strong>
+              </span>
+            </article>
+          </section>
+          <ReactCalendar
+            locale="pt-BR"
+            value={localDate(selectedDate)}
+            activeStartDate={activeMonth}
+            minDetail="month"
+            maxDetail="month"
+            next2Label={null}
+            prev2Label={null}
+            onClickDay={openAgendaDay}
+            onActiveStartDateChange={({ activeStartDate, action }) => {
+              if (!activeStartDate) return;
+              const month = firstOfMonth(activeStartDate);
+              if (action === "next" || action === "prev") {
+                selectFirstPlannedMonthRef.current = monthKey(month);
+                closeAgendaModal();
+                setAgenda([]);
+              }
+              setActiveMonth(month);
+            }}
+            formatShortWeekday={(_, date) =>
+              date
+                .toLocaleDateString("pt-BR", { weekday: "short" })
+                .replace(".", "")
+            }
+            tileClassName={({ date, view }) => {
+              if (view !== "month") return undefined;
+              const day = agendaByDate.get(isoDate(date));
+              return day
+                ? `agenda-calendar-day status-${day.status.toLowerCase()}`
+                : undefined;
+            }}
+            tileContent={({ date, view }) => {
+              if (view !== "month") return null;
+              const day = agendaByDate.get(isoDate(date));
+              if (!day) return null;
+              return (
+                <span
+                  className="agenda-day-subjects"
+                  aria-label={`${day.items.length} assuntos neste dia`}
+                >
+                  {day.items.slice(0, 3).map((item) => (
+                    <span
+                      key={String(item.id)}
+                      className={`agenda-calendar-event status-${item.status.toLowerCase()}`}
+                      title={`${item.subject_name}: ${item.title}`}
+                    >
+                      {item.title}
+                    </span>
+                  ))}
+                  <em
+                    className={`agenda-day-overflow agenda-day-overflow-wide ${day.items.length > 3 ? "is-overflow" : ""}`}
+                  >
+                    +{day.items.length - 3}
+                  </em>
+                  <em
+                    className={`agenda-day-overflow agenda-day-overflow-mobile ${day.items.length > 2 ? "is-overflow" : ""}`}
+                  >
+                    +{day.items.length - 2}
+                  </em>
+                </span>
+              );
+            }}
+          />
+          {agendaLoading && (
+            <div className="agenda-calendar-loading">
+              <RefreshCw className="animate-spin" />
+              <span>Atualizando agenda…</span>
+            </div>
+          )}
+        </section>
+      </div>
+
+      {modalDate &&
+        createPortal(
+          <div
+            className="agenda-modal-backdrop"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) closeAgendaModal();
+            }}
+          >
+            <section
+              className="agenda-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="agenda-modal-title"
+            >
+              <header className="agenda-modal-header">
+                <div className="agenda-modal-date-icon">
+                  <CalendarDays />
+                </div>
+                <div>
+                  <span>AGENDA DO DIA</span>
+                  <h2 id="agenda-modal-title">{longDate(modalDate)}</h2>
+                  <p>
+                    {modalDay?.items.length || 0}{" "}
+                    {(modalDay?.items.length || 0) === 1
+                      ? "assunto planejado"
+                      : "assuntos planejados"}{" "}
+                    · {duration(number(modalDay?.planned_minutes))} de estudo
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="agenda-modal-close"
+                  onClick={closeAgendaModal}
+                  aria-label="Fechar agenda do dia"
+                >
+                  <X />
+                </button>
+              </header>
+
+              {modalDay && modalDay.items.length > 0 ? (
+                <>
+                  <div className="agenda-modal-summary">
+                    <span>
+                      <Clock3 />
+                      <small>Realizado</small>
+                      <strong>
+                        {duration(number(modalDay.studied_minutes))}
+                      </strong>
+                    </span>
+                    <span>
+                      <Target />
+                      <small>Planejado</small>
+                      <strong>
+                        {duration(number(modalDay.planned_minutes))}
+                      </strong>
+                    </span>
+                    <span>
+                      <CircleHelp />
+                      <small>Questões feitas</small>
+                      <strong>{number(modalDay.questions_answered)}</strong>
+                    </span>
+                    <span>
+                      <BarChart3 />
+                      <small>Acertos</small>
+                      <strong>{number(modalDay.correct_answers)}</strong>
+                    </span>
+                  </div>
+                  <div className="agenda-modal-content">
+                    <div className="agenda-modal-section-heading">
+                      <div>
+                        <span>ROTEIRO DE ESTUDO</span>
+                        <h3>Assuntos deste dia</h3>
+                      </div>
+                      <small>Clique para expandir ou recolher</small>
+                    </div>
+                    <div className="agenda-modal-topic-list">
+                      {modalDay.items.map((item, index) => {
+                        const id = String(item.id);
+                        return (
+                          <AgendaTopicAccordion
+                            key={id}
+                            item={item}
+                            index={index}
+                            expanded={expandedModalItems.includes(id)}
+                            current={Boolean(
+                              studyContext?.roadmapTopicId &&
+                              String(studyContext.roadmapTopicId) ===
+                                String(item.roadmap_topic_id),
+                            )}
+                            onToggle={() => toggleModalItem(id)}
+                            onOpen={() => {
+                              closeAgendaModal();
+                              onOpenStudy({
+                                roadmapTopicId: String(item.roadmap_topic_id),
+                                topicTitle: item.title,
+                                subjectName: item.subject_name,
+                                source: "schedule",
+                              });
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="agenda-modal-empty">
+                  <CalendarDays />
+                  <h3>Dia livre no planejamento</h3>
+                  <p>
+                    Não há assuntos agendados para esta data. Escolha no
+                    calendário um dia que tenha a marcação de planejamento.
+                  </p>
+                  {nextPlannedDay && (
+                    <button
+                      type="button"
+                      onClick={() => openAgendaDay(nextPlannedDay.date)}
+                    >
+                      Abrir próximo dia de estudo
+                    </button>
+                  )}
+                </div>
+              )}
+            </section>
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
 }

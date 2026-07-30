@@ -28,6 +28,10 @@ public class ScheduleController {
     @PostMapping("/plans/{planId}/regenerate") public Map<String,Object> regenerate(@PathVariable UUID planId) {
         return engine.regeneratePlan(planId,currentUser.id());
     }
+    @GetMapping("/agenda/{planId}") public Map<String,Object> agenda(@PathVariable UUID planId,
+            @RequestParam LocalDate start,@RequestParam LocalDate end) {
+        return engine.agenda(planId,currentUser.id(),start,end);
+    }
     @GetMapping("/progress/{planId}") public List<Map<String,Object>> progress(@PathVariable UUID planId) {
         assertPlan(planId);
         return jdbc.sql("SELECT id,study_plan_id,block_id,is_completed,completed_at FROM schedule_progress WHERE study_plan_id=:p").param("p",planId).query().listOfRows();

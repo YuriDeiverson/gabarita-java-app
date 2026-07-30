@@ -3,6 +3,8 @@ import { studySections as defaultSeplagSections } from './studyData';
 import { quizQuestions as defaultSeplagQuestions } from './quizData';
 import { getJournalismQuestions } from './questionsJournalism';
 import { deduplicateQuestions } from './questionGenerator';
+import { tecnicoEnfermagemFgvEbserhQuestions } from './questionsTecnicoEnfermagemFGV';
+import { filterQuestionsByBoards } from '../questionBanks';
 
 // Curriculum structure and questions database for all 3 courses
 export interface CourseTopic {
@@ -38,6 +40,28 @@ const COMMON_BASIC_TOPICS: CourseTopic[] = [
       '6.2 Substituição de palavras ou de trechos de texto',
       '6.3 Reorganização da estrutura de orações e de períodos do texto',
       '6.4 Reescrita de textos de diferentes gêneros e níveis de formalidade',
+    ],
+  },
+  {
+    id: 'etica_servico_publico',
+    title: 'Ética no Serviço Público',
+    category: 'Ética e Compliance',
+    subtopics: [
+      '1. Ética e moral',
+      '2. Ética, princípios e valores',
+      '3. Ética e democracia: exercício da cidadania',
+      '4. Ética e função pública',
+      '5. Ética no setor público',
+      '5.1 Lei Estadual nº 6.754/2006 — Código de Ética Funcional do Servidor Público do Estado de Alagoas',
+    ],
+  },
+  {
+    id: 'legislacao_estadual',
+    title: 'Legislação Estadual',
+    category: 'Ética e Compliance',
+    subtopics: [
+      '1. Constituição do Estado de Alagoas',
+      '2. Lei Estadual nº 5.247/1991 e suas alterações — Regime Jurídico Único dos Servidores Públicos Civis do Estado de Alagoas, das Autarquias e Fundações Públicas Estaduais',
     ],
   },
   {
@@ -145,6 +169,222 @@ const COMMON_BASIC_TOPICS: CourseTopic[] = [
   },
 ];
 
+export const DISCURSIVE_TOPIC_ID = 'atualidades_discursiva';
+
+export const DISCURSIVE_TOPIC: CourseTopic = {
+  id: DISCURSIVE_TOPIC_ID,
+  title: 'Atualidades (somente para a prova discursiva)',
+  category: 'Atualidades',
+  subtopics: [
+    'Segurança',
+    'Transportes',
+    'Política',
+    'Economia',
+    'Sociedade',
+    'Educação',
+    'Saúde',
+    'Cultura',
+    'Tecnologia',
+    'Energia',
+    'Relações internacionais',
+    'Desenvolvimento sustentável',
+    'Ecologia',
+  ],
+};
+
+const ETHICS_PUBLIC_SERVICE_SECTION: StudySection = {
+  id: 'etica_servico_publico',
+  title: 'Ética no Serviço Público',
+  icon: 'Shield',
+  color: 'indigo',
+  difficulty: 'Médio',
+  weight: '10%',
+  paretoJustification: 'O estudo combina os fundamentos de ética, moral, cidadania e função pública com a leitura orientada do Código de Ética Funcional dos servidores de Alagoas.',
+  cards: [
+    {
+      id: 'etica-fundamentos-cidadania',
+      title: 'Ética, moral, princípios, valores e cidadania',
+      paretoRatio: 'Conhecimento básico',
+      isQuente: true,
+      content: '<p>Estude as diferenças entre ética e moral, a aplicação de princípios e valores e a relação entre ética, democracia, cidadania e exercício da função pública.</p>',
+      keyTakeaways: [
+        'Distinguir ética, moral, princípios e valores.',
+        'Relacionar democracia e cidadania à conduta do agente público.',
+        'Aplicar os deveres éticos a situações concretas da função pública.',
+      ],
+      materials: ['Ética e moral', 'Ética, democracia e cidadania'],
+    },
+    {
+      id: 'etica-lei-6754-2006',
+      title: 'Lei Estadual nº 6.754/2006 — Código de Ética Funcional',
+      paretoRatio: 'Leitura da lei',
+      isQuente: true,
+      content: '<p>Faça a leitura orientada do Código de Ética Funcional do Servidor Público do Estado de Alagoas, com atenção a princípios, deveres, vedações e responsabilização ética.</p>',
+      keyTakeaways: [
+        'Identificar os deveres funcionais previstos no Código de Ética.',
+        'Diferenciar condutas permitidas, vedadas e passíveis de responsabilização.',
+        'Resolver questões com base na literalidade da Lei Estadual nº 6.754/2006.',
+      ],
+      materials: ['Lei Estadual nº 6.754/2006'],
+    },
+  ],
+};
+
+const STATE_LEGISLATION_SECTION: StudySection = {
+  id: 'legislacao_estadual',
+  title: 'Legislação Estadual',
+  icon: 'BookOpen',
+  color: 'slate',
+  difficulty: 'Difícil',
+  weight: '10%',
+  paretoJustification: 'A Constituição estadual e o Regime Jurídico Único exigem leitura recorrente da norma, revisão de institutos e treino de questões literais.',
+  cards: [
+    {
+      id: 'leg-estadual-constituicao-al',
+      title: 'Constituição do Estado de Alagoas',
+      paretoRatio: 'Leitura constitucional',
+      isQuente: true,
+      content: '<p>Estude a organização do Estado, seus princípios, direitos, administração pública e regras constitucionais estaduais previstas no edital.</p>',
+      keyTakeaways: [
+        'Revisar a organização político-administrativa do Estado de Alagoas.',
+        'Reconhecer princípios e regras aplicáveis à administração pública estadual.',
+        'Treinar a literalidade dos dispositivos constitucionais cobrados.',
+      ],
+      materials: ['Constituição do Estado de Alagoas'],
+    },
+    {
+      id: 'leg-estadual-lei-5247-1991',
+      title: 'Lei Estadual nº 5.247/1991 — Regime Jurídico Único',
+      paretoRatio: 'Leitura da lei',
+      isQuente: true,
+      content: '<p>Estude o Regime Jurídico Único dos servidores públicos civis de Alagoas, das autarquias e das fundações públicas estaduais, incluindo suas alterações.</p>',
+      keyTakeaways: [
+        'Distinguir provimento, vacância, direitos, vantagens, deveres e proibições.',
+        'Revisar responsabilidade e processo disciplinar do servidor.',
+        'Resolver questões conforme o texto atualizado da Lei nº 5.247/1991.',
+      ],
+      materials: ['Lei Estadual nº 5.247/1991 e suas alterações'],
+    },
+  ],
+};
+
+const DISCURSIVE_PROMPTS = [
+  ['Segurança', 'Desafios para conciliar segurança pública, prevenção da violência e respeito aos direitos fundamentais'],
+  ['Transportes', 'Mobilidade urbana sustentável e democratização do acesso ao transporte público'],
+  ['Política', 'Participação cidadã, transparência e fortalecimento das instituições democráticas'],
+  ['Economia', 'Crescimento econômico com redução das desigualdades sociais e regionais'],
+  ['Sociedade', 'Desinformação, polarização e seus impactos na convivência social'],
+  ['Educação', 'Educação pública de qualidade como instrumento de inclusão e desenvolvimento'],
+  ['Saúde', 'Desafios para ampliar o acesso equitativo e integral à saúde pública'],
+  ['Cultura', 'Valorização da diversidade cultural e preservação do patrimônio brasileiro'],
+  ['Tecnologia', 'Inteligência artificial, proteção de dados e responsabilidade no uso da tecnologia'],
+  ['Energia', 'Transição energética justa e segurança do abastecimento no Brasil'],
+  ['Relações internacionais', 'O papel do Brasil na cooperação internacional diante de crises globais'],
+  ['Desenvolvimento sustentável', 'Desenvolvimento econômico aliado à justiça social e à preservação ambiental'],
+  ['Ecologia', 'Responsabilidade do poder público e da sociedade no enfrentamento das mudanças climáticas'],
+] as const;
+
+const DISCURSIVE_SECTION: StudySection = {
+  id: DISCURSIVE_TOPIC_ID,
+  title: 'Atualidades — Prova Discursiva',
+  icon: 'Pencil',
+  color: 'amber',
+  difficulty: 'Difícil',
+  weight: '15%',
+  paretoJustification: 'A prática periódica de textos completos desenvolve repertório, tese, argumentação, coesão e gestão do tempo para a prova discursiva.',
+  cards: DISCURSIVE_PROMPTS.map(([area, prompt], index) => ({
+    id: `redacao-atualidades-${index + 1}`,
+    title: `Treino de redação — ${area}`,
+    paretoRatio: 'Prática discursiva',
+    isQuente: true,
+    content: `<p><strong>Tema proposto:</strong> ${prompt}.</p><p>Produza uma redação dissertativo-argumentativa, com introdução, desenvolvimento e conclusão, respeitando o limite e os critérios previstos no edital da sua prova.</p>`,
+    keyTakeaways: [
+      `Tema: ${prompt}.`,
+      'Defina uma tese clara e desenvolva pelo menos dois argumentos relacionados ao tema.',
+      'Reserve tempo para revisar coesão, coerência, ortografia e pontuação.',
+    ],
+    materials: [`Atualidades: ${area}`, 'Estrutura do texto dissertativo-argumentativo'],
+  })),
+};
+
+const SUS_ADDITIONAL_CARDS: StudySection['cards'] = [
+  {
+    id: 'sus-evolucao-historica',
+    title: 'Evolução histórica e construção do SUS',
+    paretoRatio: 'Base conceitual',
+    isQuente: true,
+    content: '<p>Revise a evolução da organização da saúde no Brasil até a criação do SUS, relacionando a Reforma Sanitária, a Constituição de 1988, os princípios, as diretrizes e o arcabouço legal do sistema.</p>',
+    keyTakeaways: [
+      'Relacionar a Reforma Sanitária brasileira à criação do SUS.',
+      'Distinguir princípios doutrinários e diretrizes organizativas.',
+      'Compreender a saúde como direito de todos e dever do Estado.',
+    ],
+  },
+  {
+    id: 'sus-controle-social-resolucao-453',
+    title: 'Controle social e Resolução CNS nº 453/2012',
+    paretoRatio: 'Alta frequência',
+    isQuente: true,
+    content: '<p>Estude a participação da comunidade no SUS, o funcionamento dos Conselhos e das Conferências de Saúde e as diretrizes da Resolução nº 453/2012 do Conselho Nacional de Saúde.</p>',
+    keyTakeaways: [
+      'Diferenciar Conselhos e Conferências de Saúde.',
+      'Revisar composição, representação e caráter permanente e deliberativo dos Conselhos.',
+      'Aplicar as diretrizes de organização previstas na Resolução CNS nº 453/2012.',
+    ],
+    materials: ['Resolução CNS nº 453/2012'],
+  },
+  {
+    id: 'sus-constituicao-194-200',
+    title: 'Constituição Federal — artigos 194 a 200',
+    paretoRatio: 'Leitura constitucional',
+    isQuente: true,
+    content: '<p>Faça a leitura orientada dos artigos 194 a 200 da Constituição Federal e de suas alterações, abrangendo seguridade social, direito à saúde e competências do SUS.</p>',
+    keyTakeaways: [
+      'Compreender o conceito e os objetivos da seguridade social.',
+      'Revisar as diretrizes constitucionais das ações e dos serviços públicos de saúde.',
+      'Identificar as competências constitucionais do SUS.',
+    ],
+    materials: ['Constituição Federal, artigos 194 a 200'],
+  },
+  {
+    id: 'sus-leis-organicas-decreto-7508',
+    title: 'Leis nº 8.080/1990 e nº 8.142/1990 e Decreto nº 7.508/2011',
+    paretoRatio: 'Altíssima frequência',
+    isQuente: true,
+    content: '<p>Estude as Leis Orgânicas da Saúde e o Decreto nº 7.508/2011, sempre considerando suas alterações, com foco na organização, direção, articulação interfederativa e participação social no SUS.</p>',
+    keyTakeaways: [
+      'Revisar objetivos, atribuições, organização e direção do SUS na Lei nº 8.080/1990.',
+      'Estudar participação da comunidade e transferências intergovernamentais na Lei nº 8.142/1990.',
+      'Compreender Região de Saúde, portas de entrada, RENASES, RENAME e articulação interfederativa.',
+    ],
+    materials: ['Lei nº 8.080/1990', 'Lei nº 8.142/1990', 'Decreto nº 7.508/2011'],
+  },
+  {
+    id: 'sus-determinantes-sociais',
+    title: 'Determinantes sociais da saúde',
+    paretoRatio: 'Conhecimento aplicado',
+    isQuente: true,
+    content: '<p>Analise como condições sociais, econômicas, ambientais, culturais e territoriais influenciam o processo saúde-doença e produzem iniquidades em saúde.</p>',
+    keyTakeaways: [
+      'Diferenciar determinantes sociais de fatores estritamente biológicos.',
+      'Relacionar vulnerabilidade social, território e condições de vida ao processo saúde-doença.',
+      'Reconhecer a importância de políticas intersetoriais para reduzir iniquidades.',
+    ],
+  },
+  {
+    id: 'sus-sistemas-informacao',
+    title: 'Sistemas de informação em saúde',
+    paretoRatio: 'Conhecimento aplicado',
+    isQuente: true,
+    content: '<p>Estude a finalidade dos principais sistemas de informação em saúde e o uso de dados para vigilância, planejamento, gestão e avaliação das políticas públicas.</p>',
+    keyTakeaways: [
+      'Relacionar informação em saúde a planejamento, vigilância e tomada de decisão.',
+      'Reconhecer a importância da qualidade, oportunidade e completude dos dados.',
+      'Distinguir a finalidade geral dos sistemas conforme o evento ou serviço registrado.',
+    ],
+  },
+];
+
 export const COURSES_CONFIG: {
   [key: string]: {
     name: string;
@@ -176,7 +416,20 @@ export const COURSES_CONFIG: {
     description: "Concurso público para provimento de vagas de Técnico em Enfermagem. Foco em Fundamentos de Enfermagem, Saúde Pública/SUS, Farmacologia Clínica, Urgência/Emergência e Ética Profissional.",
     topics: [
       { id: 'fundamentos', title: 'Fundamentos de Enfermagem', category: 'Fundamentos de Enfermagem', subtopics: ['Sinais Vitais e Monitorização', 'Higiene e Conforto do Paciente', 'Sondagens e Aspiração de Vias'] },
-      { id: 'sus_saude_publica', title: 'SUS e Saúde Pública', category: 'Saúde Pública e SUS', subtopics: ['Leis Orgânicas da Saúde 8080/90 e 8142/90', 'Princípios do SUS: Integralidade e Universalidade', 'Calendário Nacional de Imunização (PNI)'] },
+      {
+        id: 'sus_saude_publica',
+        title: 'Legislação Aplicada ao SUS',
+        category: 'Saúde Pública e SUS',
+        subtopics: [
+          '1. Evolução histórica da organização do sistema de saúde no Brasil e construção do SUS: princípios, diretrizes e arcabouço legal',
+          '2. Controle social no SUS',
+          '3. Resolução nº 453/2012 do Conselho Nacional de Saúde',
+          '4. Constituição Federal, artigos 194 a 200, e suas alterações',
+          '5. Lei nº 8.080/1990 e suas alterações, Lei nº 8.142/1990 e suas alterações e Decreto Presidencial nº 7.508/2011 e suas alterações',
+          '6. Determinantes sociais da saúde',
+          '7. Sistemas de informação em saúde',
+        ],
+      },
       { id: 'urgencia_emergencia', title: 'Urgência e Emergência', category: 'Urgência e Emergência', subtopics: ['Suporte Básico de Vida (SBV / RCP)', 'Atendimento ao Trauma (XABCDE)', 'Queimaduras, Intoxicações e Hemorragias'] },
       { id: 'farmacologia', title: 'Farmacologia aplicada', category: 'Farmacologia e Administração', subtopics: ['Cálculo de Gotejamento e Dosagem', 'Vias de Administração de Medicamentos', 'Segurança na Cadeia de Medicamentos'] },
       { id: 'etica_deontologia', title: 'Ética e Deontologia', category: 'Ética e Compliance', subtopics: ['Código de Ética dos Profissionais de Enfermagem', 'COFEN/COREN Legislação', 'Deveres e Direitos do Técnico'] }
@@ -241,7 +494,7 @@ export const COURSES_CONFIG: {
       },
       {
         id: 'sus_saude_publica',
-        title: 'SUS e Saúde Pública',
+        title: 'Legislação Aplicada ao SUS',
         icon: 'Shield',
         color: 'blue',
         difficulty: 'Médio',
@@ -279,7 +532,8 @@ export const COURSES_CONFIG: {
               "Os Conselhos de Saúde têm caráter deliberativo e permanente, compostos de forma paritária (50% usuários, 50% profissionais e gestores).",
               "A iniciativa privada participa do SUS de forma complementar, com preferência para as instituições sem fins lucrativos."
             ]
-          }
+          },
+          ...SUS_ADDITIONAL_CARDS,
         ]
       },
       {
@@ -869,6 +1123,11 @@ const uniqueById = <T extends { id: string }>(items: T[]): T[] => {
   });
 };
 
+COURSES_CONFIG.tecnico_enfermagem.quizQuestions = deduplicateQuestions([
+  ...COURSES_CONFIG.tecnico_enfermagem.quizQuestions,
+  ...tecnicoEnfermagemFgvEbserhQuestions,
+]);
+
 // Add core topics to Journalism (Português, Inglês, TI Básica, Legislação, Alagoas)
 COURSES_CONFIG.jornalismo.topics.push(
   { id: 'portugues', title: 'Língua Portuguesa', category: 'Português', subtopics: ['Reescrita de Frases', 'Coesão Textual', 'Crase e Regência', 'Pontuação CEBRASPE'] },
@@ -887,7 +1146,8 @@ COURSES_CONFIG.jornalismo.studySections.push(
 COURSES_CONFIG.jornalismo.topics = uniqueById(COURSES_CONFIG.jornalismo.topics);
 COURSES_CONFIG.jornalismo.studySections = uniqueById(COURSES_CONFIG.jornalismo.studySections);
 
-const commonBasicTopicIds = new Set(COMMON_BASIC_TOPICS.map(topic => topic.id));
+const reusableTopics = [...COMMON_BASIC_TOPICS, DISCURSIVE_TOPIC];
+const commonBasicTopicIds = new Set(reusableTopics.map(topic => topic.id));
 const commonBasicSectionIds = new Set([
   'portugues',
   'ingles',
@@ -896,7 +1156,12 @@ const commonBasicSectionIds = new Set([
   'legislacao_especifica_fapeal',
   'alagoas',
 ]);
-const commonBasicSections = defaultSeplagSections.filter(section => commonBasicSectionIds.has(section.id));
+const commonBasicSections = [
+  ...defaultSeplagSections.filter(section => commonBasicSectionIds.has(section.id)),
+  ETHICS_PUBLIC_SERVICE_SECTION,
+  STATE_LEGISLATION_SECTION,
+  DISCURSIVE_SECTION,
+];
 const commonBasicQuestionCategories = new Set([
   'Português',
   'Língua Inglesa',
@@ -905,16 +1170,14 @@ const commonBasicQuestionCategories = new Set([
   'Conhecimentos de Alagoas',
 ]);
 const commonBasicQuestions = defaultSeplagQuestions.filter(question => commonBasicQuestionCategories.has(question.category));
-const withoutCurriculumNumber = (label: string) => label.replace(/^\d+(?:\.\d+)*\.?\s+/, '');
-
 // These subjects are reusable knowledge blocks, not tied to a single job profile.
 // Canonical lists replace the old abbreviated versions so equivalent entries are not duplicated.
 Object.values(COURSES_CONFIG).forEach(config => {
   const specificTopics = config.topics.filter(topic => !commonBasicTopicIds.has(topic.id));
   config.topics = [
-    ...COMMON_BASIC_TOPICS.map(topic => ({
+    ...reusableTopics.map(topic => ({
       ...topic,
-      subtopics: topic.subtopics.map(withoutCurriculumNumber),
+      subtopics: [...topic.subtopics],
     })),
     ...specificTopics,
   ];
@@ -937,7 +1200,8 @@ export function generateCustomPlan(
   hoursPerDay: number,
   selectedTopicIds: string[],
   selectedWeekdays?: number[],
-  selectedSubtopicIds: string[] = []
+  selectedSubtopicIds: string[] = [],
+  selectedQuestionBoards: string[] = [],
 ): {
   success: boolean;
   sections: StudySection[];
@@ -959,14 +1223,20 @@ export function generateCustomPlan(
     selectedTopicIds.includes(section.id) ||
     (section.id === 'ti' && selectedTopicIds.includes('ti_basica')) ||
     (section.id === 'especifico' && (selectedTopicIds.includes('especificos_devops') || selectedTopicIds.includes('especificos_db')))
-  );
+  ).map(section => {
+    if (section.id !== DISCURSIVE_TOPIC_ID) return section;
+    const selectedAreas = selectedSubtopicsByTopic.get(DISCURSIVE_TOPIC_ID) || [];
+    if (selectedAreas.length === 0) return section;
+    const selectedCards = section.cards.filter(card => selectedAreas.some(area => card.title.endsWith(`— ${area}`)));
+    return selectedCards.length > 0 ? { ...section, cards: selectedCards } : section;
+  });
 
   // If filtered sections are empty, fall back to showing all
   const sectionsToUse = filteredSections.length > 0 ? filteredSections : config.studySections;
 
   // 2. Filter the quiz questions to match selected topics
   const categoriesToInclude = sectionsToUse.map(s => s.title);
-  const filteredQuestions = config.quizQuestions.filter((q: any) => {
+  const topicFilteredQuestions = config.quizQuestions.filter((q: any) => {
     // Check if category matches any used study sections
     return categoriesToInclude.some(catTitle => 
       q.category.toLowerCase().includes(catTitle.toLowerCase()) || 
@@ -978,6 +1248,15 @@ export function generateCustomPlan(
       // SEPLAG-specific mappings
       (course === 'seplag_informatica' && q.category === 'Ética e Compliance' && (selectedTopicIds.includes('etica') || selectedTopicIds.includes('legislacao_especifica_fapeal'))) ||
       (course === 'seplag_informatica' && q.category === 'Conhecimentos Específicos' && (selectedTopicIds.includes('especificos_devops') || selectedTopicIds.includes('especificos_db'))) ||
+      // Nursing-specific mappings
+      (course === 'tecnico_enfermagem' && q.category === 'Legislação EBSERH' && selectedTopicIds.includes('etica_deontologia')) ||
+      (course === 'tecnico_enfermagem' && q.category === 'Saúde Pública e SUS' && selectedTopicIds.includes('sus_saude_publica')) ||
+      (course === 'tecnico_enfermagem' && q.category === 'Conhecimentos Específicos - Técnico em Enfermagem' && (
+        selectedTopicIds.includes('fundamentos') ||
+        selectedTopicIds.includes('urgencia_emergencia') ||
+        selectedTopicIds.includes('farmacologia') ||
+        selectedTopicIds.includes('etica_deontologia')
+      )) ||
       // Journalism-specific mappings
       (course === 'jornalismo' && q.category === 'Conhecimentos Específicos - Jornalismo' && (
         selectedTopicIds.includes('teorias_com') ||
@@ -995,7 +1274,12 @@ export function generateCustomPlan(
     );
   });
 
-  const questionsToUse = deduplicateQuestions(filteredQuestions.length > 0 ? filteredQuestions : config.quizQuestions);
+  const filteredQuestions = filterQuestionsByBoards(topicFilteredQuestions, selectedQuestionBoards);
+  const questionsToUse = deduplicateQuestions(
+    selectedQuestionBoards.length > 0
+      ? filteredQuestions
+      : filteredQuestions.length > 0 ? filteredQuestions : config.quizQuestions
+  );
 
   // 3. Generate dynamic study blocks and timeline comparing TODAY with EXAM DATE
   const today = new Date();
@@ -1068,25 +1352,37 @@ export function generateCustomPlan(
     const theoryHours = Math.ceil(hoursInWeek * 0.4) || 1;
     const exercisesHours = Math.ceil(hoursInWeek * 0.6) || 1;
 
-    // Add Theory & Revision Block
-    blocks.push({
-      id: `${course}-w${w}-b1`,
-      title: `Estudo Dirigido: ${activeSectionForWeek.title}`,
-      duration: `${theoryHours}h`,
-      methodology: "30% Teoria Ativa, 70% Resumo de Pareto",
-      subtopics: selectedSubtopics.length > 0 ? selectedSubtopics : activeSectionForWeek.cards.map(c => c.title),
-      done: false
-    });
+    if (activeSectionForWeek.id === DISCURSIVE_TOPIC_ID) {
+      const writingPrompt = activeSectionForWeek.cards[(w - 1) % activeSectionForWeek.cards.length];
+      blocks.push({
+        id: `${course}-w${w}-b1`,
+        title: writingPrompt.title,
+        duration: `${Math.max(1, hoursInWeek)}h`,
+        methodology: 'Produção de redação completa, seguida de revisão de conteúdo e linguagem',
+        subtopics: writingPrompt.keyTakeaways,
+        done: false,
+      });
+    } else {
+      // Add Theory & Revision Block
+      blocks.push({
+        id: `${course}-w${w}-b1`,
+        title: `Estudo Dirigido: ${activeSectionForWeek.title}`,
+        duration: `${theoryHours}h`,
+        methodology: "30% Teoria Ativa, 70% Resumo de Pareto",
+        subtopics: selectedSubtopics.length > 0 ? selectedSubtopics : activeSectionForWeek.cards.map(c => c.title),
+        done: false
+      });
 
-    // Add Exercises Block
-    blocks.push({
-      id: `${course}-w${w}-b2`,
-      title: `Treinamento de Questões: ${activeSectionForWeek.title}`,
-      duration: `${exercisesHours}h`,
-      methodology: "50% Questões de Prova, 50% Revisão Justificada",
-      subtopics: selectedSubtopics.length > 0 ? selectedSubtopics : activeSectionForWeek.cards.flatMap(c => c.keyTakeaways.slice(0, 2)),
-      done: false
-    });
+      // Add Exercises Block
+      blocks.push({
+        id: `${course}-w${w}-b2`,
+        title: `Treinamento de Questões: ${activeSectionForWeek.title}`,
+        duration: `${exercisesHours}h`,
+        methodology: "50% Questões de Prova, 50% Revisão Justificada",
+        subtopics: selectedSubtopics.length > 0 ? selectedSubtopics : activeSectionForWeek.cards.flatMap(c => c.keyTakeaways.slice(0, 2)),
+        done: false
+      });
+    }
 
     // Add Final Exam Simulation if this is the last week
     if (w === numWeeks) {

@@ -1,6 +1,8 @@
-import { useState, useEffect, useMemo, useRef, MouseEvent } from 'react';
-import { COURSES_CONFIG, generateCustomPlan } from '../data/generator';
-import { API_BASE_URL, studyPlansApi, scheduleApi, questionsApi } from '../services/api';
+import { useState, useEffect, useMemo, MouseEvent } from 'react';
+import ReactCalendar from 'react-calendar';
+import 'react-calendar/dist/Calendar.css';
+import { COURSES_CONFIG, DISCURSIVE_TOPIC_ID, generateCustomPlan } from '../data/generator';
+import { API_BASE_URL, studyPlansApi, scheduleApi, questionsApi, StudyPlan } from '../services/api';
 import { 
   Calendar, 
   Clock, 
@@ -52,6 +54,16 @@ const topicsForContest = <T extends { id: string }>(topics: T[], contest: Contes
   !ALL_CONTEST_TOPIC_IDS.has(topic.id) || CONTEST_TOPIC_IDS[contest].includes(topic.id)
 );
 
+const topicsForPlan = <T extends { id: string }>(
+  topics: T[],
+  contest: ContestId,
+  role: string,
+  hasDiscursiveExam: boolean,
+) => topicsForContest(topics, contest).filter(topic =>
+  (topic.id !== 'sus_saude_publica' || role === 'Técnico em Enfermagem') &&
+  (topic.id !== DISCURSIVE_TOPIC_ID || hasDiscursiveExam)
+);
+
 const inferLegacyContest = (courseId: string, selectedTopicIds: string[] = []): ContestId => {
   if (selectedTopicIds.includes('legislacao_especifica_fapeal')) return 'fapeal';
   if (courseId === 'tecnico_enfermagem') return 'sesau_al';
@@ -81,6 +93,13 @@ const normalizeSearchText = (value: string) => value
 const formatIsoDateToBr = (value: string) => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+};
+
+const formatDateToIso = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const maskBrDate = (value: string) => {
@@ -120,20 +139,25 @@ const reconcileSavedSubtopics = (
 interface HomeTabProps {
   onPlanGenerated: (courseId: string) => void;
   onPlansChanged?: () => void;
+  onBeforeCreatePlan?: () => Promise<boolean>;
 }
 
-export default function HomeTab({ onPlanGenerated, onPlansChanged }: HomeTabProps) {
+export default function HomeTab({ onPlanGenerated, onPlansChanged, onBeforeCreatePlan }: HomeTabProps) {
   const [screen, setScreen] = useState<'selection' | 'configure'>('selection');
+  const [configurationMode, setConfigurationMode] = useState<'create' | 'edit'>('create');
+  const [startingNewPlan, setStartingNewPlan] = useState(false);
   const [configStep, setConfigStep] = useState(1);
   const [selectedCourse, setSelectedCourse] = useState<string>('jornalismo');
 
   // Configuration States (loaded dynamically per course when configuring)
   const [examDate, setExamDate] = useState<string>(getTodayIso);
   const [examDateDisplay, setExamDateDisplay] = useState<string>(() => formatIsoDateToBr(getTodayIso()));
-  const nativeDatePickerRef = useRef<HTMLInputElement>(null);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [examBoard, setExamBoard] = useState<string>('CEBRASPE');
+  const [complementaryBoards, setComplementaryBoards] = useState<string[]>([]);
   const [selectedContest, setSelectedContest] = useState<ContestId>('seplag');
   const [targetRole, setTargetRole] = useState<string>('Jornalista / Analista de Comunicação');
+  const [hasDiscursiveExam, setHasDiscursiveExam] = useState(false);
   const [roleSearch, setRoleSearch] = useState('');
   const [rolePickerOpen, setRolePickerOpen] = useState(false);
   const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([1, 2, 3, 4, 5]); // Monday to Friday
@@ -191,7 +215,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
     return count;
   };
 
-  const getCoursePlanStats = (courseId: string) => {
+  const getCoursePlanStats = (courseId: string, remotePlan?: StudyPlan) => {
     const configSaved = localStorage.getItem(`${courseId}_study_config`);
     const sectionsSaved = localStorage.getItem(`${courseId}_study_sections`);
     const questionsSaved = localStorage.getItem(`${courseId}_quiz_questions`);
@@ -235,6 +259,12 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
       } catch (e) {}
     }
 
+    const remoteTotal = Number(remotePlan?.total_topics || 0);
+    if (remoteTotal > 0) {
+      totalBlocks = remoteTotal;
+      completedBlocks = Math.min(remoteTotal, Math.max(0, Number(remotePlan?.completed_topics || 0)));
+    }
+
     return {
       examDate: examDateStr,
       hoursPerDay: hoursPerDayNum,
@@ -249,14 +279,20 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
     };
   };
 
-  const loadSavedPlans = () => {
+  const loadSavedPlans = (remotePlans: StudyPlan[] = []) => {
     if (localStorage.getItem('study_plan_deleted') === 'true') {
       setSavedPlans({});
       return;
     }
     const plans: { [key: string]: any } = {};
     ['seplag_informatica', 'tecnico_enfermagem', 'jornalismo'].forEach(courseId => {
-      const stats = getCoursePlanStats(courseId);
+      let studyPlanId = '';
+      try {
+        const config = JSON.parse(localStorage.getItem(`${courseId}_study_config`) || '{}');
+        studyPlanId = String(config.studyPlanId || '');
+      } catch {}
+      const remotePlan = remotePlans.find(plan => String(plan.id) === studyPlanId);
+      const stats = getCoursePlanStats(courseId, remotePlan);
       if (stats) {
         plans[courseId] = stats;
       }
@@ -286,6 +322,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
         }
       });
 
+      loadSavedPlans(remotePlans);
       if (staleCourses.length === 0) return;
 
       staleCourses.forEach(courseId => {
@@ -379,27 +416,35 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
   };
 
   // Load configuration for a specific course to edit
-  const handleOpenConfigure = (courseId: string) => {
+  const handleOpenConfigure = (courseId: string, mode: 'create' | 'edit') => {
+    setConfigurationMode(mode);
     setSelectedCourse(courseId);
     const config = COURSES_CONFIG[courseId];
     const defaultRole = ROLE_OPTIONS.find(role => role.value === courseId)?.label || config.name;
     
     // Attempt to load existing config
-    const savedConfigStr = localStorage.getItem(`${courseId}_study_config`);
+    const savedConfigStr = mode === 'edit' ? localStorage.getItem(`${courseId}_study_config`) : null;
     if (savedConfigStr) {
       try {
         const parsed = JSON.parse(savedConfigStr);
         const savedTopicIds: string[] = parsed.selectedTopics || config.topics.map(topic => topic.id);
         const restoredContest = CONTEST_OPTIONS.find(option => option.value === parsed.contest)?.value
           || inferLegacyContest(courseId, savedTopicIds);
-        const contestTopics = topicsForContest(config.topics, restoredContest);
+        const restoredRole = parsed.targetRole || defaultRole;
+        const restoredDiscursive = parsed.hasDiscursiveExam ?? savedTopicIds.includes(DISCURSIVE_TOPIC_ID);
+        const contestTopics = topicsForPlan(config.topics, restoredContest, restoredRole, restoredDiscursive);
         const validTopicIds = new Set(contestTopics.map(topic => topic.id));
         const restoredTopicIds = savedTopicIds.filter(topicId => validTopicIds.has(topicId));
         const restoredSubtopicIds = parsed.selectedSubtopics || contestTopics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic)));
         applyExamDate(parsed.examDate || getTodayIso());
-        setExamBoard(parsed.examBoard || 'CEBRASPE');
+        const restoredExamBoard = parsed.examBoard || 'CEBRASPE';
+        setExamBoard(restoredExamBoard);
+        setComplementaryBoards(Array.isArray(parsed.complementaryBoards)
+          ? parsed.complementaryBoards.filter((board: unknown) => typeof board === 'string' && board !== restoredExamBoard)
+          : []);
         setSelectedContest(restoredContest);
-        setTargetRole(parsed.targetRole || defaultRole);
+        setTargetRole(restoredRole);
+        setHasDiscursiveExam(restoredDiscursive);
         setSelectedWeekdays(parsed.selectedWeekdays || [1, 2, 3, 4, 5]);
         setHoursPerDayInput(String(Math.max(1, parsed.hoursPerDay || 4)));
         setHoursByWeekday(parsed.hoursByWeekday || {});
@@ -409,35 +454,49 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
       } catch (e) {
         // Fallbacks
         const contest: ContestId = 'seplag';
-        const contestTopics = topicsForContest(config.topics, contest);
         applyExamDate(getTodayIso());
         setExamBoard('CEBRASPE');
+        setComplementaryBoards([]);
         setSelectedContest(contest);
         setTargetRole(defaultRole);
+        setHasDiscursiveExam(false);
         setSelectedWeekdays([1, 2, 3, 4, 5]);
         setHoursPerDayInput('4');
         setHoursByWeekday({});
         setBlockMinutes(60);
-        setSelectedTopicIds(contestTopics.map(topic => topic.id));
-        setSelectedSubtopicIds(contestTopics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))));
+        setSelectedTopicIds([]);
+        setSelectedSubtopicIds([]);
       }
     } else {
       // Defaults
       const contest: ContestId = 'seplag';
-      const contestTopics = topicsForContest(config.topics, contest);
       applyExamDate(getTodayIso());
       setExamBoard('CEBRASPE');
+      setComplementaryBoards([]);
       setSelectedContest(contest);
       setTargetRole(defaultRole);
+      setHasDiscursiveExam(false);
       setSelectedWeekdays([1, 2, 3, 4, 5]);
       setHoursPerDayInput('4');
       setHoursByWeekday({});
       setBlockMinutes(60);
-      setSelectedTopicIds(contestTopics.map(topic => topic.id));
-      setSelectedSubtopicIds(contestTopics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))));
+      setSelectedTopicIds([]);
+      setSelectedSubtopicIds([]);
     }
+    setExpandedTopicIds([]);
     setConfigStep(1);
     setScreen('configure');
+  };
+
+  const handleStartNewPlan = async (courseId: string) => {
+    if (startingNewPlan) return;
+    setStartingNewPlan(true);
+    try {
+      if (onBeforeCreatePlan && !(await onBeforeCreatePlan())) return;
+      handleOpenConfigure(courseId, 'create');
+    } finally {
+      setStartingNewPlan(false);
+    }
   };
 
   const handleWeekdayToggle = (value: number) => {
@@ -449,22 +508,28 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
     setHoursByWeekday(prev => ({ ...prev, [value]: prev[value] || normalizedHoursPerDay }));
   };
 
+  const handleExamBoardChange = (board: string) => {
+    setExamBoard(board);
+    setComplementaryBoards(current => current.filter(item => item !== board));
+  };
+
+  const handleComplementaryBoardToggle = (board: string) => {
+    if (board === examBoard) return;
+    setComplementaryBoards(current => current.includes(board)
+      ? current.filter(item => item !== board)
+      : [...current, board]
+    );
+  };
+
   const handleContestChange = (contest: ContestId) => {
-    const previousTopics = topicsForContest(activeCourseConfig.topics, selectedContest);
-    const nextTopics = topicsForContest(activeCourseConfig.topics, contest);
-    const previousTopicIds = new Set(previousTopics.map(topic => topic.id));
+    const nextTopics = topicsForPlan(activeCourseConfig.topics, contest, targetRole, hasDiscursiveExam);
     const nextTopicIds = new Set(nextTopics.map(topic => topic.id));
-    const newlyAvailableTopics = nextTopics.filter(topic => !previousTopicIds.has(topic.id));
 
     setSelectedContest(contest);
-    setSelectedTopicIds(current => Array.from(new Set([
-      ...current.filter(topicId => nextTopicIds.has(topicId)),
-      ...newlyAvailableTopics.map(topic => topic.id),
-    ])));
-    setSelectedSubtopicIds(current => Array.from(new Set([
-      ...current.filter(key => nextTopics.some(topic => key.startsWith(`${topic.id}::`))),
-      ...newlyAvailableTopics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))),
-    ])));
+    setSelectedTopicIds(current => current.filter(topicId => nextTopicIds.has(topicId)));
+    setSelectedSubtopicIds(current => current.filter(key =>
+      nextTopics.some(topic => key.startsWith(`${topic.id}::`))
+    ));
     setExpandedTopicIds(current => current.filter(topicId => nextTopicIds.has(topicId)));
   };
 
@@ -500,19 +565,27 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
   const handleRoleChange = (roleLabel: string) => {
     const option = ROLE_OPTIONS.find(role => role.label === roleLabel);
     if (!option) return;
-    const config = COURSES_CONFIG[option.value];
-    const contestTopics = topicsForContest(config.topics, selectedContest);
     setTargetRole(option.label);
     setSelectedCourse(option.value);
-    setSelectedTopicIds(contestTopics.map(topic => topic.id));
-    setSelectedSubtopicIds(contestTopics.flatMap(topic => topic.subtopics.map(subtopic => subtopicKey(topic.id, subtopic))));
+    setSelectedTopicIds([]);
+    setSelectedSubtopicIds([]);
     setExpandedTopicIds([]);
     setRoleSearch('');
     setRolePickerOpen(false);
   };
 
+  const handleDiscursiveExamChange = (enabled: boolean) => {
+    setHasDiscursiveExam(enabled);
+    if (enabled) return;
+    const topic = activeCourseConfig.topics.find(item => item.id === DISCURSIVE_TOPIC_ID);
+    if (!topic) return;
+    setSelectedTopicIds(current => current.filter(id => id !== topic.id));
+    setSelectedSubtopicIds(current => current.filter(key => !key.startsWith(`${topic.id}::`)));
+    setExpandedTopicIds(current => current.filter(id => id !== topic.id));
+  };
+
   const handleCreatePlan = async () => {
-    const isNewPlan = !localStorage.getItem(`${selectedCourse}_study_config`);
+    const isNewPlan = configurationMode === 'create';
     if (selectedTopicIds.length === 0) {
       alert("Por favor, selecione pelo menos um assunto para estudar!");
       return;
@@ -544,7 +617,8 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
         hoursPerDay,
         selectedTopicIds,
         selectedWeekdays,
-        selectedSubtopicIds
+        selectedSubtopicIds,
+        [examBoard, ...complementaryBoards]
       );
 
       if (result.success) {
@@ -581,12 +655,16 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
               settings: {
                 contest: selectedContest,
                 examBoard,
+                complementaryBoards,
                 targetRole,
+                hasDiscursiveExam,
               },
             };
 
             let existingPlanId: string | null = null;
-            const existingConfig = localStorage.getItem(`${selectedCourse}_study_config`);
+            const existingConfig = configurationMode === 'edit'
+              ? localStorage.getItem(`${selectedCourse}_study_config`)
+              : null;
             if (existingConfig) {
               try { existingPlanId = JSON.parse(existingConfig).studyPlanId || null; } catch (error) { console.warn(error); }
             }
@@ -615,8 +693,10 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
         localStorage.setItem(`${selectedCourse}_study_config`, JSON.stringify({
           examDate,
           examBoard,
+          complementaryBoards,
           contest: selectedContest,
           targetRole,
+          hasDiscursiveExam,
           totalDays: calculatedDays,
           hoursPerDay,
           selectedWeekdays,
@@ -637,8 +717,10 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
         localStorage.setItem('study_config', JSON.stringify({
           examDate,
           examBoard,
+          complementaryBoards,
           contest: selectedContest,
           targetRole,
+          hasDiscursiveExam,
           totalDays: calculatedDays,
           hoursPerDay,
           selectedWeekdays,
@@ -699,7 +781,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
       onPlanGenerated(courseId);
     } else {
       // Plan data is incomplete, open configuration for it
-      handleOpenConfigure(courseId);
+      handleOpenConfigure(courseId, 'edit');
     }
   };
 
@@ -758,7 +840,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
   };
 
   const activeCourseConfig = COURSES_CONFIG[selectedCourse] || COURSES_CONFIG.jornalismo;
-  const availableTopics = topicsForContest(activeCourseConfig.topics, selectedContest);
+  const availableTopics = topicsForPlan(activeCourseConfig.topics, selectedContest, targetRole, hasDiscursiveExam);
 
   return (
     <div id="home-tab-container" className="space-y-8 animate-fade-in">
@@ -773,7 +855,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                   Gabarita Concursos • plano mínimo
                 </span>
                 <h2 className="text-2xl lg:text-4xl font-black tracking-tight leading-tight text-white">
-                  Menos tela. Mais decisão.
+                  Estude com estratégia. Acerte com confiança.
                 </h2>
                 <p className="text-sm lg:text-base text-slate-300 leading-relaxed">
                   Escolha o concurso, defina disponibilidade e deixe o restante virar uma rotina visível: leitura, questões, calendário e desempenho.
@@ -794,8 +876,8 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                 <h4 className="text-xl font-bold">Plano personalizado</h4>
                 <p className="text-sm text-slate-500 mt-1">Escolha banca, cargo, disponibilidade e cada assunto do edital na próxima etapa.</p>
               </div>
-              <button onClick={() => handleOpenConfigure('seplag_informatica')} className="create-plan-button inline-flex items-center justify-center gap-2 px-6 font-bold shrink-0">
-                <Settings2 className="w-4 h-4" /> Criar plano
+              <button disabled={startingNewPlan} onClick={() => void handleStartNewPlan('seplag_informatica')} className="create-plan-button inline-flex items-center justify-center gap-2 px-6 font-bold shrink-0 disabled:opacity-60">
+                <Settings2 className="w-4 h-4" /> {startingNewPlan ? 'Verificando sessão…' : 'Criar plano'}
               </button>
             </div>
           </div>
@@ -855,7 +937,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                       <div className="space-y-1.5 pt-2 border-t border-slate-100">
                         <div className="flex justify-between items-center text-xs font-bold text-slate-600">
                           <span>Progresso do Cronograma</span>
-                          <span className="text-indigo-600">{plan.percentage}% ({plan.completedBlocks}/{plan.totalBlocks} Metas)</span>
+                          <span className="text-indigo-600">{plan.percentage}% ({plan.completedBlocks}/{plan.totalBlocks} etapas)</span>
                         </div>
                         <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden border border-slate-200">
                           <div 
@@ -876,7 +958,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                         </button>
                         <button
                           type="button"
-                          onClick={(event) => { event.stopPropagation(); handleOpenConfigure(courseId); }}
+                          onClick={(event) => { event.stopPropagation(); handleOpenConfigure(courseId, 'edit'); }}
                           className="flex items-center gap-1 border border-slate-200 text-slate-700 font-extrabold text-xs py-2 px-3.5 rounded-xl"
                         >
                           <Settings2 className="w-3.5 h-3.5" /> Reconfigurar
@@ -942,7 +1024,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                     {selectedCourse === 'seplag_informatica' ? <GraduationCap className="w-5 h-5" /> : selectedCourse === 'tecnico_enfermagem' ? <HeartPulse className="w-5 h-5" /> : <BookOpen className="w-5 h-5" />}
                   </div>
                   <div>
-                    <h3 className="font-extrabold text-slate-850 text-base">Reconfigurar o estudo</h3>
+                    <h3 className="font-extrabold text-slate-850 text-base">{configurationMode === 'edit' ? 'Reconfigurar o estudo' : 'Configurar o estudo'}</h3>
                     <p className="text-xs text-slate-400 mt-0.5">Etapa {configStep} de 4 · {contestLabel(selectedContest)}</p>
                   </div>
                 </div>
@@ -954,9 +1036,17 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                       <p className="text-sm text-slate-500 mt-1">Defina a prova que orientará todo o plano.</p>
                     </div>
                     <div className="contest-fields grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <label className="wizard-field space-y-1.5">
+                      <div className="wizard-field space-y-1.5">
                         <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Data da prova</span>
-                        <div className="date-input-with-picker">
+                        <div
+                          className={`date-input-with-picker ${datePickerOpen ? 'is-open' : ''}`}
+                          onBlur={(event) => {
+                            if (!event.currentTarget.contains(event.relatedTarget as Node)) setDatePickerOpen(false);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Escape') setDatePickerOpen(false);
+                          }}
+                        >
                           <input
                             id="exam-date"
                             type="text"
@@ -973,30 +1063,34 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                             type="button"
                             className="date-picker-trigger"
                             aria-label="Abrir calendário da data da prova"
-                            onClick={() => {
-                              const picker = nativeDatePickerRef.current;
-                              if (!picker) return;
-                              if (typeof picker.showPicker === 'function') picker.showPicker();
-                              else picker.click();
-                            }}
+                            aria-haspopup="dialog"
+                            aria-expanded={datePickerOpen}
+                            aria-controls="exam-date-calendar"
+                            onClick={() => setDatePickerOpen(open => !open)}
                           >
                             <Calendar aria-hidden="true" />
                           </button>
-                          <input
-                            ref={nativeDatePickerRef}
-                            type="date"
-                            min={getTodayIso()}
-                            value={examDate}
-                            onChange={event => applyExamDate(event.target.value)}
-                            className="date-native-picker"
-                            tabIndex={-1}
-                            aria-hidden="true"
-                          />
+                          {datePickerOpen && (
+                            <div id="exam-date-calendar" className="date-calendar-popover" role="dialog" aria-label="Selecionar data da prova">
+                              <ReactCalendar
+                                locale="pt-BR"
+                                minDate={new Date(`${getTodayIso()}T00:00:00`)}
+                                value={examDate ? new Date(`${examDate}T00:00:00`) : null}
+                                onChange={value => {
+                                  if (!(value instanceof Date)) return;
+                                  applyExamDate(formatDateToIso(value));
+                                  setDatePickerOpen(false);
+                                }}
+                                prev2Label={null}
+                                next2Label={null}
+                              />
+                            </div>
+                          )}
                         </div>
-                      </label>
+                      </div>
                       <label className="wizard-field space-y-1.5">
-                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Banca</span>
-                        <select value={examBoard} onChange={(e) => setExamBoard(e.target.value)} className="w-full px-3 text-sm font-semibold">
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Banca principal</span>
+                        <select value={examBoard} onChange={(e) => handleExamBoardChange(e.target.value)} className="w-full px-3 text-sm font-semibold">
                           {!EXAM_BOARDS.includes(examBoard) && <option value={examBoard}>{examBoard}</option>}
                           {EXAM_BOARDS.map(board => <option key={board} value={board}>{board}</option>)}
                         </select>
@@ -1065,6 +1159,38 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                         </div>
                       </div>
                     </div>
+                    <section className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4" aria-labelledby="complementary-boards-title">
+                      <div>
+                        <strong id="complementary-boards-title" className="block text-sm text-slate-800">Bancas complementares <span className="font-medium text-slate-400">(opcional)</span></strong>
+                        <p className="mt-1 text-xs text-slate-500">Adicione questões de outras bancas ao banco da sua banca principal. Se nenhuma for marcada, somente {examBoard} será utilizada.</p>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Selecionar bancas complementares">
+                        {EXAM_BOARDS.filter(board => board !== examBoard).map(board => {
+                          const selected = complementaryBoards.includes(board);
+                          return <button
+                            key={board}
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() => handleComplementaryBoardToggle(board)}
+                            className={`min-h-9 rounded-lg border px-3 text-xs font-bold transition ${selected ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}
+                          >
+                            {selected && <Check className="mr-1.5 inline-block h-3.5 w-3.5" />}{board}
+                          </button>;
+                        })}
+                      </div>
+                    </section>
+                    <label className={`mt-4 flex items-start gap-3 rounded-xl border p-4 cursor-pointer ${hasDiscursiveExam ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 bg-slate-50'}`}>
+                      <input
+                        type="checkbox"
+                        checked={hasDiscursiveExam}
+                        onChange={event => handleDiscursiveExamChange(event.target.checked)}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        <strong className="block text-sm text-slate-800">A prova tem etapa discursiva (redação)</strong>
+                        <span className="block text-xs text-slate-600 mt-1">Inclui Atualidades e agenda treinos de redação com temas de segurança, política, economia, saúde, tecnologia, sustentabilidade e outras áreas do edital.</span>
+                      </span>
+                    </label>
                   </div>
                 )}
 
@@ -1214,7 +1340,9 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                     <dl className="wizard-review-grid grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div><dt>Prova</dt><dd>{new Date(`${examDate}T00:00:00`).toLocaleDateString('pt-BR')}</dd></div>
                       <div><dt>Concurso</dt><dd>{contestLabel(selectedContest)}</dd></div>
-                      <div><dt>Banca e cargo</dt><dd>{examBoard} · {targetRole}</dd></div>
+                      <div><dt>Banca principal e cargo</dt><dd>{examBoard} · {targetRole}</dd></div>
+                      <div><dt>Bancas complementares</dt><dd>{complementaryBoards.length > 0 ? complementaryBoards.join(', ') : 'Nenhuma · somente a banca principal'}</dd></div>
+                      <div><dt>Prova discursiva</dt><dd>{hasDiscursiveExam ? 'Sim · com treinos de redação' : 'Não'}</dd></div>
                       <div><dt>Disponibilidade</dt><dd>{selectedWeekdays.length} dias · {weeklyHours}h por semana</dd></div>
                       <div><dt>Conteúdo</dt><dd>{selectedSubtopicIds.length} subtópicos em {selectedTopicIds.length} matérias</dd></div>
                     </dl>
@@ -1237,7 +1365,7 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm py-3.5 px-6 rounded-xl transition shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Sparkles className="w-4 h-4" />
-                    {hasSavedPlans ? 'Salvar e ativar plano de estudos' : 'Criar e ativar plano de estudos'}
+                    {configurationMode === 'edit' ? 'Salvar e ativar plano de estudos' : 'Criar e ativar plano de estudos'}
                   </button>
                 </div>}
 
@@ -1276,6 +1404,10 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
                   <div>
                     <span className="text-slate-400 block font-bold">Banca e cargo:</span>
                     <span className="text-sm font-extrabold text-white">{contestLabel(selectedContest)} · {examBoard} · {targetRole}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block font-bold">Banco de questões:</span>
+                    <span className="text-sm font-extrabold text-white">{[examBoard, ...complementaryBoards].join(' + ')}</span>
                   </div>
                   <div>
                     <span className="text-slate-400 block font-bold font-mono">Dias de Estudo Ativo:</span>

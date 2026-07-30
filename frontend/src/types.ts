@@ -20,21 +20,27 @@ export interface StudySection {
   cards: StudyCard[];
 }
 
-export type QuestionCategory = 
+export type QuestionCategory =
   | 'Português'
   | 'Língua Inglesa'
   | 'TI Básica'
   | 'Ética e Compliance'
   | 'Conhecimentos de Alagoas'
   | 'Conhecimentos Específicos'
-  | 'Conhecimentos Específicos - Jornalismo';
+  | 'Conhecimentos Específicos - Jornalismo'
+  | 'Conhecimentos Específicos - Técnico em Enfermagem';
+
+export type QuestionChoice = 'A' | 'B' | 'C' | 'D' | 'E';
+export type QuestionAnswer = 'Certo' | 'Errado' | QuestionChoice;
 
 export interface Question {
   id: number | string;
   category: QuestionCategory | string;
+  board?: string;
   topic?: string;
   text: string;
-  correct: 'Certo' | 'Errado' | 'Anulada';
+  options?: { label: QuestionChoice; text: string }[];
+  correct: QuestionAnswer | 'Anulada';
   explanation: string;
   reference?: string; // e.g., "CEBRASPE - TRT 8 - 2022"
   passageId?: string; // e.g., "capitalismo-vigilancia"
@@ -43,7 +49,7 @@ export interface Question {
 }
 
 export interface QuizState {
-  answers: { [key: string]: 'Certo' | 'Errado' };
+  answers: { [key: string]: QuestionAnswer };
   submitted: { [key: string]: boolean };
   scoreMode: 'tradicional' | 'simples'; // tradicional = Cebraspe (-1 for wrong), simples = +1 for right
 }

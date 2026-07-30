@@ -17,7 +17,15 @@ public class StudyPlanService {
     }
 
     List<Map<String,Object>> all(UUID user, boolean archived) {
-        return jdbc.sql("SELECT *, course_id AS course_id, exam_date AS exam_date, is_primary AS is_active FROM study_plans WHERE user_id=:u AND (:a OR status<>'ARCHIVED') ORDER BY is_primary DESC, updated_at DESC")
+        return jdbc.sql("""
+                SELECT sp.*,sp.course_id AS course_id,sp.exam_date AS exam_date,sp.is_primary AS is_active,
+                  (SELECT COUNT(*) FROM roadmap_topics rt WHERE rt.plan_id=sp.id AND rt.active) total_topics,
+                  (SELECT COUNT(*) FROM roadmap_topics rt JOIN topic_progress tp ON tp.roadmap_topic_id=rt.id
+                    WHERE rt.plan_id=sp.id AND rt.active AND tp.user_id=:u AND tp.status='COMPLETED') completed_topics
+                FROM study_plans sp
+                WHERE sp.user_id=:u AND (:a OR sp.status<>'ARCHIVED')
+                ORDER BY sp.is_primary DESC,sp.updated_at DESC
+                """)
                 .param("u", user).param("a", archived).query().listOfRows();
     }
     Map<String,Object> one(UUID id, UUID user) {

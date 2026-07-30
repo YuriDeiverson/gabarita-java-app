@@ -1,5 +1,6 @@
 package ai.gabarita.schedule;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
@@ -13,8 +14,92 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ScheduleEngine {
     private final JdbcClient jdbc;
+    private final ObjectMapper json;
     private static final DateTimeFormatter BR=DateTimeFormatter.ofPattern("dd/MM");
-    ScheduleEngine(JdbcClient jdbc){this.jdbc=jdbc;}
+    ScheduleEngine(JdbcClient jdbc,ObjectMapper json){this.jdbc=jdbc;this.json=json;}
+
+    public Map<String,Object> agenda(UUID planId,UUID userId,LocalDate start,LocalDate end) {
+        if(end.isBefore(start)||ChronoUnit.DAYS.between(start,end)>62)
+            throw new IllegalArgumentException("Consulte um período de até 63 dias");
+        var plan=jdbc.sql("SELECT settings::text settings_json FROM study_plans WHERE id=:p AND user_id=:u")
+                .param("p",planId).param("u",userId).query().listOfRows().stream().findFirst()
+                .orElseThrow(()->new NoSuchElementException("Plano não encontrado"));
+        var topics=jdbc.sql("""
+            SELECT rt.id,rt.title,rt.subject_name,rt.objective,rt.planned_minutes,rt.recommended_questions,
+              rt.content::text content_json
+            FROM roadmap_topics rt WHERE rt.plan_id=:p AND rt.active
+            """).param("p",planId).query().listOfRows();
+        var topicsByTitle=new HashMap<String,Map<String,Object>>();
+        topics.forEach(topic->topicsByTitle.put(normalize(String.valueOf(topic.get("title"))),topic));
+
+        var days=new TreeMap<LocalDate,List<Map<String,Object>>>();
+        var actualDates=new HashSet<LocalDate>();
+        var actual=jdbc.sql("""
+            SELECT dt.id,dt.task_date::text task_date,dt.roadmap_topic_id,dt.activity_type,dt.planned_minutes,dt.completed_minutes,
+              dt.question_goal,dt.questions_answered,dt.correct_answers,dt.achieved_accuracy,dt.status,
+              rt.title,rt.subject_name,rt.objective,rt.content::text content_json
+            FROM daily_tasks dt JOIN roadmap_topics rt ON rt.id=dt.roadmap_topic_id
+            WHERE dt.user_id=:u AND dt.plan_id=:p AND dt.task_date BETWEEN :start AND :end
+            ORDER BY dt.task_date,dt.position
+            """).param("u",userId).param("p",planId).param("start",start).param("end",end).query().listOfRows();
+        for(var task:actual){
+            LocalDate date=LocalDate.parse(String.valueOf(task.get("task_date"))); actualDates.add(date);
+            var item=new LinkedHashMap<String,Object>();
+            item.put("id",task.get("id"));item.put("roadmap_topic_id",task.get("roadmap_topic_id"));
+            item.put("title",task.get("title"));item.put("subject_name",task.get("subject_name"));
+            item.put("activity_type",task.get("activity_type"));item.put("planned_minutes",task.get("planned_minutes"));
+            item.put("studied_minutes",task.get("completed_minutes"));item.put("question_goal",task.get("question_goal"));
+            item.put("questions_answered",task.get("questions_answered"));item.put("correct_answers",task.get("correct_answers"));
+            item.put("accuracy",task.get("achieved_accuracy"));item.put("status",task.get("status"));
+            item.put("objective",task.get("objective"));item.put("review_points",reviewPoints(task.get("content_json")));
+            days.computeIfAbsent(date,ignored->new ArrayList<>()).add(item);
+        }
+
+        try{
+            JsonNode root=json.readTree(String.valueOf(plan.get("settings_json")));
+            for(JsonNode week:root.path("legacyScheduleWeeks")) for(JsonNode block:week.path("blocks")){
+                String shortDate=block.path("date").asText();
+                var candidates=new ArrayList<LocalDate>();
+                String fullDate=block.path("isoDate").asText();
+                if(!fullDate.isBlank()){try{candidates.add(LocalDate.parse(fullDate));}catch(Exception ignored){}}
+                else if(!shortDate.isBlank())for(int year=start.getYear();year<=end.getYear();year++)
+                    try{candidates.add(LocalDate.parse(shortDate+"/"+year,DateTimeFormatter.ofPattern("dd/MM/uuuu")));}catch(Exception ignored){}
+                for(LocalDate date:candidates){
+                    if(date.isBefore(start)||date.isAfter(end)||actualDates.contains(date))continue;
+                    var topic=topicsByTitle.get(normalize(block.path("title").asText()));
+                    var item=new LinkedHashMap<String,Object>();
+                    item.put("id",block.path("id").asText("planned-"+date));
+                    if(topic!=null)item.put("roadmap_topic_id",topic.get("id"));
+                    item.put("title",block.path("title").asText("Estudo planejado"));
+                    item.put("subject_name",topic==null?"Plano de estudos":topic.get("subject_name"));
+                    item.put("activity_type","PLANNED");
+                    item.put("planned_minutes",block.path("durationMinutes").asInt(parseMinutes(block.path("duration").asText())));
+                    item.put("studied_minutes",0);item.put("question_goal",topic==null?0:topic.get("recommended_questions"));
+                    item.put("questions_answered",0);item.put("correct_answers",0);item.put("accuracy",null);
+                    item.put("status",date.isBefore(LocalDate.now(ZoneId.of("America/Maceio")))?"MISSED":"PLANNED");
+                    item.put("objective",topic==null?"Cumprir o bloco previsto para este dia.":topic.get("objective"));
+                    var points=topic==null?List.<String>of():reviewPoints(topic.get("content_json"));
+                    if(points.isEmpty())points=textItems(block.path("subtopics"));
+                    item.put("review_points",points);
+                    days.computeIfAbsent(date,ignored->new ArrayList<>()).add(item);
+                }
+            }
+        }catch(Exception ignored){/* Tarefas reais continuam disponíveis mesmo em planos legados sem agenda serializada. */}
+
+        var dayList=new ArrayList<Map<String,Object>>();
+        days.forEach((date,items)->{
+            int planned=items.stream().mapToInt(item->number(item.get("planned_minutes"))).sum();
+            int studied=items.stream().mapToInt(item->number(item.get("studied_minutes"))).sum();
+            int questions=items.stream().mapToInt(item->number(item.get("questions_answered"))).sum();
+            int correct=items.stream().mapToInt(item->number(item.get("correct_answers"))).sum();
+            boolean complete=items.stream().allMatch(item->"COMPLETED".equals(item.get("status")));
+            String status=complete?"COMPLETED":studied>0||questions>0?"IN_PROGRESS":date.isBefore(LocalDate.now(ZoneId.of("America/Maceio")))?"MISSED":"PLANNED";
+            var day=new LinkedHashMap<String,Object>();day.put("date",date);day.put("status",status);day.put("items",items);
+            day.put("planned_minutes",planned);day.put("studied_minutes",studied);day.put("questions_answered",questions);day.put("correct_answers",correct);
+            dayList.add(day);
+        });
+        return Map.of("plan_id",planId,"start",start,"end",end,"days",dayList);
+    }
 
     public List<Map<String,Object>> generateLegacy(ScheduleController.GenerateRequest r) {
         var hours=new HashMap<DayOfWeek,Double>();
@@ -46,9 +131,12 @@ public class ScheduleEngine {
                 JsonNode card=chosen.cards().isEmpty()?null:chosen.cards().get(pointer%chosen.cards().size());
                 var takeaways=new ArrayList<String>(); if(card!=null) card.path("keyTakeaways").forEach(x->{if(takeaways.size()<3)takeaways.add(x.asText());});
                 var block=new LinkedHashMap<String,Object>(); block.put("id","block-"+counter++); block.put("day",weekday(date.getDayOfWeek()));
-                block.put("date",date.format(BR)); block.put("title",card==null?chosen.title():card.path("title").asText());
+                block.put("date",date.format(BR)); block.put("isoDate",date); block.put("title",card==null?chosen.title():card.path("title").asText());
                 block.put("duration",formatMinutes(duration)); block.put("durationMinutes",duration);
-                block.put("methodology","30% Teoria, 50% Exercícios, 20% Revisão"); block.put("subtopics",takeaways); block.put("done",false);
+                boolean discursive="atualidades_discursiva".equals(chosen.id());
+                block.put("methodology",discursive
+                    ?"Produção de redação completa, seguida de revisão de conteúdo e linguagem"
+                    :"30% Teoria, 50% Exercícios, 20% Revisão"); block.put("subtopics",takeaways); block.put("done",false);
                 byWeek.computeIfAbsent(date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)),k->new ArrayList<>()).add(block);
                 remaining-=duration;
             }
@@ -86,6 +174,11 @@ public class ScheduleEngine {
         return Map.of("planId",planId,"blocksCreated",created,"warning",created<topics.size()?"Tempo insuficiente: reduza assuntos ou aumente a disponibilidade":"Cronograma recalculado com sucesso");
     }
     private record Section(String id,String title,double weight,List<JsonNode> cards){}
+    private List<String> reviewPoints(Object content){try{return textItems(json.readTree(String.valueOf(content)).path("keyTakeaways"));}catch(Exception ignored){return List.of();}}
+    private List<String> textItems(JsonNode node){var values=new ArrayList<String>();if(node!=null&&node.isArray())for(JsonNode value:node){if(values.size()==3)break;String text=value.asText().trim();if(!text.isBlank())values.add(text);}return values;}
+    private int number(Object value){return value instanceof Number number?number.intValue():0;}
+    private int parseMinutes(String value){try{String normalized=value.toLowerCase();int hours=0,minutes=0;var hour=java.util.regex.Pattern.compile("(\\d+)h").matcher(normalized);if(hour.find())hours=Integer.parseInt(hour.group(1));var minute=java.util.regex.Pattern.compile("(\\d+)min").matcher(normalized);if(minute.find())minutes=Integer.parseInt(minute.group(1));return Math.max(15,hours*60+minutes);}catch(Exception ignored){return 60;}}
+    private String normalize(String value){return java.text.Normalizer.normalize(value,java.text.Normalizer.Form.NFD).replaceAll("\\p{M}","").toLowerCase(Locale.ROOT).trim();}
     private double weight(String s){try{return Double.parseDouble(s.replace("%",""));}catch(Exception e){return 1;}}
     private String formatHours(double h){int hour=(int)h,min=(int)Math.round((h-hour)*60);return min==0?hour+"h":hour+"h"+String.format("%02d",min);}
     private String formatMinutes(int total){int hour=total/60,min=total%60;if(hour==0)return min+"min";return min==0?hour+"h":hour+"h"+String.format("%02d",min);}

@@ -36,6 +36,8 @@ export interface StudyPlan {
   status?: 'ACTIVE' | 'ARCHIVED';
   is_primary?: boolean;
   is_active?: boolean | number;
+  total_topics?: number;
+  completed_topics?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -55,6 +57,40 @@ export interface ScheduleProgress {
   block_id: string;
   is_completed: number | boolean;
   completed_at: string | null;
+}
+
+export interface ScheduleAgendaItem {
+  id: string;
+  roadmap_topic_id?: string;
+  title: string;
+  subject_name: string;
+  activity_type: string;
+  planned_minutes: number;
+  studied_minutes: number;
+  question_goal: number;
+  questions_answered: number;
+  correct_answers: number;
+  accuracy?: number | null;
+  status: string;
+  objective?: string;
+  review_points: string[];
+}
+
+export interface ScheduleAgendaDay {
+  date: string;
+  status: string;
+  planned_minutes: number;
+  studied_minutes: number;
+  questions_answered: number;
+  correct_answers: number;
+  items: ScheduleAgendaItem[];
+}
+
+export interface ScheduleAgenda {
+  plan_id: string;
+  start: string;
+  end: string;
+  days: ScheduleAgendaDay[];
 }
 
 export interface DailyTask {
@@ -258,6 +294,13 @@ export const quizProgressApi = {
 
 // Schedule API
 export const scheduleApi = {
+  getAgenda: async (studyPlanId: string, start: string, end: string): Promise<ScheduleAgenda> => {
+    const params = new URLSearchParams({ start, end });
+    const response = await fetch(`${API_BASE_URL}/schedule/agenda/${studyPlanId}?${params}`);
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Não foi possível carregar a agenda'));
+    return response.json();
+  },
+
   getProgress: async (studyPlanId: string): Promise<ScheduleProgress[]> => {
     const response = await fetch(`${API_BASE_URL}/schedule/progress/${studyPlanId}`);
     if (!response.ok) throw new Error('Failed to fetch schedule progress');
@@ -334,9 +377,17 @@ export const questionsApi = {
     const response = await fetch(`${API_BASE_URL}/questions/course/${encodeURIComponent(courseId)}`);
     if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to fetch course questions'));
     const rows = await response.json();
-    return rows.map((row: any) => ({ id: row.id, category: row.category, topic: row.topic || row.category, text: row.text,
-      correct: row.correct, explanation: row.explanation, reference: row.reference,
-      passageId: row.passage_id, passageTitle: row.passage_title, passageContent: row.passage_content }));
+    return rows.map((row: any) => {
+      let options = row.options || row.alternatives;
+      if (typeof options === 'string') {
+        try { options = JSON.parse(options); } catch { options = undefined; }
+      }
+      return { id: row.id, category: row.category, board: row.board || row.exam_board,
+        topic: row.topic || row.category, text: row.text,
+        options: Array.isArray(options) ? options : undefined,
+        correct: row.correct_option || row.correct, explanation: row.explanation, reference: row.reference,
+        passageId: row.passage_id, passageTitle: row.passage_title, passageContent: row.passage_content };
+    });
   },
   importLegacy: async (courseId: string, questions: unknown[]): Promise<{ imported: number; updated: number; total: number }> => {
     const response = await fetch(`${API_BASE_URL}/questions/import/legacy?courseId=${encodeURIComponent(courseId)}`, {

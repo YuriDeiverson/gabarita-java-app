@@ -1,12 +1,12 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { quizQuestions } from '../data/quizData';
-import { QuestionCategory, Question } from '../types';
+import { QuestionAnswer, QuestionCategory, Question } from '../types';
 import { passages } from '../data/passagesData';
 import { questionsApi, quizProgressApi } from '../services/api';
 import { CheckCircle2, XCircle, Filter, Sparkles, AlertCircle, Info, Bookmark, Flag, Target } from 'lucide-react';
 import { ActiveStudyContext, findContextCard, normalizeStudyText, questionRelevance } from '../studyContext';
-import { COURSES_CONFIG } from '../data/generator';
 import { studySections } from '../data/studyData';
+import { filterQuestionsByBoards, questionBoardsFromConfig, questionExamBoard } from '../questionBanks';
 
 interface QuizTabProps {
   mode?: 'session'|'all';
@@ -40,6 +40,7 @@ const preservePassages = (remoteQuestions: Question[], localQuestions: Question[
       passageId,
       passageTitle: question.passageTitle || localQuestion?.passageTitle || catalogPassage?.title,
       passageContent: question.passageContent || localQuestion?.passageContent || catalogPassage?.content,
+      options: question.options?.length ? question.options : localQuestion?.options,
     };
   });
 };
@@ -47,6 +48,19 @@ const preservePassages = (remoteQuestions: Question[], localQuestions: Question[
 const mergeQuestionBanks=(primary:Question[],secondary:Question[])=>{
   const seen=new Set<string>();
   return [...primary,...secondary].filter(question=>{const key=normalizeQuestionText(question.text);if(seen.has(key))return false;seen.add(key);return true;});
+};
+
+const readPlanQuestionBank=()=>{
+  const course=localStorage.getItem('active_course')||'seplag_informatica';
+  for(const key of [`${course}_quiz_questions`,'custom_quiz_questions']){
+    const saved=localStorage.getItem(key);
+    if(saved===null)continue;
+    try{
+      const parsed=JSON.parse(saved);
+      if(Array.isArray(parsed))return {configured:true,questions:parsed as Question[]};
+    }catch(error){console.warn(`Banco de questões inválido em ${key}.`,error);}
+  }
+  return {configured:false,questions:[] as Question[]};
 };
 
 const topicGeneratedQuestions=(context:ActiveStudyContext):Question[]=>{
@@ -93,7 +107,7 @@ const guidedReviewQuestionIds=()=>{
 };
 
 interface GuidedReviewDraft {
-  answers: Record<string,'Certo'|'Errado'>;
+  answers: Record<string,QuestionAnswer>;
   questionIds: string[];
   reviewGoal: number;
   visibleQuestions: number;
@@ -113,7 +127,8 @@ const readGuidedReviewDraft=(key:string|null):GuidedReviewDraft|null=>{
   try{
     const parsed=JSON.parse(localStorage.getItem(key)||'null') as Partial<GuidedReviewDraft>|null;
     if(!parsed||typeof parsed!=='object')return null;
-    const answers=Object.fromEntries(Object.entries(parsed.answers||{}).filter(([,answer])=>answer==='Certo'||answer==='Errado')) as GuidedReviewDraft['answers'];
+    const validAnswers:QuestionAnswer[]=['Certo','Errado','A','B','C','D','E'];
+    const answers=Object.fromEntries(Object.entries(parsed.answers||{}).filter(([,answer])=>validAnswers.includes(answer as QuestionAnswer))) as GuidedReviewDraft['answers'];
     return {
       answers,
       questionIds:Array.isArray(parsed.questionIds)?parsed.questionIds.map(String):[],
@@ -134,24 +149,24 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
   const reviewDraftKey=useMemo(()=>mode==='session'&&studyContext?guidedReviewDraftKey(studyContext):null,
     [mode,studyContext?.roadmapTopicId,studyContext?.topicTitle]);
   const initialReviewDraft=useMemo(()=>readGuidedReviewDraft(reviewDraftKey),[reviewDraftKey]);
+  const selectedQuestionBoards=useMemo(()=>{
+    const course=localStorage.getItem('active_course')||'seplag_informatica';
+    for(const key of [`${course}_study_config`,'study_config']){
+      try{
+        const parsed=JSON.parse(localStorage.getItem(key)||'null');
+        const boards=questionBoardsFromConfig(parsed);
+        if(boards.length>0)return boards;
+      }catch{}
+    }
+    return [];
+  },[]);
   const [questions, setQuestions] = useState<Question[]>(() => {
-    const saved = localStorage.getItem('custom_quiz_questions');
-    let selectedQuestions:Question[]=[];
-    if (saved) {
-      try {
-        selectedQuestions=JSON.parse(saved);
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    if(mode==='all'){
-      const course=localStorage.getItem('active_course')||'seplag_informatica';
-      return mergeQuestionBanks(selectedQuestions,(COURSES_CONFIG[course]?.quizQuestions||quizQuestions) as Question[]);
-    }
-    return selectedQuestions.length?selectedQuestions:quizQuestions;
+    const planBank=readPlanQuestionBank();
+    const available=planBank.configured?planBank.questions:quizQuestions;
+    return filterQuestionsByBoards(available,selectedQuestionBoards);
   });
 
-  const [answers, setAnswers] = useState<{ [key: string]: 'Certo' | 'Errado' }>(() => {
+  const [answers, setAnswers] = useState<{ [key: string]: QuestionAnswer }>(() => {
     const saved = localStorage.getItem('quiz_answers');
     return saved ? JSON.parse(saved) : {};
   });
@@ -162,7 +177,7 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
   const [favoriteQuestions, setFavoriteQuestions] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('quiz_favorite_questions') || '[]')); } catch { return new Set(); }
   });
-  const [cycleAnswers,setCycleAnswers]=useState<{[key:string]:'Certo'|'Errado'}>(()=>initialReviewDraft?.answers||{});
+  const [cycleAnswers,setCycleAnswers]=useState<{[key:string]:QuestionAnswer}>(()=>initialReviewDraft?.answers||{});
   const [draftQuestionIds,setDraftQuestionIds]=useState<string[]>(()=>initialReviewDraft?.questionIds||[]);
   const [usedBeforeCycle,setUsedBeforeCycle]=useState<Set<string>>(()=>{
     const reviewed=guidedReviewQuestionIds();
@@ -182,14 +197,23 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     questionsApi.forCourse(courseId).then(remoteQuestions => {
       if (remoteQuestions.length > 0) {
         setQuestions(localQuestions => {
-          const reconciledQuestions = preservePassages(remoteQuestions, localQuestions);
-          const available=mergeQuestionBanks(reconciledQuestions,localQuestions);
+          const planBank=readPlanQuestionBank();
+          const allowedIds=new Set(planBank.questions.map(question=>String(question.id)));
+          const allowedTexts=new Set(planBank.questions.map(question=>normalizeQuestionText(question.text)));
+          const scopedRemoteQuestions=planBank.configured
+            ? remoteQuestions.filter(question=>allowedIds.has(String(question.id))||allowedTexts.has(normalizeQuestionText(question.text)))
+            : remoteQuestions;
+          const reconciledQuestions = preservePassages(scopedRemoteQuestions, localQuestions);
+          const available=filterQuestionsByBoards(
+            mergeQuestionBanks(reconciledQuestions,localQuestions),
+            selectedQuestionBoards
+          );
           localStorage.setItem('active_quiz_questions_cache', JSON.stringify(available));
           return available;
         });
       }
     }).catch(error => console.warn('Banco de questões indisponível; usando conteúdo offline.', error));
-  }, []);
+  }, [selectedQuestionBoards]);
 
   useEffect(()=>{
     if(mode!=='session')return;
@@ -216,11 +240,11 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
       const { studyPlanId } = JSON.parse(config);
       if (!studyPlanId || String(studyPlanId).startsWith('local-')) return;
       quizProgressApi.getByStudyPlan(studyPlanId).then(progress => {
-        const remoteAnswers: { [key: string]: 'Certo' | 'Errado' } = {};
+        const remoteAnswers: { [key: string]: QuestionAnswer } = {};
         progress.forEach(item => {
           const questionId = String(item.question_id);
-          if (item.answer === 'Certo' || item.answer === 'Errado') {
-            remoteAnswers[questionId] = item.answer;
+          if (['Certo','Errado','A','B','C','D','E'].includes(item.answer)) {
+            remoteAnswers[questionId] = item.answer as QuestionAnswer;
           }
         });
         setAnswers(current => ({ ...current, ...remoteAnswers }));
@@ -254,10 +278,11 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     });
   };
 
-  const handleAnswer = async (questionId: number | string, option: 'Certo' | 'Errado') => {
+  const handleAnswer = async (questionId: number | string, option: QuestionAnswer) => {
     const question = questions.find(q => String(q.id) === String(questionId))
       || (mode==='session'&&studyContext
-        ? topicGeneratedQuestions(studyContext).find(q=>String(q.id)===String(questionId))
+        ? filterQuestionsByBoards(topicGeneratedQuestions(studyContext),selectedQuestionBoards)
+            .find(q=>String(q.id)===String(questionId))
         : undefined);
     if (!question) return;
     if (question.correct === 'Anulada') return;
@@ -315,13 +340,14 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     const precise=questions.filter(question=>question.correct!=='Anulada'&&belongsToExactTopic(question,studyContext))
       .map(question=>({question,score:questionRelevance(question,studyContext)}))
       .sort((a,b)=>b.score-a.score).map(item=>item.question);
-    const available=mergeQuestionBanks(precise,topicGeneratedQuestions(studyContext));
+    const generated=filterQuestionsByBoards(topicGeneratedQuestions(studyContext),selectedQuestionBoards);
+    const available=mergeQuestionBanks(precise,generated);
     const byId=new Map(available.map(question=>[String(question.id),question]));
     const restored=draftQuestionIds.map(id=>byId.get(id)).filter((question):question is Question=>Boolean(question));
     const restoredIds=new Set(restored.map(question=>String(question.id)));
     const fresh=available.filter(question=>!restoredIds.has(String(question.id))&&!usedBeforeCycle.has(String(question.id)));
     return [...restored,...fresh].slice(0,20);
-  },[mode,questions,studyContext,usedBeforeCycle,draftQuestionIds]);
+  },[mode,questions,studyContext,usedBeforeCycle,draftQuestionIds,selectedQuestionBoards]);
 
   useEffect(()=>{
     if(mode!=='session'||!reviewDraftKey||draftQuestionIds.length>0||questionPool.length===0)return;
@@ -345,14 +371,17 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     }).length;
     let correctCount = 0;
     let incorrectCount = 0;
+    let bankAwareScore = 0;
 
     validQuestions.forEach(q => {
       const userAnswer = activeAnswers[q.id];
       if (userAnswer) {
         if (userAnswer === q.correct) {
           correctCount++;
+          bankAwareScore++;
         } else {
           incorrectCount++;
+          if (questionExamBoard(q) === 'CEBRASPE') bankAwareScore--;
         }
       }
     });
@@ -369,6 +398,7 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
       answeredCount,
       correctCount,
       incorrectCount,
+      bankAwareScore: Math.max(0, bankAwareScore),
       cebraspeScore,
       simpleScore,
       percentage,
@@ -432,13 +462,15 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
 
   const selectedExamBoard=useMemo(()=>{
     const course=localStorage.getItem('active_course')||'seplag_informatica';
-    for(const key of ['study_config',`${course}_study_config`]){
+    for(const key of [`${course}_study_config`,'study_config']){
       try{const value=JSON.parse(localStorage.getItem(key)||'{}').examBoard;if(value)return String(value);}catch{}
     }
     return 'CEBRASPE';
   },[]);
   const usesCebraspeScoring=/cebraspe|cespe/i.test(selectedExamBoard);
-  const currentScore=usesCebraspeScoring?stats.cebraspeScore:stats.simpleScore;
+  const currentScore=selectedQuestionBoards.length>1
+    ? stats.bankAwareScore
+    : usesCebraspeScoring?stats.cebraspeScore:stats.simpleScore;
   const currentAccuracy=stats.answeredCount?Math.round(stats.correctCount*100/stats.answeredCount):0;
 
   return (
@@ -449,7 +481,7 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
           {mode==='session'&&<div className="quiz-heading">
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Sparkles className="w-5 h-5 text-amber-500"/>Revisão da sessão</h2>
           </div>}
-          <div className="quiz-stats grid grid-cols-2 md:grid-cols-4 gap-3" aria-label={`Pontuação calculada pela banca ${selectedExamBoard}`}>
+          <div className="quiz-stats grid grid-cols-2 md:grid-cols-4 gap-3" aria-label={`Pontuação calculada para ${selectedQuestionBoards.join(' e ') || selectedExamBoard}`}>
             <div className="bg-slate-50 p-3 rounded-lg text-center"><span className="text-xs text-slate-500 block">Pontuação</span><strong className="text-xl font-bold text-slate-800">{currentScore}</strong></div>
             <div className="bg-emerald-50 p-3 rounded-lg text-center"><span className="text-xs text-emerald-800 font-bold">Acertos</span><strong className="text-xl font-bold text-emerald-600 block mt-1">{stats.correctCount}</strong></div>
             <div className="bg-rose-50 p-3 rounded-lg text-center"><span className="font-bold text-rose-800 text-xs">Erros</span><strong className="text-rose-600 block mt-1 text-xl font-bold">{stats.incorrectCount}</strong></div>
@@ -536,6 +568,9 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
                       {mode==='session'&&studyContext?studyContext.topicTitle:q.category}
                     </span>
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
+                      {questionExamBoard(q)}
+                    </span>
                     {q.passageId && <span className="passage-available">Texto de apoio</span>}
                   </div>
                   <div className="question-card-actions">
@@ -577,13 +612,40 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
                   <p className="text-slate-800 text-sm leading-relaxed font-medium">{q.text}</p>
 
                   {/* Actions (Buttons for answering) */}
-                  <div className="flex items-center gap-3">
+                  <div className="space-y-3">
                     {isAnnulled ? (
                       <span className="px-4 py-2 rounded-lg text-sm font-bold border border-amber-200 bg-amber-50 text-amber-800">
                         Questão anulada
                       </span>
+                    ) : q.options?.length ? (
+                      <div className="grid gap-2" role="radiogroup" aria-label={`Alternativas da questão ${index + 1}`}>
+                        {q.options.map(option => {
+                          const selected=userAnswer===option.label;
+                          const optionIsCorrect=q.correct===option.label;
+                          return <button
+                            key={option.label}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            onClick={()=>handleAnswer(q.id,option.label)}
+                            className={`w-full p-3 rounded-xl border text-left text-sm transition flex items-start gap-3 ${
+                              selected
+                                ? optionIsCorrect
+                                  ? 'bg-emerald-50 border-emerald-400 text-emerald-900'
+                                  : 'bg-rose-50 border-rose-400 text-rose-900'
+                                : isAnswered&&optionIsCorrect
+                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                                  : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
+                            }`}
+                          >
+                            <strong className={`w-7 h-7 shrink-0 rounded-lg grid place-items-center ${selected?'bg-current/10':'bg-slate-100'}`}>{option.label}</strong>
+                            <span className="leading-relaxed pt-0.5">{option.text}</span>
+                            {selected&&(optionIsCorrect?<CheckCircle2 className="w-5 h-5 shrink-0 ml-auto text-emerald-600"/>:<XCircle className="w-5 h-5 shrink-0 ml-auto text-rose-600"/>)}
+                          </button>;
+                        })}
+                      </div>
                     ) : (
-                      <>
+                      <div className="flex items-center gap-3">
                     <button
                       id={`btn-certo-${q.id}`}
                       onClick={() => handleAnswer(q.id, 'Certo')}
@@ -612,12 +674,12 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
                       {userAnswer === 'Errado' && (q.correct === 'Errado' ? <CheckCircle2 aria-hidden="true" /> : <XCircle aria-hidden="true" />)}
                       Errado
                     </button>
-                      </>
+                      </div>
                     )}
 
                     {/* Quick indicator icon */}
                     {(isAnswered || isAnnulled) && (
-                      <div className="flex items-center gap-1.5 ml-2 text-xs font-bold">
+                      <div className="flex items-center gap-1.5 text-xs font-bold">
                         {isAnnulled ? (
                           <span className="text-amber-700 flex items-center gap-1">
                             <AlertCircle className="w-4 h-4" /> Anulada
