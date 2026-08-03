@@ -34,9 +34,13 @@ public class DailyStudyService {
         LocalDate today = bootstrap.userToday(currentUser.id());
         refreshReviews(today);
         var summary = jdbc.sql("""
-            SELECT COALESCE(SUM(planned_minutes),0) planned_minutes,COALESCE(SUM(completed_minutes),0) completed_minutes,
-              COUNT(*) total_tasks,COUNT(*) FILTER(WHERE status='COMPLETED') completed_tasks,
-              COALESCE(SUM(question_goal),0) question_goal,COALESCE(SUM(questions_answered),0) questions_answered
+            SELECT COALESCE(SUM(planned_minutes) FILTER(WHERE NOT outside_planned_hours),0) planned_minutes,
+              COALESCE(SUM(completed_minutes) FILTER(WHERE NOT outside_planned_hours),0) completed_minutes,
+              COUNT(*) FILTER(WHERE NOT outside_planned_hours) total_tasks,
+              COUNT(*) FILTER(WHERE NOT outside_planned_hours AND status='COMPLETED') completed_tasks,
+              COALESCE(SUM(planned_minutes) FILTER(WHERE outside_planned_hours AND status<>'SKIPPED'),0) extra_question_minutes,
+              COALESCE(SUM(question_goal) FILTER(WHERE status<>'SKIPPED'),0) question_goal,
+              COALESCE(SUM(questions_answered),0) questions_answered
             FROM daily_tasks WHERE user_id=:u AND plan_id=:p AND task_date=:date
             """).param("u",currentUser.id()).param("p",planId).param("date",today).query().singleRow();
         int planned = number(summary,"planned_minutes"), completed = number(summary,"completed_minutes");
@@ -100,7 +104,8 @@ public class DailyStudyService {
         if(availableMinutes<30||availableMinutes>720) throw new IllegalArgumentException("Informe entre 30 minutos e 12 horas");
         var plan=activePlan(); UUID planId=(UUID)plan.get("id"); LocalDate date=bootstrap.userToday(currentUser.id());
         var tasks=jdbc.sql("""
-            SELECT * FROM daily_tasks WHERE user_id=:u AND plan_id=:p AND task_date=:date AND status<>'COMPLETED'
+            SELECT * FROM daily_tasks WHERE user_id=:u AND plan_id=:p AND task_date=:date
+              AND status NOT IN('COMPLETED','SKIPPED') AND NOT outside_planned_hours
             ORDER BY CASE WHEN activity_type IN('REVIEW','REVISION') THEN 0 ELSE 1 END,priority DESC,position
             """).param("u",currentUser.id()).param("p",planId).param("date",date).query().listOfRows();
         int remaining=availableMinutes;
@@ -117,6 +122,34 @@ public class DailyStudyService {
         }
         engagement.createNotification(currentUser.id(),planId,"PLAN_REBALANCED","Plano de hoje reorganizado",
                 "As prioridades foram preservadas para caber em "+availableMinutes+" minutos.","NORMAL");
+        return today();
+    }
+
+    @Transactional
+    public Map<String,Object> skipOptionalQuestions(UUID taskId) {
+        LocalDate date=bootstrap.userToday(currentUser.id());
+        var rows=jdbc.sql("""
+            SELECT dt.* FROM daily_tasks dt JOIN study_plans sp ON sp.id=dt.plan_id
+            WHERE dt.id=:id AND dt.user_id=:u AND sp.user_id=:u AND dt.task_date=:date
+            FOR UPDATE
+            """).param("id",taskId).param("u",currentUser.id()).param("date",date).query().listOfRows();
+        if(rows.isEmpty())throw new NoSuchElementException("Bloco de questões não encontrado");
+        var task=rows.getFirst();
+        if(!"QUESTIONS".equals(task.get("activity_type"))||!Boolean.TRUE.equals(task.get("is_optional")))
+            throw new IllegalStateException("A revisão semanal obrigatória não pode ser dispensada.");
+        if("COMPLETED".equals(task.get("status")))throw new IllegalStateException("Este treino já foi concluído.");
+        int activeSessions=jdbc.sql("SELECT COUNT(*) FROM study_sessions WHERE daily_task_id=:id AND status IN('RUNNING','PAUSED')")
+                .param("id",taskId).query(Integer.class).single();
+        if(activeSessions>0)throw new IllegalStateException("Finalize o treino de questões em andamento antes de dispensá-lo.");
+        jdbc.sql("""
+            UPDATE daily_tasks SET status='SKIPPED',completed_minutes=0,updated_at=now()
+            WHERE id=:id AND status NOT IN('COMPLETED','SKIPPED')
+            """).param("id",taskId).update();
+        if("AVAILABLE".equals(task.get("status")))jdbc.sql("""
+                UPDATE daily_tasks SET status='AVAILABLE',updated_at=now() WHERE id=(
+                  SELECT id FROM daily_tasks WHERE user_id=:u AND plan_id=:p AND task_date=:date AND status='PENDING'
+                  ORDER BY position LIMIT 1)
+                """).param("u",currentUser.id()).param("p",task.get("plan_id")).param("date",date).update();
         return today();
     }
 

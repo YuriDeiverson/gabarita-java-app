@@ -385,6 +385,12 @@
   background: transparent; color: var(--ink-soft);
   cursor: pointer;
 }
+.timer-mode > strong {
+  padding: var(--space-2) var(--space-4);
+  color: var(--accent-deep);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
 .timer-mode button.is-active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-1); }
 .timer-mode select { border: 1px solid var(--hairline); background: var(--surface); margin-left: var(--space-2); }
 
@@ -471,6 +477,8 @@
   border-radius: var(--radius-sm);
 }
 .today-task-list li.is-current { background: var(--accent-wash); }
+.today-task-list li.is-extra { margin-top: var(--space-2); border-top: 1px dashed var(--hairline); border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+.today-task-list li.is-skipped { opacity: 0.62; }
 .task-state {
   width: 22px; height: 22px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
@@ -478,6 +486,8 @@
 }
 .today-task-list li.is-complete .task-state { background: var(--accent-deep); border-color: var(--accent-deep); color: var(--surface); }
 .today-task-list li.is-complete .task-state svg { width: 13px; height: 13px; }
+.today-task-list li.is-skipped .task-state { color: var(--ink-faint); }
+.today-task-list li.is-skipped .task-state svg { width: 12px; height: 12px; }
 .today-task-list li.is-current .task-state { border-color: var(--accent); color: var(--accent); }
 .today-task-list li.is-current .task-state svg { width: 8px; height: 8px; fill: currentColor; }
 .today-task-list button {
@@ -490,6 +500,13 @@
 .today-task-list small { font-size: 0.78rem; color: var(--ink-soft); }
 .today-task-list li.is-complete strong { color: var(--ink-soft); text-decoration: line-through; text-decoration-color: var(--hairline); }
 .task-tag { font-size: 0.72rem; color: var(--ink-faint); white-space: nowrap; flex-shrink: 0; }
+.today-task-list .skip-question-task {
+  flex: 0 0 auto; width: auto; padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+  color: var(--ink-soft); font-size: 0.7rem; font-weight: 600; white-space: nowrap;
+}
+.today-task-list .skip-question-task:hover { border-color: var(--ink-faint); color: var(--ink); }
+.today-task-list .skip-question-task:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .today-plan-footer {
   display: flex; align-items: center; gap: var(--space-2);
@@ -498,6 +515,16 @@
 }
 .today-plan-footer svg { color: var(--accent); flex-shrink: 0; }
 .today-plan-footer strong { color: var(--ink); }
+
+.extra-questions-note {
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  padding: var(--space-3); border-radius: var(--radius-sm);
+  background: var(--paper); color: var(--ink-soft); font-size: 0.78rem;
+}
+.extra-questions-note svg { width: 17px; height: 17px; flex-shrink: 0; color: var(--accent); }
+.extra-questions-note span { display: flex; flex-direction: column; gap: 2px; }
+.extra-questions-note strong { color: var(--ink); font-size: 0.82rem; }
+.extra-questions-note.is-mandatory { background: var(--accent-wash); color: var(--accent-deep); }
 
 .less-time-button {
   padding: var(--space-3);

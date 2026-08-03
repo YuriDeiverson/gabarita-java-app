@@ -96,7 +96,7 @@ const belongsToExactTopic=(question:Question,context:ActiveStudyContext)=>{
   const searchable=normalizeStudyText([question.topic,question.reference,question.text].filter(Boolean).join(' '));
   const topic=normalizeStudyText(context.topicTitle);
   if(question.topic&&normalizeStudyText(question.topic)===topic)return true;
-  const legalAnchors=(context.topicTitle.match(/\d+/g)||[]).filter(value=>value.length>=2);
+  const legalAnchors:string[]=(context.topicTitle.match(/\d+/g)??[] as string[]).filter(value=>value.length>=2);
   if(legalAnchors.length>0)return legalAnchors.every(anchor=>searchable.split(' ').includes(anchor));
   return questionRelevance(question,context)>=60;
 };

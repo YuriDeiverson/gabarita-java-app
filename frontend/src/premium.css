@@ -818,6 +818,18 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .question-pomodoro-compact .question-timer-message + .question-pomodoro-body { margin-top: 12px !important; }
 .question-pomodoro-stats article { background: var(--surface-2) !important; }
 .question-pomodoro-actions button, .question-pomodoro-actions select { border-radius: 10px !important; }
+.question-pomodoro-preset {
+  min-height: 40px;
+  padding: 8px 10px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  background: var(--surface-2);
+  font-size: 9px;
+  font-weight: 650;
+}
 .question-timer-message { border-color: var(--line) !important; background: var(--accent-soft) !important; color: var(--accent-2) !important; }
 .question-timer-message.is-error { background: #f1e8e6 !important; color: var(--danger) !important; }
 .question-timer-message.is-warning { background: #eee9e0 !important; color: var(--warning) !important; }

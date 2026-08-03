@@ -71,22 +71,39 @@ public class StudySessionService {
     }
 
     @Transactional
-    public Map<String,Object> startQuestionPractice(UUID userId, UUID planId, int focusMinutes, String device) {
+    public Map<String,Object> startQuestionPractice(UUID userId, UUID planId, int focusMinutes, String device,UUID dailyTaskId) {
         if(focusMinutes<5||focusMinutes>120) throw new IllegalArgumentException("O foco deve ter entre 5 e 120 minutos");
         int owned=jdbc.sql("SELECT COUNT(*) FROM study_plans WHERE id=:p AND user_id=:u AND status='ACTIVE'")
                 .param("p",planId).param("u",userId).query(Integer.class).single();
         if(owned==0) throw new NoSuchElementException("Plano não encontrado");
+        Map<String,Object> task=null;
+        if(dailyTaskId!=null){
+            task=ownedTask(userId,dailyTaskId);
+            if(!planId.equals(task.get("plan_id"))||!"QUESTIONS".equals(task.get("activity_type")))
+                throw new IllegalArgumentException("O bloco informado não é um treino de questões deste plano.");
+            if(List.of("COMPLETED","SKIPPED").contains(String.valueOf(task.get("status"))))
+                throw new IllegalStateException("Este bloco de questões já foi encerrado.");
+            if(!bootstrap.userToday(userId).equals(localDate(task.get("task_date"))))
+                throw new IllegalStateException("Este bloco de questões não pertence ao plano de hoje.");
+        }
         var active=active(userId);
         if(active!=null){
-            if("QUESTIONS".equals(active.get("session_kind"))) return active;
+            if("QUESTIONS".equals(active.get("session_kind"))&&(dailyTaskId==null||dailyTaskId.equals(active.get("daily_task_id")))) return active;
+            if("QUESTIONS".equals(active.get("session_kind")))
+                throw new IllegalStateException("Finalize o treino de questões atual antes de iniciar o bloco do cronograma.");
             throw new IllegalStateException("Finalize ou pause a sessão de estudo atual antes de iniciar questões.");
         }
         UUID id=UUID.randomUUID();
-        String config="{\"focusMinutes\":"+focusMinutes+",\"shortBreakMinutes\":5,\"longBreakMinutes\":15,\"cycles\":4}";
+        String config="{\"focusMinutes\":"+focusMinutes+",\"shortBreakMinutes\":10,\"longBreakMinutes\":10,\"cycles\":4}";
         jdbc.sql("""
-            INSERT INTO study_sessions(id,user_id,plan_id,started_at,active_since,status,mode,pomodoro,device,session_kind,context_title)
-            VALUES(:id,:u,:p,now(),now(),'RUNNING','POMODORO',CAST(:config AS jsonb),:device,'QUESTIONS','Banco completo de questões')
-            """).param("id",id).param("u",userId).param("p",planId).param("config",config).param("device",device).update();
+            INSERT INTO study_sessions(id,user_id,plan_id,daily_task_id,roadmap_topic_id,started_at,active_since,status,mode,pomodoro,device,session_kind,context_title)
+            VALUES(:id,:u,:p,:task,:topic,now(),now(),'RUNNING','POMODORO',CAST(:config AS jsonb),:device,'QUESTIONS',:title)
+            """).param("id",id).param("u",userId).param("p",planId)
+                .param("task",dailyTaskId).param("topic",task==null?null:task.get("roadmap_topic_id"))
+                .param("config",config).param("device",device)
+                .param("title",task==null?"Banco completo de questões":Boolean.TRUE.equals(task.get("is_optional"))?"Questões extras do dia":"Revisão semanal com questões").update();
+        if(dailyTaskId!=null)jdbc.sql("UPDATE daily_tasks SET status='IN_PROGRESS',updated_at=now() WHERE id=:id AND status IN('PENDING','AVAILABLE')")
+                .param("id",dailyTaskId).update();
         return one(userId,id);
     }
 
@@ -123,6 +140,18 @@ public class StudySessionService {
                 .param("notes",notes).param("id",id).update();
         session=one(userId,id);
         int answered=number(session,"questions_answered");
+        if(session.get("daily_task_id") instanceof UUID taskId){
+            var task=ownedTask(userId,taskId);
+            int correct=number(session,"correct_answers");
+            int minutes=Math.max(1,number(session,"effective_seconds")/60);
+            Double accuracy=answered==0?null:correct*100d/answered;
+            jdbc.sql("""
+                UPDATE daily_tasks SET completed_minutes=:minutes,questions_answered=:answered,correct_answers=:correct,
+                  achieved_accuracy=:accuracy,status='COMPLETED',completed_at=now(),updated_at=now() WHERE id=:id
+                """).param("minutes",minutes).param("answered",answered).param("correct",correct)
+                    .param("accuracy",accuracy).param("id",taskId).update();
+            releaseNextTask(userId,(UUID)task.get("plan_id"),localDate(task.get("task_date")));
+        }
         engagement.award(userId,10+Math.min(30,answered),"QUESTION_PRACTICE","STUDY_SESSION",id,"question-practice:"+id);
         engagement.refreshDay(userId,(UUID)session.get("plan_id"));
         return completion(session,List.of(answered+" questões registradas em "+Math.max(1,number(session,"effective_seconds")/60)+" minutos."));

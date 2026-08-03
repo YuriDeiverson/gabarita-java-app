@@ -14,6 +14,194 @@ export interface CourseTopic {
   subtopics: string[];
 }
 
+const TECHNOLOGY_SPECIFIC_TOPICS: CourseTopic[] = [
+  {
+    id: 'especificos_tecnologia_informacao',
+    title: 'Tecnologia da Informação',
+    category: 'Conhecimentos Específicos',
+    subtopics: [
+      '1. Lógica e programação',
+      '1.1 Algoritmos básicos, scripts, versionamento e boas práticas',
+      '2. Bancos de dados e SQL',
+      '2.1 Modelagem, integridade e consultas',
+      '3. Integração de sistemas e APIs',
+      '3.1 Conceitos e automação de fluxos',
+      '4. ETL/ELT e pipelines de dados',
+      '4.1 Ingestão, transformação, qualidade, governança e rastreabilidade',
+      '5. BI e dashboards',
+      '5.1 Camada semântica, consistência de métricas e relatórios automatizados',
+      '6. Segurança e LGPD aplicada',
+      '6.1 Controle de acesso, logs, minimização e boas práticas no setor público',
+      '7. Automação de indicadores e bibliometria computacional',
+      '8. Gestão de Redes e Gestão de Equipes de TI',
+      '9. Gerenciamento de Projetos de Tecnologia da Informação e Comunicação',
+      '10. Uso de big data e ciência de dados em avaliação',
+      '10.1 Integração e vinculação de bases; qualidade e governança de dados; documentação, rastreabilidade e auditorabilidade; privacidade e proteção de dados; potenciais e limites de análises baseadas em grandes bases administrativas e registros digitais',
+    ],
+  },
+  {
+    id: 'especificos_sistemas_operacionais',
+    title: 'Sistemas Operacionais',
+    category: 'Conhecimentos Específicos',
+    subtopics: [
+      '1. Conceitos e configurações básicas de MS Windows Server 2025 (LTSC): DNS, DHCP, Exchange, Active Directory, GPO, failover clustering, Kerberos, NTLM, file server, replicação e desduplicação; e Linux: sistemas de arquivos EXT4, BTRFS e XFS, conceitos de LVM e gerenciamento de processos',
+      '2. Gerenciamento de memória, processos, entrada e saída',
+      '2.1 Conceitos de processos e threads',
+      '2.2 Memória real e virtual, paginação, segmentação, segmentação com paginação e swap',
+      '2.3 Tipos de processamento: batch e transacional',
+      '2.4 Administração de usuários, grupos, permissões e controles de acesso',
+      '3. Noções de serviços de diretórios (LDAP)',
+      '4. Virtualização de servidores',
+      '5. Ferramentas de alta disponibilidade',
+      '6. Contêineres e orquestração',
+      '7. Contingência e continuidade de serviços',
+      '8. Sistema Eletrônico de Informações (SEI) — parte operacional',
+    ],
+  },
+  {
+    id: 'especificos_desenvolvimento_sistemas',
+    title: 'Desenvolvimento de Sistemas',
+    category: 'Conhecimentos Específicos',
+    subtopics: [
+      '1. Projeto e desenvolvimento de sistemas em Java, AngularJS, TypeScript, Python e Framework Hibernate',
+      '2. Interoperabilidade de sistemas (APIs), SOA e web services',
+      '3. Controles e testes de segurança para aplicações web',
+      '4. Portais corporativos, JSON; padrões HTML, xHTML, XML e CSS',
+      '5. Modelo de Acessibilidade do Governo Eletrônico',
+    ],
+  },
+  {
+    id: 'especificos_engenharia_software',
+    title: 'Engenharia de Software',
+    category: 'Conhecimentos Específicos',
+    subtopics: [
+      '1. Fundamentos de engenharia de software: engenharia de requisitos, processos de desenvolvimento em cascata e iterativo, projeto orientado a objetos, testes e validação',
+      '2. Medição e estimativas de projetos de software: análise e processo de contagem de pontos de função, funções de dados e transacionais e fatores de ajuste',
+      '3. Processo de desenvolvimento de software',
+      '3.1 Processo unificado: noções de RUP, disciplinas, fases, papéis, atividades e artefatos',
+      '3.2 Processo ágil: conceito e metodologia Scrum',
+    ],
+  },
+  {
+    id: 'especificos_banco_dados_gestao_informacao',
+    title: 'Banco de Dados e Gestão da Informação',
+    category: 'Conhecimentos Específicos',
+    subtopics: [
+      '1. Fundamentos: finalidades, níveis de abstração, modelagem de dados e modelagem funcional',
+      '2. Administração de dados: fundamentos; dado, informação, conhecimento e inteligência; modelos e níveis de abstração; metadados; linguagens de definição e manipulação de dados; normalização',
+      '3. Administração de banco de dados: fundamentos, SGBDs, organização de arquivos, técnicas de armazenamento, métodos de acesso, tipos e projeto de bancos de dados',
+      '4. Soluções de suporte à decisão: data warehouse, OLAP, data mining e business intelligence (BI)',
+    ],
+  },
+  {
+    id: 'especificos_seguranca_informacao',
+    title: 'Segurança da Informação',
+    category: 'Conhecimentos Específicos',
+    subtopics: [
+      '1. Gestão de segurança da informação: NBR ISO/IEC 27001 e NBR ISO/IEC 27002',
+      '2. Métodos de autenticação',
+      '2.1 Autenticação de dois fatores (2FA), biometria, token e certificados',
+      '2.2 Protocolos OAuth 2.0, OpenID Connect e JWT',
+      '3. Ameaças e vulnerabilidades: SQL/LDAP injection, XSS, quebra de autenticação e de sessão, referência insegura a objetos, CSRF e armazenamento inseguro de dados criptografados',
+      '4. Segurança de aplicativos web, análise de vulnerabilidades, OWASP e técnicas de proteção',
+      '5. Prevenção e combate a DDoS, DoS, DNS spoofing, eavesdropping, phishing, brute force e port scanning',
+      '6. Criptografia e proteção de dados em trânsito e em repouso; sistemas simétricos, assimétricos e principais protocolos',
+      '7. Assinatura e certificação digital',
+      '8. Gestão de riscos e continuidade de negócio: NBR ISO/IEC 27005',
+      '9. Lei nº 13.709/2018 e suas alterações — Lei Geral de Proteção de Dados Pessoais (LGPD)',
+    ],
+  },
+  {
+    id: 'especificos_fiscalizacao_contratos_ti',
+    title: 'Fiscalização de Contratos de TI',
+    category: 'Conhecimentos Específicos',
+    subtopics: [
+      '1. Gestão de contratação de soluções de TI',
+      '2. Legislação aplicável à contratação de bens e serviços de TI',
+      '2.1 Lei nº 13.303/2016 e suas alterações',
+      '3. Elaboração e fiscalização de contratos de tecnologia da informação',
+      '3.1 Critérios de remuneração por esforço versus produto',
+      '3.2 Cláusulas e indicadores de nível de serviço',
+      '3.3 Papel do fiscalizador do contrato',
+      '3.4 Papel do preposto da contratada',
+      '3.5 Acompanhamento da execução contratual',
+      '3.6 Registro e notificação de irregularidades',
+      '3.7 Definição e aplicação de penalidades e sanções administrativas',
+      '3.8 Contratações de serviços de TI baseadas em UST, pontos de função e postos de trabalho com níveis de serviço',
+    ],
+  },
+  {
+    id: 'especificos_ciencia_dados',
+    title: 'Ciência de Dados',
+    category: 'Conhecimentos Específicos',
+    subtopics: [
+      '1. Manipulação, tratamento e visualização de dados',
+      '1.1 Técnicas de visualização de dados',
+      '1.2 Tratamento de valores faltantes',
+      '1.3 Tratamento de dados categóricos',
+      '1.4 Normalização numérica',
+      '1.5 Detecção e tratamento de outliers',
+      '1.6 Dataframes com Python Pandas: leitura, seleção, agregação, valores faltantes, duplicados e junção',
+      '2. Aprendizado supervisionado: regressão e classificação',
+      '2.1 Métricas de avaliação',
+      '2.2 Overfitting e underfitting',
+      '2.3 Regularização',
+      '2.4 Seleção de modelos e erro de generalização',
+      '2.5 Validação cruzada',
+      '2.6 Conjuntos de treino, validação e teste',
+      '2.7 Trade-off entre variância e viés',
+      '2.8 Regressão linear e regressão logística',
+      '2.9 Árvores de decisão e random forests',
+      '2.10 Máquina de vetores de suporte (SVM)',
+      '2.11 Naive Bayes',
+      '2.12 K-NN',
+      '2.13 Ensembles',
+      '2.14 Aprendizado supervisionado com Python scikit-learn',
+      '2.15 Otimização de hiperparâmetros',
+      '3. Aprendizado não supervisionado',
+      '3.1 Redução de dimensionalidade: PCA',
+      '3.2 Agrupamento K-means',
+      '3.3 Mistura de gaussianas',
+      '3.4 Agrupamento hierárquico',
+      '3.5 Regras de associação',
+      '3.6 Aprendizado não supervisionado com Python scikit-learn',
+      '4. Redes neurais artificiais',
+      '4.1 Noções de redes neurais artificiais: definições e arquitetura',
+      '4.2 Funções de ativação',
+      '4.3 Otimização: gradiente, gradiente estocástico, backpropagation, inicialização de pesos e vanishing gradients',
+      '4.4 Regularização com normas L1 e L2, dropout e early stopping',
+      '4.5 Noções de redes neurais convolucionais',
+      '4.6 Noções de redes neurais recorrentes',
+      '4.7 Treino de redes neurais com Keras e PyTorch',
+    ],
+  },
+];
+
+const TECHNOLOGY_SPECIFIC_TOPIC_IDS = new Set(TECHNOLOGY_SPECIFIC_TOPICS.map(topic => topic.id));
+
+const TECHNOLOGY_SPECIFIC_STUDY_SECTIONS: StudySection[] = TECHNOLOGY_SPECIFIC_TOPICS.map(topic => ({
+  id: topic.id,
+  title: topic.title.replace('Conhecimentos Específicos: ', ''),
+  icon: 'Terminal',
+  color: 'slate',
+  difficulty: 'Difícil',
+  weight: 'Específico',
+  paretoJustification: 'Conteúdo integrante dos conhecimentos específicos do Cargo 5 — Gestor Especializado em Ciência e Tecnologia, especialidade Tecnologia da Informação.',
+  cards: topic.subtopics.map((subtopic, index) => ({
+    id: `${topic.id}-${index + 1}`,
+    title: subtopic,
+    paretoRatio: 'Conteúdo do edital',
+    isQuente: true,
+    content: `<p>Estude este item do edital com foco nos conceitos, aplicações práticas, diferenças entre tecnologias e resolução de questões da banca.</p><p><strong>Assunto:</strong> ${subtopic}.</p>`,
+    keyTakeaways: [
+      `Dominar os conceitos e a aplicação de ${subtopic.replace(/^\d+(?:\.\d+)?\.\s*/, '')}.`,
+      'Revisar definições, casos de uso, limitações e boas práticas relacionadas ao assunto.',
+      'Resolver questões e registrar os erros recorrentes para revisão espaçada.',
+    ],
+    materials: [subtopic],
+  })),
+}));
+
 const COMMON_BASIC_TOPICS: CourseTopic[] = [
   {
     id: 'portugues',
@@ -168,6 +356,538 @@ const COMMON_BASIC_TOPICS: CourseTopic[] = [
     ],
   },
 ];
+
+const POLICE_BASIC_TOPICS: CourseTopic[] = [
+  {
+    ...COMMON_BASIC_TOPICS.find(topic => topic.id === 'portugues')!,
+    subtopics: [...COMMON_BASIC_TOPICS.find(topic => topic.id === 'portugues')!.subtopics],
+  },
+  {
+    id: 'pc_ti_seguranca_cibernetica',
+    title: 'Tecnologia da Informação e Segurança Cibernética',
+    category: 'TI Básica',
+    subtopics: [
+      'I.1 Noções de sistema operacional: ambientes Linux e Windows',
+      'I.2 Edição de textos, planilhas e apresentações: pacotes Microsoft Office',
+      'I.3 Redes de computadores',
+      'I.3.1 Conceitos básicos, ferramentas, aplicativos e procedimentos de Internet e intranet',
+      'I.3.2 Programas de navegação: Microsoft Edge e Google Chrome',
+      'I.3.3 Programas de correio eletrônico: Microsoft Outlook',
+      'I.3.4 Sítios de busca e pesquisa na Internet',
+      'I.3.5 Grupos de discussão',
+      'I.3.6 Computação na nuvem (cloud computing)',
+      'I.4 Organização e gerenciamento de informações, arquivos, pastas e programas',
+      'I.5 Segurança da informação',
+      'I.5.1 Procedimentos de segurança',
+      'I.5.2 Noções de vírus, worms e pragas virtuais',
+      'I.5.3 Aplicativos de segurança: antivírus, firewall, anti-spyware e similares',
+      'I.5.4 Procedimentos de backup',
+      'I.5.5 Armazenamento de dados na nuvem (cloud storage)',
+      'I.6 Banco de dados',
+      'I.6.1 Organização de arquivos e métodos de acesso',
+      'I.6.2 Abstração e modelos de dados',
+      'I.6.3 Sistemas gerenciadores de banco de dados',
+      'I.6.4 Linguagens de definição e manipulação de dados',
+      'I.6.5 SQL',
+      'I.6.6 Controle de proteção, segurança e integridade',
+      'I.6.7 Bancos de dados distribuídos e orientados a objetos',
+      'I.7 Lei nº 13.709/2018 — Lei Geral de Proteção de Dados Pessoais (LGPD)',
+      'I.8 Serviços públicos digitais',
+      'I.9 Inteligência Artificial',
+      'I.10 Linguagens de programação: Java, Python, Apex e C#',
+      'II.1 Fundamentos de Segurança da Informação',
+      'II.1.1 Princípio da confidencialidade',
+      'II.1.2 Integridade',
+      'II.1.3 Disponibilidade',
+      'II.2 Gestão de Riscos e Conformidade',
+      'II.2.1 Avaliação de riscos',
+      'II.2.2 Políticas de segurança',
+      'II.2.3 Conformidade com normas e regulamentações',
+      'II.3 Segurança de Rede',
+      'II.3.1 Firewalls, IDS/IPS, VPNs e segmentação de rede',
+      'II.4 Criptografia',
+      'II.4.1 Técnicas de criptografia e principais ferramentas',
+      'II.5 Segurança em Nuvem',
+      'II.5.1 Práticas de segurança para ambientes de nuvem',
+      'II.6 Gestão de Identidades e Acesso: autenticação, autorização, SSO, SAML, OAuth2 e OpenID Connect',
+      'II.7 Principais tipos de ataques e vulnerabilidades',
+      'II.8 Controles e testes de segurança para aplicações Web e Web Services',
+      'II.9 Soluções de Segurança da Informação: Firewall, IDS, IPS, SIEM, Proxy, IAM, PAM, antivírus e antispam',
+      'II.10 Frameworks de segurança: MITRE, CIS Controls e NIST Cybersecurity Framework (NIST CSF)',
+      'II.11 Tratamento de Incidentes Cibernéticos',
+      'II.12 Assinatura e certificação digital, criptografia e proteção de dados em trânsito e em repouso',
+      'II.13 Segurança em nuvens e de contêineres',
+    ],
+  },
+  {
+    id: 'pc_raciocinio_logico_matematico',
+    title: 'Raciocínio Lógico-Matemático',
+    category: 'Raciocínio Lógico-Matemático',
+    subtopics: [
+      '1. Princípios de contagem',
+      '2. Razões e proporções',
+      '3. Regras de três simples',
+      '4. Porcentagens',
+      '5. Equações de 1º e de 2º graus',
+      '6. Sequências numéricas',
+      '7. Progressões aritméticas e geométricas',
+      '8. Funções e gráficos',
+      '9. Estruturas lógicas',
+      '10. Lógica de argumentação',
+      '10.1 Analogias, inferências, deduções e conclusões',
+      '11. Lógica sentencial ou proposicional',
+      '11.1 Proposições simples e compostas',
+      '11.2 Tabelas-verdade',
+      '11.3 Equivalências',
+      '11.4 Leis de De Morgan',
+      '11.5 Diagramas lógicos',
+      '12. Lógica de primeira ordem',
+      '13. Princípios de contagem e probabilidade',
+      '14. Operações com conjuntos',
+      '15. Raciocínio lógico envolvendo problemas aritméticos, geométricos e matriciais',
+    ],
+  },
+  {
+    id: 'pc_direitos_humanos',
+    title: 'Noções de Direitos Humanos',
+    category: 'Noções de Direitos Humanos',
+    subtopics: [
+      '1. Teoria geral dos direitos humanos',
+      '1.1 Conceitos, terminologia, estrutura normativa e fundamentação',
+      '2. Afirmação histórica dos direitos humanos',
+      '3. Direitos humanos e responsabilidade do Estado',
+      '4. Direitos humanos na Constituição Federal',
+      '5. Política Nacional de Direitos Humanos',
+      '6. A Constituição brasileira e os tratados internacionais de direitos humanos',
+      '7. Pacto de São José da Costa Rica e Decreto nº 678/1992 — Convenção Americana sobre Direitos Humanos',
+    ],
+  },
+  {
+    id: 'pc_atualidades',
+    title: 'Atualidades',
+    category: 'Atualidades',
+    subtopics: [
+      '1. Tópicos relevantes e atuais de segurança, transportes, política, economia, sociedade, educação, saúde, cultura, tecnologia, energia, relações internacionais, desenvolvimento sustentável e ecologia, suas inter-relações e vinculações históricas',
+    ],
+  },
+  {
+    ...COMMON_BASIC_TOPICS.find(topic => topic.id === 'etica_servico_publico')!,
+    subtopics: [...COMMON_BASIC_TOPICS.find(topic => topic.id === 'etica_servico_publico')!.subtopics],
+  },
+];
+
+const POLICE_SPECIFIC_TOPICS: CourseTopic[] = [
+  {
+    id: 'pc_direito_penal',
+    title: 'Conhecimentos Específicos: Noções de Direito Penal',
+    category: 'Conhecimentos Específicos - Polícia Civil',
+    subtopics: [
+      '1. Aplicação da lei penal',
+      '1.1 Princípios',
+      '1.2 Lei penal no tempo e no espaço',
+      '1.3 Tempo e lugar do crime',
+      '1.4 Lei penal excepcional, especial e temporária',
+      '1.5 Contagem de prazo',
+      '1.6 Irretroatividade da lei penal',
+      '2. Crimes contra a pessoa',
+      '3. Crimes contra o patrimônio',
+      '4. Crimes contra a administração pública',
+      '5. Disposições constitucionais aplicáveis ao direito penal',
+    ],
+  },
+  {
+    id: 'pc_direito_processual_penal',
+    title: 'Conhecimentos Específicos: Noções de Direito Processual Penal',
+    category: 'Conhecimentos Específicos - Polícia Civil',
+    subtopics: [
+      '1. Disposições preliminares do Código de Processo Penal',
+      '2. Inquérito policial',
+      '2.1 Histórico, natureza, conceito, finalidade, características, fundamento, titularidade, grau de cognição, valor probatório, formas de instauração, notitia criminis, delatio criminis, procedimentos investigativos, indiciamento, garantias do investigado e conclusão',
+      '3. Prisão e liberdade provisória',
+      '4. Disposições constitucionais aplicáveis ao direito processual penal',
+      '5. Lei nº 9.099/1995 e suas alterações',
+    ],
+  },
+  {
+    id: 'pc_direito_constitucional',
+    title: 'Conhecimentos Específicos: Noções de Direito Constitucional',
+    category: 'Conhecimentos Específicos - Polícia Civil',
+    subtopics: [
+      '1. Constituição Federal de 1988',
+      '1.1 Direitos e Garantias Fundamentais',
+      '1.2 Título V, Capítulo III — Da Segurança Pública',
+    ],
+  },
+  {
+    id: 'pc_direito_administrativo',
+    title: 'Conhecimentos Específicos: Noções de Direito Administrativo',
+    category: 'Conhecimentos Específicos - Polícia Civil',
+    subtopics: [
+      '1. Organização administrativa',
+      '1.1 Centralização, descentralização, concentração e desconcentração',
+      '1.2 Administração direta e indireta',
+      '1.3 Autarquias, fundações, empresas públicas e sociedades de economia mista',
+      '2. Ato administrativo',
+      '2.1 Conceito, requisitos, atributos, classificação e espécies',
+      '3. Agente público',
+      '3.1 Legislação pertinente',
+      '3.1.1 Disposições constitucionais aplicáveis',
+      '3.1.2 Cargo, emprego e função pública',
+      '4. Poderes administrativos',
+      '4.1 Poderes hierárquico, disciplinar, regulamentar e de polícia',
+      '4.2 Uso e abuso do poder',
+      '5. Licitações',
+      '5.1 Princípios',
+      '5.2 Contratação direta, dispensa e inexigibilidade',
+      '5.3 Modalidades, tipos e procedimentos',
+      '6. Controle da administração pública',
+      '6.1 Controle judicial',
+      '6.2 Controle legislativo',
+      '7. Responsabilidade civil do Estado',
+      '7.1 Responsabilidade por ato comissivo do Estado',
+      '7.2 Responsabilidade por omissão do Estado',
+      '7.3 Requisitos para a demonstração da responsabilidade do Estado',
+      '7.4 Causas excludentes e atenuantes da responsabilidade do Estado',
+    ],
+  },
+  {
+    id: 'pc_legislacao_institucional_alagoas',
+    title: 'Conhecimentos Específicos: Legislação Institucional do Estado de Alagoas',
+    category: 'Conhecimentos Específicos - Polícia Civil',
+    subtopics: [
+      '1. Constituição do Estado de Alagoas',
+      '2. Lei Estadual nº 3.437/1975 e suas alterações — Estatuto da Polícia Civil do Estado de Alagoas',
+      '3. Lei Estadual nº 5.247/1991 e suas alterações — Regime Jurídico Único dos Servidores Públicos Civis do Estado de Alagoas, das Autarquias e das Fundações Públicas Estaduais',
+      '4. Lei nº 3.437/1975 e suas alterações — Estatuto da Polícia Civil do Estado de Alagoas',
+      '5. Lei nº 14.735 e suas alterações — Lei Orgânica Nacional das Polícias Civis',
+      '6. Lei nº 6.441/2003 e suas alterações',
+      '7. Lei Estadual nº 6.276/2001 e suas alterações',
+      '8. Lei Estadual nº 6.479/2004',
+      '9. Lei nº 10.826/2003 e suas alterações — Estatuto do Desarmamento',
+      '10. Lei Estadual nº 4.590/1984',
+    ],
+  },
+  {
+    id: 'pc_legislacao_penal_especial',
+    title: 'Conhecimentos Específicos: Legislação Penal Especial',
+    category: 'Conhecimentos Específicos - Polícia Civil',
+    subtopics: [
+      '1. Crimes contra as finanças públicas',
+      '2. Lei nº 11.343/2006 e suas alterações — tráfico ilícito e uso indevido de substâncias entorpecentes',
+      '3. Lei nº 12.850/2013 e suas alterações — crime organizado',
+      '4. Lei nº 7.492/1986 — crimes contra o Sistema Financeiro Nacional',
+      '5. Lei nº 8.137/1990 e suas alterações — crimes contra a ordem econômica e tributária e as relações de consumo',
+      '6. Lei nº 9.613/1998 e suas alterações — lavagem de dinheiro',
+      '7. Lei nº 8.176/1991 — crimes contra a ordem econômica',
+      '8. Lei nº 8.072/1990 e suas alterações — crimes hediondos',
+      '9. Lei nº 7.716/1989 e suas alterações — crimes resultantes de preconceito de raça ou de cor',
+      '10. Lei nº 9.455/1997 e suas alterações — crimes de tortura',
+      '11. Lei nº 9.605/1998 e suas alterações — crimes contra o meio ambiente',
+      '12. Crimes de responsabilidade: Decreto-Lei nº 201/1967, Lei nº 1.079/1950 e Lei nº 8.176/1991, com suas alterações',
+      '13. Lei nº 11.101/2005 e suas alterações — crimes falimentares',
+      '14. Lei nº 14.133/2021 — crimes em licitações e contratos administrativos',
+      '15. Lei nº 13.869/2019 — crimes de abuso de autoridade',
+      '15. Convenção de Budapeste: Decreto nº 11.491/2023 — Convenção sobre o Crime Cibernético',
+      '16. Lei nº 13.146/2015 e suas alterações — crimes previstos no Estatuto da Pessoa com Deficiência',
+      '17. Lei nº 10.741/2003 e suas alterações — crimes cometidos contra a pessoa idosa',
+    ],
+  },
+  {
+    id: 'pc_contabilidade_analise_financeira',
+    title: 'Conhecimentos Específicos: Noções de Contabilidade, Análise Financeira e Crimes contra a Ordem Tributária',
+    category: 'Conhecimentos Específicos - Polícia Civil',
+    subtopics: [
+      'I.1 Conceitos, objetivos e finalidades da contabilidade',
+      'I.2 Patrimônio: componentes, equação fundamental, situação líquida e representação gráfica',
+      'I.3 Atos e fatos administrativos: conceitos; fatos permutativos, modificativos e mistos',
+      'I.4 Contas: conceitos, contas de débitos, contas de créditos e saldos',
+      'I.5 Plano de contas: conceitos, elenco, função e funcionamento das contas',
+      'I.6 Contabilização de operações contábeis diversas',
+      'I.7 Análise e conciliações contábeis: composição e análise de contas e conciliação bancária',
+      'I.8 Balancete de verificação: conceitos, modelos e técnicas de elaboração',
+      'I.9 Balanço patrimonial: conceitos, objetivo e composição',
+      'I.10 Demonstração do resultado do exercício: conceito, objetivo e composição',
+      'I.11 Noções de finanças',
+      'I.12 Noções de orçamento',
+      'I.13 Noções de tributos e seus impactos nas operações das empresas',
+      'II.1 Métodos de análise financeira',
+      'II.2 Ferramentas de análise financeira',
+      'II.3 Gestão de risco financeiro',
+      'II.4 Identificação de riscos financeiros',
+      'II.5 Estratégias de mitigação',
+      'II.6 Monitoramento contínuo de riscos',
+      'III.1 Crimes de lavagem de dinheiro ou ocultação de bens, direitos e valores',
+      'III.1.1 Lei nº 9.613/1998 e suas alterações — principais dispositivos e sanções',
+      'III.2 Fraude a credores em processos de recuperação judicial, extrajudicial e falência',
+      'III.3 Crimes contra a previdência social',
+      'III.4 Crimes contra as finanças públicas',
+      'III.5 Crimes contra o Sistema Financeiro Nacional',
+      'III.6 Crimes contra o mercado de capitais',
+      'III.7 Comparação entre fluxos financeiros e capacidade econômica declarada',
+      'III.8 Indícios de fraudes contábeis e ocultação de patrimônio',
+      'III.9 Transações fracionadas para evitar detecção (smurfing)',
+      'III.10 Transferências entre contas de empresas fictícias',
+      'III.11 Uso de laranjas e interpostas pessoas para movimentação de recursos',
+      'III.12 Saques e depósitos de valores elevados sem justificativa',
+      'III.13 Movimentações incompatíveis com a renda declarada',
+      'III.13 Lei nº 8.137/1990 e suas alterações — crimes contra a ordem tributária',
+    ],
+  },
+  {
+    id: 'pc_estatistica_analise_dados',
+    title: 'Conhecimentos Específicos: Estatística e Análise de Dados',
+    category: 'Conhecimentos Específicos - Polícia Civil',
+    subtopics: [
+      'I.1 Estatística descritiva e análise exploratória: gráficos, diagramas, tabelas e medidas de posição, dispersão, assimetria e curtose',
+      'I.2 Probabilidade',
+      'I.2.1 Probabilidade e probabilidade condicional',
+      'I.2.2 Conceitos básicos de probabilidade',
+      'I.2.3 Cálculo de probabilidades condicionais',
+      'I.2.4 Definições básicas e axiomas',
+      'I.2.5 Probabilidade condicional e independência',
+      'I.2.6 Variáveis aleatórias discretas e contínuas',
+      'I.2.7 Distribuições de probabilidades',
+      'I.2.8 Função de probabilidade',
+      'I.2.9 Função densidade de probabilidade',
+      'I.2.10 Esperança e momentos',
+      'I.2.11 Distribuições especiais',
+      'I.2.12 Distribuições condicionais e independência',
+      'I.2.13 Transformação de variáveis',
+      'I.2.14 Leis dos grandes números',
+      'I.2.15 Teorema central do limite',
+      'I.2.16 Amostras aleatórias',
+      'I.2.17 Distribuições amostrais',
+      'I.2.18 Independência de eventos, Regra de Bayes e Teorema da Probabilidade Total',
+      'I.2.19 Conceito de independência',
+      'I.2.20 Aplicação da Regra de Bayes',
+      'I.2.21 Uso do Teorema da Probabilidade Total',
+      'I.2.21 Variáveis aleatórias e funções de probabilidade',
+      'I.2.21.1 Definição e exemplos de variáveis aleatórias',
+      'I.2.21.2 Função de probabilidade para variáveis discretas e função densidade para variáveis contínuas',
+      'I.2.22 Principais distribuições de probabilidade discretas e contínuas',
+      'I.2.22.1 Distribuição uniforme',
+      'I.2.22.2 Distribuição de Bernoulli',
+      'I.2.22.3 Distribuição binomial',
+      'I.2.22.4 Distribuição normal',
+      'I.2.23 Medidas de tendência central',
+      'I.2.23.1 Médias aritmética, ponderada, geométrica e harmônica',
+      'I.2.23.2 Mediana',
+      'I.2.23.3 Moda',
+      'I.2.24 Medidas de dispersão',
+      'I.2.24.1 Amplitude',
+      'I.2.24.2 Variância',
+      'I.2.24.3 Desvio padrão',
+      'I.2.24.4 Coeficiente de variação',
+      'I.2.25 Coeficiente de Correlação de Pearson',
+      'I.2.25.1 Conceito e cálculo da correlação entre duas variáveis',
+      'I.2.26 Teorema Central do Limite',
+      'I.2.26.1 Importância do teorema para a distribuição amostral da média',
+      'I.2.27 Regra Empírica ou Regra dos Três Sigma da distribuição normal',
+      'I.2.27.1 Aproximação da dispersão dos dados na distribuição normal',
+      'I.2.28 Técnicas de amostragem',
+      'I.2.29 Amostragem aleatória simples, estratificada, sistemática e por conglomerados',
+      'I.2.29.1 Conceitos básicos para determinação do tamanho amostral',
+      'I.3 Inferência estatística',
+      'I.3.1 Estimação pontual: métodos, propriedades dos estimadores e suficiência',
+      'I.3.2 Estimação intervalar: intervalos de confiança e de credibilidade',
+      'I.3.3 Testes de hipóteses: hipóteses simples e compostas, significância, potência, teste t de Student e teste qui-quadrado',
+      'I.4 Análise de regressão linear',
+      'I.4.1 Critérios de mínimos quadrados e de máxima verossimilhança',
+      'I.4.2 Modelos de regressão linear',
+      'I.4.3 Inferência sobre os parâmetros do modelo',
+      'I.4.4 Análise de variância',
+      'I.4.5 Análise de resíduos',
+      'I.5 Técnicas de amostragem: aleatória simples, estratificada, sistemática e por conglomerados',
+      'I.5.1 Tamanho amostral',
+      'II.1 Dados estruturados e não estruturados; dados abertos; coleta, tratamento, armazenamento, integração e recuperação; ETL; XML, JSON e CSV; representação de dados e aritmética computacional',
+      'II.2 Exploração e mineração de dados: CRISP-DM, pré-processamento, classificação, regras de associação, clusterização, detecção de anomalias e modelagem preditiva',
+      'II.3 Processamento de Linguagem Natural: semântica vetorial, redução de dimensionalidade, tópicos latentes, classificação de textos, sentimentos e n-gramas',
+      'II.4 Machine Learning: erros, validação, avaliação, underfitting, overfitting, regularização, hiperparâmetros, separabilidade, redução de dimensionalidade, modelos lineares, árvores, redes neurais e Naive Bayes',
+      'II.5 Python: sintaxe, variáveis, tipos, controle de fluxo, estruturas de dados, funções, arquivos, NLTK, TensorFlow, Pandas, NumPy, scikit-learn e SciPy',
+    ],
+  },
+  {
+    id: 'pc_crimes_ciberneticos_seguranca_digital',
+    title: 'Conhecimentos Específicos: Crimes Cibernéticos e Segurança Digital',
+    category: 'Conhecimentos Específicos - Polícia Civil',
+    subtopics: [
+      'I.1 Lei nº 12.737/2012',
+      'I.2 Conceito e classificação de crimes cibernéticos',
+      'I.3 Requisitos legais e limites para busca e apreensão de itens digitais — artigo 240 e seguintes do CPP',
+      'II.1 Privacidade',
+      'II.2 Cuidados com redes sociais',
+      'II.3 Autenticação',
+      'II.3.1 Autenticação multifator (MFA)',
+      'II.3.2 Senhas seguras',
+      'II.4 Golpes virtuais',
+      'II.4.1 Phishing',
+      'II.5 Links suspeitos',
+      'II.6 Malwares',
+      'II.7 Lei nº 13.709/2018 — Lei Geral de Proteção de Dados Pessoais (LGPD)',
+    ],
+  },
+];
+
+const policeSpecificTopic = (id: string) => {
+  const topic = POLICE_SPECIFIC_TOPICS.find(item => item.id === id);
+  if (!topic) throw new Error(`Assunto da Polícia Civil não encontrado: ${id}`);
+  return topic;
+};
+
+const splitPoliceTopic = (
+  sourceId: string,
+  id: string,
+  title: string,
+  prefix: 'I.' | 'II.' | 'III.',
+): CourseTopic => {
+  const source = policeSpecificTopic(sourceId);
+  return {
+    ...source,
+    id,
+    title: `Conhecimentos Específicos: ${title}`,
+    subtopics: source.subtopics.filter(subtopic => subtopic.startsWith(prefix)),
+  };
+};
+
+const reorderNumberedGroups = (topic: CourseTopic, order: number[]): CourseTopic => ({
+  ...topic,
+  subtopics: topic.subtopics
+    .map((subtopic, originalIndex) => ({
+      subtopic,
+      originalIndex,
+      group: Number(subtopic.match(/^(\d+)/)?.[1] || Number.MAX_SAFE_INTEGER),
+    }))
+    .sort((a, b) => {
+      const aOrder = order.indexOf(a.group);
+      const bOrder = order.indexOf(b.group);
+      const aRank = aOrder < 0 ? order.length : aOrder;
+      const bRank = bOrder < 0 ? order.length : bOrder;
+      return aRank - bRank || a.originalIndex - b.originalIndex;
+    })
+    .map(item => item.subtopic),
+});
+
+const prioritizePoliceSubtopics = (topic: CourseTopic, terms: string[]): CourseTopic => {
+  const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return {
+    ...topic,
+    subtopics: topic.subtopics
+      .map((subtopic, originalIndex) => {
+        const normalized = normalize(subtopic);
+        const found = terms.findIndex(term => normalized.includes(normalize(term)));
+        return { subtopic, originalIndex, rank: found < 0 ? terms.length : found };
+      })
+      .sort((a, b) => a.rank - b.rank || a.originalIndex - b.originalIndex)
+      .map(item => item.subtopic),
+  };
+};
+
+const financialPoliceTopic = (): CourseTopic => {
+  const source = policeSpecificTopic('pc_contabilidade_analise_financeira');
+  return prioritizePoliceSubtopics({
+    ...splitPoliceTopic(
+      'pc_contabilidade_analise_financeira',
+      'pc_analise_financeira_crimes_tributarios',
+      'Análise Financeira e Crimes contra a Ordem Tributária',
+      'II.',
+    ),
+    subtopics: source.subtopics.filter(subtopic => subtopic.startsWith('II.') || subtopic.startsWith('III.')),
+  }, [
+    'métodos de análise', 'ferramentas de análise', 'gestão de risco', 'identificação de riscos',
+    'mitigação', 'monitoramento', 'fluxos financeiros', 'capacidade econômica', 'fraudes contábeis',
+    'empresas fictícias', 'laranjas', 'fracionadas', 'valores elevados', 'renda declarada',
+    'lavagem de dinheiro', 'ordem tributária', 'previdência social', 'sistema financeiro',
+    'finanças públicas', 'mercado de capitais', 'fraude a credores',
+  ]);
+};
+
+// Trilha pedagógica: fundamentos jurídicos primeiro; conteúdos financeiros e de dados depois.
+// Os conhecimentos básicos continuam sendo estudados em paralelo pelo motor do cronograma.
+const POLICE_ORDERED_SPECIFIC_TOPICS: CourseTopic[] = [
+  policeSpecificTopic('pc_direito_constitucional'),
+  reorderNumberedGroups(policeSpecificTopic('pc_direito_administrativo'), [1, 3, 2, 4, 7, 6, 5]),
+  reorderNumberedGroups(policeSpecificTopic('pc_legislacao_institucional_alagoas'), [1, 3, 2, 4, 5, 7, 6, 8, 9, 10]),
+  prioritizePoliceSubtopics(policeSpecificTopic('pc_direito_penal'), [
+    'princípios', 'aplicação da lei penal', 'tempo e no espaço', 'tempo e lugar', 'excepcional',
+    'contagem de prazo', 'irretroatividade', 'crimes contra a pessoa', 'crimes contra o patrimônio',
+    'administração pública', 'disposições constitucionais',
+  ]),
+  reorderNumberedGroups(policeSpecificTopic('pc_direito_processual_penal'), [1, 4, 2, 3, 5]),
+  prioritizePoliceSubtopics(policeSpecificTopic('pc_legislacao_penal_especial'), [
+    '11.343', '12.850', '9.613', '13.869', '8.072', '9.455', '7.716', '10.826',
+    'sistema financeiro', 'ordem econômica e tributária', '8.176', '9.605', '14.133',
+    '11.101', 'pessoa idosa', 'pessoa com deficiência', 'budapeste', 'finanças públicas',
+    'crimes de responsabilidade',
+  ]),
+  prioritizePoliceSubtopics(
+    splitPoliceTopic('pc_contabilidade_analise_financeira', 'pc_contabilidade', 'Noções de Contabilidade', 'I.'),
+    ['conceitos, objetivos', 'patrimônio', 'contas:', 'atos e fatos', 'plano de contas', 'contabilização',
+      'balancete', 'balanço patrimonial', 'resultado do exercício', 'conciliações', 'finanças', 'orçamento', 'tributos'],
+  ),
+  financialPoliceTopic(),
+  prioritizePoliceSubtopics(
+    splitPoliceTopic('pc_estatistica_analise_dados', 'pc_estatistica', 'Estatística', 'I.'),
+    ['descritiva', 'tendência central', 'mediana', 'moda', 'dispersão', 'amplitude', 'variância',
+      'desvio padrão', 'coeficiente de variação', 'probabilidade', 'bayes', 'variáveis aleatórias',
+      'distribuições', 'normal', 'amostragem', 'intervalos de confiança', 'testes de hipóteses',
+      'correlação', 'regressão linear'],
+  ),
+  splitPoliceTopic('pc_estatistica_analise_dados', 'pc_analise_dados', 'Análise de Dados', 'II.'),
+  prioritizePoliceSubtopics(policeSpecificTopic('pc_crimes_ciberneticos_seguranca_digital'), [
+    'privacidade', 'autenticação', 'senhas seguras', 'multifator', 'phishing', 'malwares',
+    'links suspeitos', '13.709', 'conceito e classificação', '12.737', 'busca e apreensão',
+  ]),
+];
+
+const POLICE_BASIC_STUDY_SECTIONS: StudySection[] = POLICE_BASIC_TOPICS.map((topic, learningOrder) => ({
+  id: topic.id,
+  title: topic.title.replace('Conhecimentos Específicos: ', ''),
+  learningTrack: 'basic',
+  learningOrder,
+  icon: topic.id === 'portugues' || topic.id === 'pc_atualidades' ? 'BookOpen' : topic.id === 'etica_servico_publico' || topic.id === 'pc_direitos_humanos' ? 'Shield' : 'Cpu',
+  color: 'blue',
+  difficulty: 'Médio',
+  weight: 'Básico',
+  paretoJustification: 'Conteúdo integrante dos conhecimentos básicos do cargo de Policial Civil, conforme o programa da banca CEBRASPE.',
+  cards: topic.subtopics.map((subtopic, index) => ({
+    id: `${topic.id}-${index + 1}`,
+    title: subtopic,
+    paretoRatio: 'Conteúdo do edital',
+    isQuente: true,
+    content: `<p>Estude este item do edital com atenção aos conceitos, à aplicação prática e ao padrão de julgamento de itens da banca CEBRASPE.</p><p><strong>Assunto:</strong> ${subtopic}.</p>`,
+    keyTakeaways: [
+      `Dominar ${subtopic.replace(/^(?:I{1,2}\.)?\d+(?:\.\d+)*\s*/, '')}.`,
+      'Identificar conceitos, exceções e relações que possam alterar o julgamento de itens certos ou errados.',
+      'Resolver questões da banca e revisar os erros recorrentes.',
+    ],
+    materials: [subtopic],
+  })),
+}));
+
+const POLICE_SPECIFIC_STUDY_SECTIONS: StudySection[] = POLICE_ORDERED_SPECIFIC_TOPICS.map((topic, learningOrder) => ({
+  id: topic.id,
+  title: topic.title.replace('Conhecimentos Específicos: ', ''),
+  learningTrack: 'specific',
+  learningOrder: learningOrder + 1,
+  icon: topic.id.includes('dados') || topic.id.includes('contabilidade') ? 'Cpu' : 'Shield',
+  color: 'slate',
+  difficulty: 'Difícil',
+  weight: 'Específico',
+  paretoJustification: 'Conteúdo integrante dos conhecimentos específicos comuns aos cargos de Agente de Polícia e Escrivão de Polícia, conforme o programa da banca CEBRASPE.',
+  cards: topic.subtopics.map((subtopic, index) => ({
+    id: `${topic.id}-${index + 1}`,
+    title: subtopic,
+    paretoRatio: 'Conteúdo do edital',
+    isQuente: true,
+    content: `<p>Estude este item dos conhecimentos específicos com atenção à literalidade normativa, aos conceitos técnicos e ao padrão de julgamento da banca CEBRASPE.</p><p><strong>Assunto:</strong> ${subtopic}.</p>`,
+    keyTakeaways: [
+      `Dominar ${subtopic.replace(/^(?:I{1,3}\.)?\d+(?:\.\d+)*\s*/, '')}.`,
+      'Identificar conceitos, requisitos, exceções e aplicações práticas relevantes para a atividade policial.',
+      'Resolver itens CEBRASPE e revisar os erros recorrentes.',
+    ],
+    materials: [subtopic],
+  })),
+}));
 
 export const DISCURSIVE_TOPIC_ID = 'atualidades_discursiva';
 
@@ -396,7 +1116,7 @@ export const COURSES_CONFIG: {
 } = {
   seplag_informatica: {
     name: "SEPLAG Alagoas - Informática",
-    description: "Concurso para Especialista em Gestão Pública (Tecnologia da Informação e Informática). Foco em Engenharia de Software, DevOps, Banco de Dados, Redes, Legislação de Alagoas, Marco Legal de CT&I e Estatuto da FAPEAL.",
+    description: "Preparação para cargos da área de Tecnologia da Informação, incluindo o Cargo 5 — Gestor Especializado em Ciência e Tecnologia. Abrange o conteúdo completo de conhecimentos específicos de TI.",
     topics: [
       { id: 'portugues', title: 'Língua Portuguesa', category: 'Português', subtopics: ['Reescrita de Frases', 'Coesão Textual', 'Crase e Regência', 'Pontuação CEBRASPE'] },
       { id: 'ingles', title: 'Língua Inglesa', category: 'Língua Inglesa', subtopics: ['Compreensão de Textos', 'Conectores e Advérbios', 'Tempos Verbais', 'Vocabulário Técnico'] },
@@ -405,11 +1125,22 @@ export const COURSES_CONFIG: {
       { id: 'marco_legal_cti', title: 'Marco Legal de CT&I', category: 'Ética e Compliance', subtopics: ['Constituição e EC 85/2015', 'Lei 10.973/2004 (Lei de Inovação)', 'Lei 13.243/2016', 'Decreto 9.283/2018', 'Encomenda Tecnológica (ETEC)'] },
       { id: 'legislacao_especifica_fapeal', title: 'Legislações Específicas (FAPEAL)', category: 'Ética e Compliance', subtopics: ['Lei Delegada 48/2022', 'Lei 7.117/2009', 'Lei 6.527/2004', 'L.C. 20/2002 e 5/1990', 'Lei 5.247/1991 (RJU)', 'Decreto 4.137/2009'] },
       { id: 'alagoas', title: 'Conhecimentos de Alagoas', category: 'Conhecimentos de Alagoas', subtopics: ['Emancipação Política', 'Geografia de Alagoas', 'Ciclo do Açúcar e História'] },
-      { id: 'especificos_devops', title: 'Conhecimentos Específicos: DevOps', category: 'Conhecimentos Específicos', subtopics: ['Docker e Kubernetes', 'CI/CD Pipelines', 'Monitoramento e Git'] },
-      { id: 'especificos_db', title: 'Conhecimentos Específicos: Banco de Dados', category: 'Conhecimentos Específicos', subtopics: ['Modelagem Relacional e SQL', 'NoSQL e Transações ACID', 'Drizzle e Migrações'] },
+      ...TECHNOLOGY_SPECIFIC_TOPICS,
     ],
-    studySections: defaultSeplagSections,
+    studySections: [
+      ...defaultSeplagSections.filter(section => section.id !== 'especificos'),
+      ...TECHNOLOGY_SPECIFIC_STUDY_SECTIONS,
+    ],
     quizQuestions: defaultSeplagQuestions
+  },
+  policial_civil: {
+    name: "Policial Civil — CEBRASPE",
+    description: "Preparação para os cargos de Agente de Polícia e Escrivão de Polícia com conhecimentos básicos e específicos previstos no programa da banca CEBRASPE.",
+    topics: [...POLICE_BASIC_TOPICS, ...POLICE_ORDERED_SPECIFIC_TOPICS],
+    studySections: [...POLICE_BASIC_STUDY_SECTIONS, ...POLICE_SPECIFIC_STUDY_SECTIONS],
+    quizQuestions: defaultSeplagQuestions.filter(question =>
+      ['Português', 'TI Básica', 'Ética e Compliance'].includes(question.category)
+    ),
   },
   tecnico_enfermagem: {
     name: "Técnico em Enfermagem",
@@ -1172,7 +1903,8 @@ const commonBasicQuestionCategories = new Set([
 const commonBasicQuestions = defaultSeplagQuestions.filter(question => commonBasicQuestionCategories.has(question.category));
 // These subjects are reusable knowledge blocks, not tied to a single job profile.
 // Canonical lists replace the old abbreviated versions so equivalent entries are not duplicated.
-Object.values(COURSES_CONFIG).forEach(config => {
+Object.entries(COURSES_CONFIG).forEach(([courseId, config]) => {
+  if (courseId === 'policial_civil') return;
   const specificTopics = config.topics.filter(topic => !commonBasicTopicIds.has(topic.id));
   config.topics = [
     ...reusableTopics.map(topic => ({
@@ -1217,13 +1949,22 @@ export function generateCustomPlan(
     const label = value.slice(separator + 2);
     selectedSubtopicsByTopic.set(topicId, [...(selectedSubtopicsByTopic.get(topicId) || []), label]);
   });
-  
+  const hasSelectedTechnologySpecificTopic = selectedTopicIds.some(topicId => TECHNOLOGY_SPECIFIC_TOPIC_IDS.has(topicId));
+
   // 1. Filter the study sections by selected topics
   const filteredSections = config.studySections.filter(section =>
     selectedTopicIds.includes(section.id) ||
     (section.id === 'ti' && selectedTopicIds.includes('ti_basica')) ||
-    (section.id === 'especifico' && (selectedTopicIds.includes('especificos_devops') || selectedTopicIds.includes('especificos_db')))
+    (section.id === 'especificos' && hasSelectedTechnologySpecificTopic)
   ).map(section => {
+    const configuredTopic = config.topics.find(topic => topic.id === section.id);
+    if (configuredTopic) {
+      const selectedSubtopics = selectedSubtopicsByTopic.get(section.id) || [];
+      if (selectedSubtopics.length > 0) {
+        const selectedCards = section.cards.filter(card => selectedSubtopics.includes(card.title));
+        if (selectedCards.length > 0) return { ...section, cards: selectedCards };
+      }
+    }
     if (section.id !== DISCURSIVE_TOPIC_ID) return section;
     const selectedAreas = selectedSubtopicsByTopic.get(DISCURSIVE_TOPIC_ID) || [];
     if (selectedAreas.length === 0) return section;
@@ -1238,8 +1979,8 @@ export function generateCustomPlan(
   const categoriesToInclude = sectionsToUse.map(s => s.title);
   const topicFilteredQuestions = config.quizQuestions.filter((q: any) => {
     // Check if category matches any used study sections
-    return categoriesToInclude.some(catTitle => 
-      q.category.toLowerCase().includes(catTitle.toLowerCase()) || 
+    return categoriesToInclude.some(catTitle =>
+      q.category.toLowerCase().includes(catTitle.toLowerCase()) ||
       catTitle.toLowerCase().includes(q.category.toLowerCase()) ||
       // Reusable basic-knowledge mappings
       (q.category === 'TI Básica' && selectedTopicIds.includes('ti_basica')) ||
@@ -1247,7 +1988,11 @@ export function generateCustomPlan(
       (q.category === 'Ética e Compliance' && (selectedTopicIds.includes('marco_legal_cti') || selectedTopicIds.includes('legislacao_especifica_fapeal'))) ||
       // SEPLAG-specific mappings
       (course === 'seplag_informatica' && q.category === 'Ética e Compliance' && (selectedTopicIds.includes('etica') || selectedTopicIds.includes('legislacao_especifica_fapeal'))) ||
-      (course === 'seplag_informatica' && q.category === 'Conhecimentos Específicos' && (selectedTopicIds.includes('especificos_devops') || selectedTopicIds.includes('especificos_db'))) ||
+      (course === 'seplag_informatica' && q.category === 'Conhecimentos Específicos' && hasSelectedTechnologySpecificTopic) ||
+      // Civil Police basic-knowledge mappings
+      (course === 'policial_civil' && q.category === 'Português' && selectedTopicIds.includes('portugues')) ||
+      (course === 'policial_civil' && q.category === 'TI Básica' && selectedTopicIds.includes('pc_ti_seguranca_cibernetica')) ||
+      (course === 'policial_civil' && q.category === 'Ética e Compliance' && selectedTopicIds.includes('etica_servico_publico')) ||
       // Nursing-specific mappings
       (course === 'tecnico_enfermagem' && q.category === 'Legislação EBSERH' && selectedTopicIds.includes('etica_deontologia')) ||
       (course === 'tecnico_enfermagem' && q.category === 'Saúde Pública e SUS' && selectedTopicIds.includes('sus_saude_publica')) ||
@@ -1278,25 +2023,25 @@ export function generateCustomPlan(
   const questionsToUse = deduplicateQuestions(
     selectedQuestionBoards.length > 0
       ? filteredQuestions
-      : filteredQuestions.length > 0 ? filteredQuestions : config.quizQuestions
+      : filteredQuestions.length > 0 || course === 'policial_civil' ? filteredQuestions : config.quizQuestions
   );
 
   // 3. Generate dynamic study blocks and timeline comparing TODAY with EXAM DATE
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const examDate = new Date(examDateStr);
-  
+
   // Calculate difference in days
   const timeDiff = examDate.getTime() - today.getTime();
   const daysRemaining = Math.max(1, Math.ceil(timeDiff / (1000 * 3600 * 24)));
-  
+
   // We have W weeks of preparation. Let's calculate the number of weeks
   const numWeeks = Math.ceil(daysRemaining / 7);
 
   // If selectedWeekdays is provided, calculate exact study days and dates
   const weekdays = selectedWeekdays || [1, 2, 3, 4, 5, 6, 0]; // default all days (Mon to Sun)
   const weekdayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-  
+
   const allStudyDates: { date: Date; dateStr: string; weekdayName: string }[] = [];
   let tempDate = new Date(today);
   while (tempDate <= examDate) {
@@ -1321,13 +2066,13 @@ export function generateCustomPlan(
   for (let w = 1; w <= numWeeks; w++) {
     const weekStartDate = new Date(today);
     weekStartDate.setDate(today.getDate() + (w - 1) * 7);
-    
+
     const weekEndDate = new Date(weekStartDate);
     weekEndDate.setDate(weekStartDate.getDate() + 6);
-    
+
     // Ensure week end doesn't surpass exam date
     const finalEnd = weekEndDate > examDate ? examDate : weekEndDate;
-    
+
     const dateRangeStr = `${weekStartDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} a ${finalEnd.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}`;
 
     // Find study dates that fall within this specific week
@@ -1338,7 +2083,7 @@ export function generateCustomPlan(
     // Select 1 topic for this week
     const currentSectionIndex = (w - 1) % sectionsToUse.length;
     const activeSectionForWeek = sectionsToUse[currentSectionIndex];
-    
+
     const blocks: StudyBlock[] = [];
     const configuredTopic = config.topics.find(topic =>
       topic.id === activeSectionForWeek.id ||
@@ -1347,7 +2092,7 @@ export function generateCustomPlan(
       activeSectionForWeek.title.toLowerCase().includes(topic.title.toLowerCase())
     );
     const selectedSubtopics = configuredTopic ? selectedSubtopicsByTopic.get(configuredTopic.id) || [] : [];
-    
+
     // Divide hours in this week among blocks (e.g. 40% theory, 60% exercises)
     const theoryHours = Math.ceil(hoursInWeek * 0.4) || 1;
     const exercisesHours = Math.ceil(hoursInWeek * 0.6) || 1;
@@ -1358,7 +2103,7 @@ export function generateCustomPlan(
         id: `${course}-w${w}-b1`,
         title: writingPrompt.title,
         duration: `${Math.max(1, hoursInWeek)}h`,
-        methodology: 'Produção de redação completa, seguida de revisão de conteúdo e linguagem',
+        methodology: 'Pomodoro 50+10: produção de redação completa, seguida de revisão de conteúdo e linguagem',
         subtopics: writingPrompt.keyTakeaways,
         done: false,
       });
@@ -1368,7 +2113,7 @@ export function generateCustomPlan(
         id: `${course}-w${w}-b1`,
         title: `Estudo Dirigido: ${activeSectionForWeek.title}`,
         duration: `${theoryHours}h`,
-        methodology: "30% Teoria Ativa, 70% Resumo de Pareto",
+        methodology: "Pomodoro 50+10: teoria ativa e resumo de Pareto",
         subtopics: selectedSubtopics.length > 0 ? selectedSubtopics : activeSectionForWeek.cards.map(c => c.title),
         done: false
       });
@@ -1378,7 +2123,7 @@ export function generateCustomPlan(
         id: `${course}-w${w}-b2`,
         title: `Treinamento de Questões: ${activeSectionForWeek.title}`,
         duration: `${exercisesHours}h`,
-        methodology: "50% Questões de Prova, 50% Revisão Justificada",
+        methodology: "Pomodoro 50+10: questões de prova e revisão justificada",
         subtopics: selectedSubtopics.length > 0 ? selectedSubtopics : activeSectionForWeek.cards.flatMap(c => c.keyTakeaways.slice(0, 2)),
         done: false
       });
@@ -1390,7 +2135,7 @@ export function generateCustomPlan(
         id: `${course}-w${w}-b3`,
         title: "Simulado de Fechamento Geral de Reta Final",
         duration: `${Math.max(2, hoursPerDay)}h`,
-        methodology: "Simulado Geral CEBRASPE Sob Pressão",
+        methodology: "Pomodoro 50+10: simulado CEBRASPE e correção",
         subtopics: ["Todas as disciplinas integradas", "Análise de erros e nota líquida"],
         done: false
       });
@@ -1403,12 +2148,36 @@ export function generateCustomPlan(
       weekFocus += ` Nenhum dia de estudo agendado para esta semana com os dias da semana escolhidos.`;
     }
 
+    const contentTemplates=blocks.filter(block=>!block.title.includes('Questões'));
+    const hourlyBlocks = weekStudyDates.flatMap((studyDate,dateIndex) => {
+      const content=Array.from({length:Math.max(1,Math.round(hoursPerDay))},(_,slot)=>{
+        const template=contentTemplates[slot%Math.max(1,contentTemplates.length)]||blocks[0];
+        return {
+          ...template,
+          id:`${course}-w${w}-${studyDate.date.toISOString().slice(0,10)}-h${slot+1}`,
+          day:studyDate.weekdayName,date:studyDate.dateStr,isoDate:studyDate.date.toISOString().slice(0,10),
+          duration:'1h',durationMinutes:60,activityType:'THEORY' as const,
+        };
+      });
+      const mandatory=dateIndex===weekStudyDates.length-1;
+      const questions:StudyBlock={
+        id:`${course}-w${w}-${studyDate.date.toISOString().slice(0,10)}-questions`,
+        day:studyDate.weekdayName,date:studyDate.dateStr,isoDate:studyDate.date.toISOString().slice(0,10),
+        title:mandatory?'Revisão semanal com questões':'Questões extras do dia',
+        duration:mandatory?'1h':'30min',durationMinutes:mandatory?60:30,activityType:'QUESTIONS',
+        isOptional:!mandatory,outsidePlannedHours:true,
+        methodology:mandatory?'Revisão semanal obrigatória: 50 minutos de questões e 10 minutos de correção':'Treino extra opcional de questões e correção dos erros',
+        subtopics:[activeSectionForWeek.title],done:false,
+      };
+      return [...content,questions];
+    });
+
     generatedWeeks.push({
       id: `week-${w}`,
       title: `Semana ${w}: Foco em ${activeSectionForWeek.title}`,
       dateRange: dateRangeStr,
       focus: weekFocus,
-      blocks: blocks
+      blocks: hourlyBlocks
     });
   }
 

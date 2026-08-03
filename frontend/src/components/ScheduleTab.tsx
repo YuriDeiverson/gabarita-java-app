@@ -27,6 +27,7 @@ import "./ScheduleTab.css";
 interface Props {
   studyContext: ActiveStudyContext | null;
   onOpenStudy: (context?: ActiveStudyContext) => void;
+  onOpenQuestions: () => void;
 }
 
 const statusLabel: Record<string, string> = {
@@ -132,7 +133,7 @@ function AgendaTopicAccordion({
           {String(index + 1).padStart(2, "0")}
         </span>
         <span className="agenda-modal-topic-name">
-          <small>{item.subject_name}</small>
+          <small>{item.topic_title || item.subject_name}</small>
           <strong>{item.title}</strong>
         </span>
         <span className="agenda-modal-topic-brief">
@@ -201,11 +202,13 @@ function AgendaTopicAccordion({
               </strong>
             </span>
           </div>
-          {item.roadmap_topic_id && (
+          {(item.roadmap_topic_id || item.activity_type === "QUESTIONS") && (
             <div className="agenda-modal-topic-action">
               <button type="button" onClick={onOpen}>
-                <BookOpen />{" "}
-                {item.status === "COMPLETED"
+                {item.activity_type === "QUESTIONS" ? <CircleHelp /> : <BookOpen />} {" "}
+                {item.activity_type === "QUESTIONS"
+                  ? "Abrir banco de questões"
+                  : item.status === "COMPLETED"
                   ? "Revisar assunto"
                   : "Abrir assunto para estudar"}
               </button>
@@ -217,7 +220,7 @@ function AgendaTopicAccordion({
   );
 }
 
-export default function ScheduleTab({ studyContext, onOpenStudy }: Props) {
+export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions }: Props) {
   const today = isoDate(new Date());
   const [dashboard, setDashboard] = useState<StudyDashboardData | null>(null);
   const [agenda, setAgenda] = useState<ScheduleAgendaDay[]>([]);
@@ -416,9 +419,6 @@ export default function ScheduleTab({ studyContext, onOpenStudy }: Props) {
 
   return (
     <div id="schedule-tab-container" className="study-agenda animate-fade-in">
-      <header className="study-agenda-header">
-        <h2>Cronograma</h2>
-      </header>
 
       {error && (
         <div className="agenda-error" role="alert">
@@ -431,36 +431,6 @@ export default function ScheduleTab({ studyContext, onOpenStudy }: Props) {
           className="agenda-calendar-card"
           aria-label="Calendário mensal de estudos"
         >
-          <section className="agenda-calendar-kpis" aria-label="Resumo do mês">
-            <article>
-              <CalendarDays />
-              <span>
-                <small>Dias planejados</small>
-                <strong>{monthDays.length}</strong>
-              </span>
-            </article>
-            <article>
-              <Clock3 />
-              <span>
-                <small>Tempo estudado</small>
-                <strong>{duration(monthStats.studied)}</strong>
-              </span>
-            </article>
-            <article>
-              <CircleHelp />
-              <span>
-                <small>Questões feitas</small>
-                <strong>{monthStats.questions}</strong>
-              </span>
-            </article>
-            <article>
-              <Check />
-              <span>
-                <small>Etapas concluídas</small>
-                <strong>{monthStats.completed}</strong>
-              </span>
-            </article>
-          </section>
           <ReactCalendar
             locale="pt-BR"
             value={localDate(selectedDate)}
@@ -626,10 +596,14 @@ export default function ScheduleTab({ studyContext, onOpenStudy }: Props) {
                             onToggle={() => toggleModalItem(id)}
                             onOpen={() => {
                               closeAgendaModal();
+                              if (item.activity_type === "QUESTIONS") {
+                                onOpenQuestions();
+                                return;
+                              }
                               onOpenStudy({
                                 roadmapTopicId: String(item.roadmap_topic_id),
-                                topicTitle: item.title,
-                                subjectName: item.subject_name,
+                                topicTitle: item.topic_title || item.title,
+                                subjectName: item.title,
                                 source: "schedule",
                               });
                             }}

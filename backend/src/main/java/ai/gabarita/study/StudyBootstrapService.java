@@ -1,6 +1,8 @@
 package ai.gabarita.study;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.*;
 import java.util.*;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -10,8 +12,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class StudyBootstrapService {
     private final JdbcClient jdbc;
+    private final ObjectMapper json;
 
-    public StudyBootstrapService(JdbcClient jdbc) { this.jdbc = jdbc; }
+    public StudyBootstrapService(JdbcClient jdbc,ObjectMapper json) { this.jdbc = jdbc;this.json=json; }
 
     @Transactional
     public void synchronize(UUID planId, UUID userId, JsonNode sections, int blockMinutes, Integer hoursPerDay) {
@@ -32,7 +35,7 @@ public class StudyBootstrapService {
                 String source = section.path("id").asText("section-" + modulePosition) + ":" +
                         card.path("id").asText("topic-" + topicPosition);
                 UUID topicId = upsertTopic(planId, moduleId, source, section, card, topicPosition,
-                        prerequisite, Math.max(15, blockMinutes));
+                        prerequisite, plannedMinutes(section, card, blockMinutes));
                 String initialStatus = prerequisite == null ? "AVAILABLE" : "LOCKED";
                 jdbc.sql("""
                     INSERT INTO topic_progress(id,user_id,roadmap_topic_id,status)
@@ -44,6 +47,21 @@ public class StudyBootstrapService {
             }
             modulePosition++;
         }
+        jdbc.sql("""
+            UPDATE topic_progress tp SET status='AVAILABLE',updated_at=now()
+            FROM roadmap_topics rt WHERE tp.roadmap_topic_id=rt.id AND tp.user_id=:u AND rt.plan_id=:p
+              AND rt.active AND rt.prerequisite_id IS NULL AND tp.status='LOCKED'
+            """).param("u",userId).param("p",planId).update();
+        jdbc.sql("""
+            UPDATE topic_progress tp SET status='LOCKED',updated_at=now()
+            FROM roadmap_topics rt
+            WHERE tp.roadmap_topic_id=rt.id AND tp.user_id=:u AND rt.plan_id=:p AND rt.active
+              AND rt.prerequisite_id IS NOT NULL AND tp.status='AVAILABLE'
+              AND NOT EXISTS (
+                SELECT 1 FROM topic_progress prerequisite
+                WHERE prerequisite.user_id=:u AND prerequisite.roadmap_topic_id=rt.prerequisite_id
+                  AND prerequisite.status IN('COMPLETED','MASTERED'))
+            """).param("u", userId).param("p", planId).update();
         ensureToday(planId, userId, hoursPerDay == null ? 120 : Math.max(30, hoursPerDay * 60));
         createWelcomeNotification(planId, userId);
     }
@@ -69,6 +87,7 @@ public class StudyBootstrapService {
                       SELECT dt.id,ROW_NUMBER() OVER(ORDER BY
                         CASE WHEN dt.status='COMPLETED' THEN 0 ELSE 1 END,
                         CASE WHEN dt.status='COMPLETED' THEN dt.completed_at END,
+                        CASE WHEN dt.outside_planned_hours THEN 1 ELSE 0 END,
                         CASE WHEN dt.activity_type='REVIEW' THEN 0 ELSE 1 END,
                         rt.position,md5(rt.id::text||CAST(:p AS text)))-1 new_position
                       FROM daily_tasks dt JOIN roadmap_topics rt ON rt.id=dt.roadmap_topic_id
@@ -89,20 +108,32 @@ public class StudyBootstrapService {
             return tasks(userId, planId, date);
         }
 
-        var candidates = jdbc.sql("""
+        if (createPoliceTasksFromSchedule(planId,userId,date)>0) return tasks(userId,planId,date);
+
+        var rawCandidates = jdbc.sql("""
             SELECT rt.id,rt.planned_minutes,rt.recommended_questions,rt.minimum_accuracy,
                    rt.priority,tp.status,rt.subject_name,rt.title,
+                   COALESCE(rt.content->>'learningTrack','') learning_track,
+                   COALESCE((rt.content->>'learningOrder')::integer,rm.position) learning_order,
+                   rm.position module_position,rt.position topic_position,
                    CASE WHEN tp.status='NEEDS_REVIEW' THEN 40 ELSE 0 END + rt.priority AS score
             FROM roadmap_topics rt JOIN topic_progress tp ON tp.roadmap_topic_id=rt.id AND tp.user_id=:u
-            WHERE rt.plan_id=:p AND rt.active AND tp.status IN('AVAILABLE','IN_PROGRESS','NEEDS_REVIEW')
+            JOIN roadmap_modules rm ON rm.id=rt.module_id
+            WHERE rt.plan_id=:p AND rt.active AND (
+              tp.status IN('AVAILABLE','IN_PROGRESS','NEEDS_REVIEW') OR
+              (tp.status='LOCKED' AND rt.content->>'learningTrack' IN('basic','specific')))
             ORDER BY CASE WHEN tp.status='NEEDS_REVIEW' THEN 0 ELSE 1 END,
-              rt.position,md5(rt.id::text||CAST(:p AS text)),score DESC
+              rm.position,rt.position,md5(rt.id::text||CAST(:p AS text)),score DESC
             """).param("u", userId).param("p", planId).query().listOfRows();
+        var candidates = learningPathCandidates(rawCandidates);
 
-        int remaining = Math.max(30, goalMinutes), position = 0;
+        int dailyGoal = Math.max(60, goalMinutes);
+        boolean mandatoryQuestions = lastStudyDayOfWeek(planId,date);
+        int questionsMinutes = mandatoryQuestions ? 60 : 30;
+        int remaining = dailyGoal, position = 0;
         for (var topic : candidates) {
             if (remaining <= 0 && position > 0) break;
-            int planned = Math.min(number(topic, "planned_minutes"), Math.max(15, remaining));
+            int planned = Math.min(number(topic, "planned_minutes"), Math.max(60, remaining));
             String type = "NEEDS_REVIEW".equals(topic.get("status")) ? "REVIEW" : "THEORY";
             jdbc.sql("""
                 INSERT INTO daily_tasks(id,user_id,plan_id,roadmap_topic_id,task_date,position,activity_type,
@@ -115,6 +146,19 @@ public class StudyBootstrapService {
                     .param("priority", topic.get("score")).param("status", position == 0 ? "AVAILABLE" : "PENDING").update();
             remaining -= planned;
             position++;
+        }
+        if (!candidates.isEmpty() && questionsMinutes > 0) {
+            var reference = candidates.getFirst();
+            jdbc.sql("""
+                INSERT INTO daily_tasks(id,user_id,plan_id,roadmap_topic_id,task_date,position,activity_type,
+                  planned_minutes,question_goal,minimum_accuracy,priority,status,is_optional,outside_planned_hours)
+                VALUES(gen_random_uuid(),:u,:p,:t,:date,:pos,'QUESTIONS',:minutes,:questions,:accuracy,:priority,:status,:optional,true)
+                ON CONFLICT(user_id,plan_id,task_date,roadmap_topic_id,activity_type) DO NOTHING
+                """).param("u", userId).param("p", planId).param("t", reference.get("id"))
+                    .param("date", date).param("pos", position).param("minutes", questionsMinutes)
+                    .param("questions", Math.max(10, questionsMinutes / 3)).param("accuracy", reference.get("minimum_accuracy"))
+                    .param("priority", reference.get("score")).param("status", position == 0 ? "AVAILABLE" : "PENDING")
+                    .param("optional",!mandatoryQuestions).update();
         }
         return tasks(userId, planId, date);
     }
@@ -147,7 +191,10 @@ public class StudyBootstrapService {
 
     private UUID upsertTopic(UUID planId, UUID moduleId, String source, JsonNode section, JsonNode card,
                              int position, UUID prerequisite, int blockMinutes) {
-        String content = card.toString();
+        ObjectNode contentNode = card.deepCopy();
+        contentNode.put("learningTrack", section.path("learningTrack").asText(""));
+        contentNode.put("learningOrder", section.path("learningOrder").asInt(Integer.MAX_VALUE));
+        String content = contentNode.toString();
         return jdbc.sql("""
             INSERT INTO roadmap_topics(id,plan_id,module_id,source_key,subject_name,title,description,objective,
               content,position,prerequisite_id,planned_minutes,recommended_questions,minimum_accuracy,difficulty,priority,active)
@@ -180,4 +227,121 @@ public class StudyBootstrapService {
     private int number(Map<String,Object> row, String key) { return ((Number) row.get(key)).intValue(); }
     private int difficulty(String value) { String v = value.toLowerCase(); return v.contains("dif") ? 4 : v.contains("fácil") ? 2 : 3; }
     private double weight(String value) { try { return Double.parseDouble(value.replace("%", "").trim()); } catch (Exception ignored) { return 1; } }
+    private int plannedMinutes(JsonNode section, JsonNode card, int preferredMinutes) { return 60; }
+    private boolean lastStudyDayOfWeek(UUID planId,LocalDate date) {
+        try {
+            String value=jdbc.sql("SELECT settings::text FROM study_plans WHERE id=:p")
+                    .param("p",planId).query(String.class).single();
+            JsonNode root=json.readTree(value);
+            LocalDate week=date.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            for(JsonNode scheduleWeek:root.path("legacyScheduleWeeks")) for(JsonNode block:scheduleWeek.path("blocks")) {
+                String raw=block.path("isoDate").asText();
+                if(raw.isBlank())continue;
+                LocalDate other=LocalDate.parse(raw);
+                if(other.isAfter(date)&&other.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).equals(week))return false;
+            }
+            JsonNode weekdays=root.path("preferences").path("selectedWeekdays");
+            if(weekdays.isArray()&&!weekdays.isEmpty()) {
+                int current=date.getDayOfWeek().getValue();
+                int last=0;
+                for(JsonNode weekday:weekdays) {
+                    int javascriptDay=weekday.asInt();
+                    last=Math.max(last,javascriptDay==0?7:javascriptDay);
+                }
+                return current==last;
+            }
+        } catch(Exception ignored) { /* Em planos antigos, domingo encerra a semana. */ }
+        return date.getDayOfWeek()==DayOfWeek.SUNDAY;
+    }
+    private int createPoliceTasksFromSchedule(UUID planId,UUID userId,LocalDate date){
+        var plans=jdbc.sql("SELECT course_id,settings::text settings_json,created_at<=now()-interval '14 days' adaptive FROM study_plans WHERE id=:p AND user_id=:u")
+                .param("p",planId).param("u",userId).query().listOfRows();
+        if(plans.isEmpty()||!"policial_civil".equals(String.valueOf(plans.getFirst().get("course_id"))))return 0;
+        var topics=jdbc.sql("""
+            SELECT rt.id,rt.title,rt.subject_name,rt.recommended_questions,rt.minimum_accuracy,rt.priority,
+              tp.questions_answered,tp.correct_answers
+            FROM roadmap_topics rt JOIN topic_progress tp ON tp.roadmap_topic_id=rt.id AND tp.user_id=:u
+            WHERE rt.plan_id=:p AND rt.active
+            """).param("p",planId).param("u",userId).query().listOfRows();
+        var byTitle=new HashMap<String,Map<String,Object>>();topics.forEach(topic->byTitle.put(normalize(String.valueOf(topic.get("title"))),topic));
+        var seeds=new ArrayList<PoliceTaskSeed>();
+        try{
+            JsonNode settings=json.readTree(String.valueOf(plans.getFirst().get("settings_json")));
+            for(JsonNode week:settings.path("legacyScheduleWeeks"))for(JsonNode block:week.path("blocks")){
+                if(!date.toString().equals(block.path("isoDate").asText()))continue;
+                String activity=block.path("activityType").asText("THEORY");
+                String topicTitle=block.path("topicTitle").asText(block.path("title").asText());
+                var topic="QUESTIONS".equals(activity)&&!topics.isEmpty()?topics.getFirst():byTitle.get(normalize(topicTitle));if(topic==null)continue;
+                boolean question="QUESTIONS".equals(activity);
+                boolean optional=question?block.path("isOptional").asBoolean(!lastStudyDayOfWeek(planId,date)):false;
+                boolean outside=question;
+                int minutes=question?(optional?30:60):block.path("durationMinutes").asInt(60);
+                seeds.add(new PoliceTaskSeed(topic,activity,minutes,optional,outside));
+            }
+        }catch(Exception ignored){return 0;}
+        var hourlySeeds=hourlyPoliceSeeds(seeds,topics);
+        boolean adaptive=Boolean.TRUE.equals(plans.getFirst().get("adaptive"));
+        var adjusted=adaptivePoliceMinutes(hourlySeeds,topics,adaptive);int position=0;
+        for(int index=0;index<hourlySeeds.size();index++){
+                var seed=hourlySeeds.get(index);var topic=seed.topic();int minutes=adjusted.get(index);if(minutes<=0)continue;
+                jdbc.sql("""
+                    INSERT INTO daily_tasks(id,user_id,plan_id,roadmap_topic_id,task_date,position,activity_type,
+                      planned_minutes,question_goal,minimum_accuracy,priority,status,is_optional,outside_planned_hours)
+                    VALUES(gen_random_uuid(),:u,:p,:t,:date,:position,:activity,:minutes,:questions,:accuracy,:priority,:status,:optional,:outside)
+                    ON CONFLICT(user_id,plan_id,task_date,roadmap_topic_id,activity_type) DO NOTHING
+                    """).param("u",userId).param("p",planId).param("t",topic.get("id")).param("date",date)
+                        .param("position",position).param("activity",seed.activity()).param("minutes",minutes)
+                        .param("questions",topic.get("recommended_questions")).param("accuracy",topic.get("minimum_accuracy"))
+                        .param("priority",topic.get("priority")).param("status",position==0?"AVAILABLE":"PENDING")
+                        .param("optional",seed.optional()).param("outside",seed.outside()).update();
+                position++;
+        }
+        return position;
+    }
+    private List<PoliceTaskSeed> hourlyPoliceSeeds(List<PoliceTaskSeed> seeds,List<Map<String,Object>> topics){
+        if(seeds.isEmpty()||seeds.stream().filter(seed->!"QUESTIONS".equals(seed.activity())).allMatch(seed->seed.minutes()==60))return seeds;
+        int totalSlots=Math.max(1,(int)Math.round(seeds.stream().mapToInt(PoliceTaskSeed::minutes).sum()/60d));
+        int questionSlots=totalSlots>=2?1:0;int theorySlots=totalSlots-questionSlots;
+        var theory=seeds.stream().filter(seed->!"QUESTIONS".equals(seed.activity())).toList();
+        var result=new ArrayList<PoliceTaskSeed>();
+        if(!theory.isEmpty())for(int slot=0;slot<theorySlots;slot++){
+            int index=Math.min(theory.size()-1,(int)Math.floor((double)slot*theory.size()/Math.max(1,theorySlots)));
+            var seed=theory.get(index);result.add(new PoliceTaskSeed(seed.topic(),seed.activity(),60,false,false));
+        }
+        if(questionSlots>0&&!topics.isEmpty()){
+            var question=seeds.stream().filter(seed->"QUESTIONS".equals(seed.activity())).findFirst()
+                    .orElse(new PoliceTaskSeed(topics.getFirst(),"QUESTIONS",30,true,true));
+            result.add(question);
+        }
+        return result;
+    }
+    private List<Integer> adaptivePoliceMinutes(List<PoliceTaskSeed> seeds,List<Map<String,Object>> topics,boolean adaptive){
+        return seeds.stream().map(PoliceTaskSeed::minutes).toList();
+    }
+    private record PoliceTaskSeed(Map<String,Object> topic,String activity,int minutes,boolean optional,boolean outside){}
+    private String normalize(String value){return java.text.Normalizer.normalize(value,java.text.Normalizer.Form.NFD).replaceAll("\\p{M}","").toLowerCase(Locale.ROOT).trim();}
+    private List<Map<String,Object>> learningPathCandidates(List<Map<String,Object>> raw) {
+        var specific = raw.stream().filter(row -> "specific".equals(row.get("learning_track")))
+                .sorted(Comparator.comparingInt((Map<String,Object> row) -> number(row, "learning_order"))
+                        .thenComparingInt(row -> number(row, "module_position"))
+                        .thenComparingInt(row -> number(row, "topic_position"))).toList();
+        if (specific.isEmpty()) return raw;
+        var basic = raw.stream().filter(row -> "basic".equals(row.get("learning_track")))
+                .sorted(Comparator.comparingInt((Map<String,Object> row) -> number(row, "topic_position"))
+                        .thenComparingInt(row -> number(row, "module_position"))).toList();
+        var ordered = new ArrayList<Map<String,Object>>();
+        int basicIndex = 0, specificIndex = 0;
+        boolean specificTurn = true;
+        while (basicIndex < basic.size() || specificIndex < specific.size()) {
+            if (specificIndex < specific.size() && (specificTurn || basicIndex >= basic.size())) {
+                ordered.add(specific.get(specificIndex++));
+            } else if (basicIndex < basic.size()) {
+                ordered.add(basic.get(basicIndex++));
+            }
+            specificTurn = !specificTurn;
+        }
+        raw.stream().filter(row -> !"basic".equals(row.get("learning_track")) && !"specific".equals(row.get("learning_track")))
+                .forEach(ordered::add);
+        return ordered;
+    }
 }

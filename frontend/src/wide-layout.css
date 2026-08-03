@@ -1,0 +1,516 @@
+/* Desktop amplo: sidebar fixa + grid útil de 12 colunas + trilho contextual. */
+.app-context-rail {
+  display: none;
+}
+
+@media (min-width: 1280px) {
+  .app-header-inner {
+    max-width: none;
+  }
+
+  .app-shell.has-desktop-navigation .app-main,
+  .app-shell.has-desktop-navigation.no-plan .app-main,
+  .app-shell.has-desktop-navigation.sidebar-collapsed .app-main {
+    width: calc(100% - 248px) !important;
+    max-width: none !important;
+    min-height: calc(100dvh - 77px);
+    margin: 0 0 0 248px !important;
+    padding: 24px 30px 48px !important;
+    display: grid !important;
+    grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
+    align-items: start;
+    gap: 24px !important;
+  }
+
+  .app-shell.has-desktop-navigation .app-main > .app-navigation,
+  .app-shell.has-desktop-navigation.no-plan .app-main > .app-navigation {
+    position: fixed !important;
+    z-index: 35;
+    inset: 100px auto 24px 16px !important;
+    width: 216px !important;
+    max-height: calc(100dvh - 124px);
+    margin: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+  }
+
+  .app-shell.has-desktop-navigation .app-main > .app-content,
+  .app-shell.has-desktop-navigation.no-plan .app-main > .app-content {
+    grid-column: 1 / -1 !important;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .app-shell.has-context-rail .app-main > .app-content,
+  .app-shell.has-context-rail.no-plan .app-main > .app-content {
+    grid-column: 1 / span 9 !important;
+  }
+
+  .app-shell.has-desktop-navigation .app-content > * {
+    width: 100%;
+    max-width: none;
+    margin-inline: 0;
+  }
+
+  .app-shell.has-context-rail .app-context-rail {
+    position: sticky;
+    top: 100px;
+    grid-column: 10 / -1;
+    display: grid;
+    min-width: 0;
+    max-height: calc(100dvh - 124px);
+    padding-right: 2px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    align-content: start;
+    gap: 14px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+
+  .app-shell.has-context-rail .daily-dashboard {
+    max-width: none;
+    padding: 24px 26px 38px;
+    gap: 22px;
+  }
+
+  .app-shell.has-context-rail .daily-dashboard-heading {
+    padding-bottom: 18px;
+  }
+
+  .app-shell.has-context-rail .daily-kpis {
+    gap: 10px;
+  }
+
+  .app-shell.has-context-rail .daily-kpis article {
+    padding: 14px;
+    gap: 10px;
+  }
+
+  .app-shell.has-context-rail .daily-kpis .kpi-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .app-shell.has-context-rail .daily-main-grid {
+    grid-template-columns: minmax(0, 1.45fr) minmax(250px, 1fr) !important;
+    gap: 16px !important;
+  }
+
+  .app-shell.has-context-rail .focus-card {
+    padding: 20px;
+    gap: 16px;
+  }
+
+  .app-shell.has-context-rail .timer-stage {
+    padding-block: 10px;
+    gap: 24px;
+  }
+
+  .app-shell.has-context-rail .timer-ring {
+    --ring-size: 150px;
+  }
+
+  .app-shell.has-context-rail .timer-face span {
+    font-size: 2rem;
+  }
+
+  .app-shell.has-context-rail .today-plan-card {
+    padding: 18px;
+  }
+
+  .app-shell.sidebar-collapsed.has-desktop-navigation .app-main,
+  .app-shell.sidebar-collapsed.has-desktop-navigation.no-plan .app-main {
+    width: calc(100% - 96px) !important;
+    margin-left: 96px !important;
+  }
+
+  .app-shell.sidebar-collapsed.has-desktop-navigation .app-main > .app-navigation,
+  .app-shell.sidebar-collapsed.has-desktop-navigation.no-plan .app-main > .app-navigation {
+    inset-inline-start: 12px !important;
+    width: 68px !important;
+  }
+
+  .app-shell.has-desktop-navigation > footer {
+    margin-left: 248px;
+  }
+
+  .app-shell.sidebar-collapsed.has-desktop-navigation > footer {
+    margin-left: 96px;
+  }
+}
+
+.context-rail-heading {
+  display: flex;
+  min-width: 0;
+  padding: 2px 2px 4px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.context-rail-heading > div {
+  min-width: 0;
+}
+
+.context-rail-heading > div > span,
+.context-card-label,
+.context-shortcuts > span {
+  display: block;
+  color: var(--quiet);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .1em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.app-main .context-rail-heading h2 {
+  margin: 4px 0 0;
+  color: var(--ink) !important;
+  font-size: 18px !important;
+  font-weight: 680 !important;
+  letter-spacing: -.025em !important;
+  line-height: 1.15 !important;
+}
+
+.context-rail-live {
+  display: inline-flex;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid #c9d9cb;
+  border-radius: 999px;
+  align-items: center;
+  gap: 5px;
+  color: #3f6248;
+  background: #eff5ef;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.context-rail-live i {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: #3f8051;
+  box-shadow: 0 0 0 3px rgb(63 128 81 / .1);
+}
+
+.app-context-rail > section,
+.context-shortcuts {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.app-context-rail .context-primary-card {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 105% -10%, rgb(23 105 210 / .12), transparent 42%),
+    var(--surface);
+}
+
+.app-main .app-context-rail h3 {
+  margin: 0;
+  color: var(--ink) !important;
+  font-size: 14px !important;
+  font-weight: 680 !important;
+  letter-spacing: -.02em !important;
+  line-height: 1.35 !important;
+  overflow-wrap: anywhere;
+}
+
+.context-primary-card > h3 {
+  margin-top: 7px !important;
+}
+
+.context-exam-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  min-width: 0;
+  margin-top: 15px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+  align-items: center;
+  gap: 8px;
+}
+
+.context-exam-row > svg {
+  width: 28px;
+  height: 28px;
+  padding: 7px;
+  border-radius: 8px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+}
+
+.context-exam-row > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.context-exam-row span,
+.context-card-heading span,
+.context-session-card small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.context-exam-row strong {
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.context-exam-row b {
+  padding: 5px 7px;
+  border-radius: 7px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  font-size: 9px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.context-card-heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.context-card-heading > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.context-card-heading strong {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 720;
+}
+
+.context-card-heading > svg {
+  width: 30px;
+  height: 30px;
+  padding: 7px;
+  flex: 0 0 30px;
+  border-radius: 9px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+}
+
+.context-progress-track {
+  height: 7px;
+  margin-top: 13px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.context-progress-track i {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.context-progress-meta {
+  display: flex;
+  margin-top: 8px;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.context-next-card > h3 {
+  margin-top: 14px !important;
+}
+
+.app-main .context-next-card > p,
+.app-main .context-guidance-card > p,
+.app-main .context-availability-card > p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.context-next-card > button,
+.context-guidance-card > button {
+  display: inline-flex;
+  width: 100%;
+  min-height: 38px;
+  margin-top: 13px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 9px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #fff;
+  background: var(--ink);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.context-next-card > button:hover,
+.context-guidance-card > button:hover {
+  background: #30343a;
+}
+
+.context-next-card > button svg,
+.context-guidance-card > button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.context-session-card {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  border-color: #c8d7ca !important;
+  background: #f1f6f1 !important;
+}
+
+.context-session-card > span {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 10px;
+  color: #3f6248;
+  background: #fff;
+}
+
+.context-session-card svg {
+  width: 17px;
+  height: 17px;
+}
+
+.context-session-card > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.context-session-card strong {
+  color: #314d38;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-main .context-session-card p {
+  margin: 0;
+  overflow: hidden;
+  color: #607064;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-shortcuts {
+  display: grid;
+  gap: 10px;
+}
+
+.context-shortcuts > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.context-shortcuts > div.context-shortcuts-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.context-shortcuts button {
+  display: grid;
+  min-width: 0;
+  min-height: 54px;
+  padding: 7px 5px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  color: var(--muted);
+  background: var(--surface-2);
+}
+
+.context-shortcuts button:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.context-shortcuts button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.context-shortcuts button span {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 8px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-availability-card > p {
+  margin-top: 3px !important;
+}
+
+.context-availability-card .context-exam-row {
+  grid-template-columns: 28px minmax(0, 1fr);
+}
+
+.context-guidance-card > svg {
+  width: 34px;
+  height: 34px;
+  padding: 8px;
+  border-radius: 10px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+}
+
+.context-guidance-card > h3 {
+  margin-top: 12px !important;
+}
+
+@media (min-width: 1600px) {
+  .app-shell.has-desktop-navigation .app-main,
+  .app-shell.has-desktop-navigation.no-plan .app-main,
+  .app-shell.has-desktop-navigation.sidebar-collapsed .app-main {
+    padding-inline: 34px !important;
+    gap: 28px !important;
+  }
+
+  .app-context-rail > section,
+  .context-shortcuts {
+    padding: 18px;
+  }
+}
+
+@media (max-width: 1279px) {
+  .app-context-rail {
+    display: none !important;
+  }
+}

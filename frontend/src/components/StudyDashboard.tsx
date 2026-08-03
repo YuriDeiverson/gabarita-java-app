@@ -10,7 +10,7 @@ import './Studydashboard.css';
 interface Props {
   onManagePlans: () => void;
   onOpenStudy: (context?: ActiveStudyContext) => void;
-  onOpenQuestions: () => void;
+  onOpenQuestions: (dailyTaskId?: string, minutes?: number) => void;
   onStudyContextChange: (context: ActiveStudyContext) => void;
   onSessionChange?: (session?: Partial<StudySession> | null) => void;
   initialData?: StudyDashboardData | null;
@@ -45,7 +45,6 @@ export default function StudyDashboard({ onManagePlans, onOpenStudy, onOpenQuest
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(!initialData);
   const [busy, setBusy] = useState(false);
-  const [pomodoroPreset, setPomodoroPreset] = useState<'25/10'|'50/10'>('50/10');
   const [feedback, setFeedback] = useState<string[]>([]);
   const [mobileInsightsOpen, setMobileInsightsOpen] = useState(false);
   const [tick, setTick] = useState(0);
@@ -88,10 +87,10 @@ export default function StudyDashboard({ onManagePlans, onOpenStudy, onOpenQuest
   const currentTask = useMemo(() => {
     if (!data || questionPractice) return null;
     if (active) return data.tasks.find(task => task.id === active.daily_task_id) || data.tasks[0] || null;
-    return data.tasks.find(task => ['AVAILABLE','IN_PROGRESS'].includes(task.status)) || data.tasks.find(task => task.status !== 'COMPLETED') || null;
+    return data.tasks.find(task => ['AVAILABLE','IN_PROGRESS'].includes(task.status)) || data.tasks.find(task => !['COMPLETED','SKIPPED'].includes(task.status)) || null;
   }, [active, data]);
   const isPomoBreak=active?.mode==='POMODORO'&&active.status==='PAUSED'&&active.pause_reason==='POMODORO_FOCUS_COMPLETE'&&Boolean(pomo);
-  const selectedFocusMinutes=pomodoroPreset==='25/10'?25:50;
+  const selectedFocusMinutes=currentTask?.activity_type==='QUESTIONS'&&currentTask.planned_minutes===30?30:50;
   const focusSeconds=Math.max(1,number(pomo?.focusMinutes)*60);
   const focusElapsed=pomo?Math.max(0,elapsed-cycle*focusSeconds):0;
   const focusRemaining=pomo?Math.max(0,focusSeconds-focusElapsed):selectedFocusMinutes*60;
@@ -128,6 +127,10 @@ export default function StudyDashboard({ onManagePlans, onOpenStudy, onOpenQuest
   };
   const start = () => {
     if(!currentTask)return;
+    if(currentTask.activity_type==='QUESTIONS'){
+      onOpenQuestions(currentTask.id,currentTask.planned_minutes);
+      return;
+    }
     if('Notification' in window&&Notification.permission==='default'){
       void Notification.requestPermission().catch(()=>{});
     }
@@ -135,7 +138,7 @@ export default function StudyDashboard({ onManagePlans, onOpenStudy, onOpenQuest
       const started=await dailyStudyApi.start(currentTask.id, {
         mode: 'POMODORO',
         pomodoro: {
-          focusMinutes: pomodoroPreset === '25/10' ? 25 : 50,
+          focusMinutes: 50,
           shortBreakMinutes: 10,
           longBreakMinutes: 10,
           cycles: 4
@@ -165,6 +168,10 @@ export default function StudyDashboard({ onManagePlans, onOpenStudy, onOpenQuest
     if(!Number.isFinite(minutes)||minutes<30){setError('Informe pelo menos 30 minutos para reorganizar o dia.');return;}
     action(()=>dailyStudyApi.rebalance(Math.round(minutes)));
   };
+  const skipQuestions=(taskId:string)=>{
+    if(!window.confirm('Não fazer o treino extra de questões hoje? Suas horas de conteúdo continuarão registradas normalmente.'))return;
+    void action(()=>dailyStudyApi.skipOptionalQuestions(taskId));
+  };
 
   if (loading) return (
     <div className="daily-dashboard-loading">
@@ -191,9 +198,11 @@ export default function StudyDashboard({ onManagePlans, onOpenStudy, onOpenQuest
   const recommendedTopicStudied=number(data.next.attempts)>0;
   const recommendationMastery=recommendedTopicStudied?number(data.next.mastery):number(data.next.plan_mastery);
   const recommendationMasteryLabel=recommendedTopicStudied?'Domínio do assunto':'Domínio médio do plano';
-  const completedTasks=data.tasks.filter(task=>task.status==='COMPLETED').length;
+  const plannedTasks=data.tasks.filter(task=>!task.outside_planned_hours);
+  const completedTasks=plannedTasks.filter(task=>task.status==='COMPLETED').length;
   const currentTaskIndex=currentTask?data.tasks.findIndex(task=>task.id===currentTask.id):-1;
-  const nextTask=data.tasks.find((task,index)=>index>currentTaskIndex&&task.status!=='COMPLETED')||null;
+  const nextTask=data.tasks.find((task,index)=>index>currentTaskIndex&&!['COMPLETED','SKIPPED'].includes(task.status))||null;
+  const extraQuestionTask=data.tasks.find(task=>task.activity_type==='QUESTIONS'&&task.outside_planned_hours);
 
   return <div className="daily-dashboard">
     <header className="daily-dashboard-heading">
@@ -212,13 +221,13 @@ export default function StudyDashboard({ onManagePlans, onOpenStudy, onOpenQuest
         <div className="focus-card-top">
           <div>
             <span className="eyebrow">{questionPractice?'Pomodoro em andamento':active?'Sessão em andamento':'Próxima ação'}</span>
-            <h3>{questionPractice?'Banco completo de questões':currentTask?.topic_title || 'Meta diária concluída'}</h3>
-            <p>{questionPractice?`${number(questionPractice.questions_answered)} questões respondidas nesta sessão`:currentTask?.subject_name || 'Seu progresso de hoje foi salvo.'}</p>
+            <h3>{questionPractice?'Banco completo de questões':currentTask?.activity_type==='QUESTIONS'?(currentTask.is_optional?'Questões extras do dia':'Revisão semanal com questões'):currentTask?.topic_title || 'Meta diária concluída'}</h3>
+            <p>{questionPractice?`${number(questionPractice.questions_answered)} questões respondidas nesta sessão`:currentTask?.activity_type==='QUESTIONS'?(currentTask.is_optional?'Opcional e fora da carga planejada.':'Obrigatória no encerramento da semana.'):currentTask?.subject_name || 'Seu progresso de hoje foi salvo.'}</p>
           </div>
           {currentTask&&!questionPractice&&<span className="focus-duration"><Clock3 />{currentTask.planned_minutes} min</span>}
         </div>
         {currentTask&&!questionPractice ? <>
-          <div className="focus-objective"><Target /><p><strong>Objetivo</strong>{currentTask.objective || 'Consolidar o conteúdo e praticar com questões.'}</p></div>
+          <div className="focus-objective"><Target /><p><strong>Objetivo</strong>{currentTask.activity_type==='QUESTIONS'?'Consolidar os conteúdos estudados no dia, corrigir erros e identificar pontos fracos.':currentTask.objective || 'Consolidar o conteúdo e praticar com questões.'}</p></div>
           <div className="timer-stage">
             <div className={`timer-ring ${active?.status==='PAUSED'?'is-paused':''}`} style={{'--timer-progress':`${timerProgress}%`} as React.CSSProperties}>
               <div className="timer-face"><span>{clock(timerDisplay)}</span><small>{timerCaption}</small></div>
@@ -229,38 +238,40 @@ export default function StudyDashboard({ onManagePlans, onOpenStudy, onOpenQuest
               <p><span>Domínio atual</span><strong>{Math.round(number(currentTask.mastery))}%</strong></p>
             </div>
           </div>
-          {!active&&<div className="timer-mode" role="group" aria-label="Duração do Pomodoro">
-            <button className={pomodoroPreset==='50/10'?'is-active':''} onClick={()=>setPomodoroPreset('50/10')}>50 min + 10 min</button>
-            <button className={pomodoroPreset==='25/10'?'is-active':''} onClick={()=>setPomodoroPreset('25/10')}>25 min + 10 min</button>
-          </div>}
+          {!active&&<div className="timer-mode" aria-label="Duração do Pomodoro"><strong>50 min de foco + 10 min de descanso</strong></div>}
           <div className="timer-actions">
-            {!active&&<button className="primary-study-action" disabled={busy} onClick={start}><Play /> Começar agora</button>}
+            {!active&&<button className="primary-study-action" disabled={busy} onClick={start}><Play /> {currentTask.activity_type==='QUESTIONS'?'Fazer questões':'Começar agora'}</button>}
+            {!active&&currentTask.activity_type==='QUESTIONS'&&currentTask.is_optional&&<button className="secondary-study-action" disabled={busy} onClick={()=>skipQuestions(currentTask.id)}>Não fazer hoje</button>}
             {active?.status==='RUNNING'&&<button className="secondary-study-action" disabled={busy} onClick={pauseActive}><Pause /> Pausar</button>}
             {active?.status==='PAUSED'&&<button className="primary-study-action" disabled={busy} onClick={resumeActive}><Play /> {isPomoBreak&&breakRemaining>0?'Pular descanso':'Continuar'}</button>}
             {active&&<button className="finish-study-action" disabled={busy} onClick={()=>onOpenStudy({roadmapTopicId:currentTask.roadmap_topic_id,topicTitle:currentTask.topic_title,subjectName:currentTask.subject_name,source:'session'})}><BookOpen /> Continuar conteúdo</button>}
           </div>
-        </>:questionPractice?<button className="primary-study-action" onClick={onOpenQuestions}><ListChecks /> Continuar questões</button>:<button className="primary-study-action" onClick={()=>onOpenStudy()}><BookOpen /> Revisar conteúdos</button>}
+        </>:questionPractice?<button className="primary-study-action" onClick={()=>onOpenQuestions()}><ListChecks /> Continuar questões</button>:<button className="primary-study-action" onClick={()=>onOpenStudy()}><BookOpen /> Revisar conteúdos</button>}
       </section>
 
       <aside className="today-plan-card">
         <div className="card-heading"><div><span className="eyebrow">Rota do dia</span><h3>Plano de hoje</h3></div><strong className="progress-figure">{Math.round(progress)}%</strong></div>
         <div className="daily-progress-track"><i style={{width:`${progress}%`}}/></div>
         <ol className="today-task-list">{data.tasks.map((task)=>{
-          const complete=task.status==='COMPLETED',current=task.id===currentTask?.id;
-          return <li key={task.id} className={`${complete?'is-complete':''} ${current?'is-current':''}`}>
-            <span className="task-state">{complete?<Check />:<Circle />}</span>
-            <button disabled={!current&&!complete} onClick={()=>current&&!active&&start()}><strong>{task.topic_title}</strong><small>{task.subject_name} · {task.planned_minutes} min</small></button>
-            <span className="task-tag">{complete?'Feito':current?'Agora':task.activity_type==='REVIEW'?'Revisão':'Depois'}</span>
+          const complete=task.status==='COMPLETED',skipped=task.status==='SKIPPED',current=task.id===currentTask?.id;
+          const questionTitle=task.is_optional?'Questões extras do dia':'Revisão semanal com questões';
+          return <li key={task.id} className={`${complete?'is-complete':''} ${skipped?'is-skipped':''} ${current?'is-current':''} ${task.outside_planned_hours?'is-extra':''}`}>
+            <span className="task-state">{complete?<Check />:skipped?<X />:<Circle />}</span>
+            <button disabled={!current&&!complete} onClick={()=>current&&!active&&start()}><strong>{task.activity_type==='QUESTIONS'?questionTitle:task.topic_title}</strong><small>{task.activity_type==='QUESTIONS'?(task.is_optional?'Fora da carga planejada · opcional':'Fechamento semanal · obrigatório'):task.subject_name} · {task.planned_minutes} min</small></button>
+            {task.activity_type==='QUESTIONS'&&task.is_optional&&!complete&&!skipped&&!questionPractice
+              ?<button type="button" className="skip-question-task" disabled={busy} onClick={()=>skipQuestions(task.id)}>Não fazer hoje</button>
+              :<span className="task-tag">{complete?'Feito':skipped?'Dispensado':current?'Agora':task.activity_type==='QUESTIONS'?'Obrigatória':task.activity_type==='REVIEW'?'Revisão':'Depois'}</span>}
           </li>;
         })}</ol>
         <div className="today-plan-footer"><Clock3 /><span><strong>{duration(number(data.today.remaining_minutes))}</strong> para cumprir a meta de hoje</span></div>
+        {extraQuestionTask&&extraQuestionTask.status!=='SKIPPED'&&<div className={`extra-questions-note ${extraQuestionTask.is_optional?'':'is-mandatory'}`}><ListChecks/><span><strong>+ {duration(extraQuestionTask.planned_minutes)} de questões</strong>{extraQuestionTask.is_optional?'extra e opcional, depois da carga planejada':'obrigatórias para a revisão semanal'}</span></div>}
         <button className="less-time-button" onClick={rebalance}>Hoje tenho menos tempo</button>
       </aside>
     </div>
 
     <section className="mobile-daily-summary" aria-label="Resumo do plano de hoje">
       <div className="mobile-summary-heading">
-        <div><span className="eyebrow">Progresso de hoje</span><strong>{completedTasks} de {data.tasks.length} etapas</strong></div>
+        <div><span className="eyebrow">Progresso de hoje</span><strong>{completedTasks} de {plannedTasks.length} etapas planejadas</strong></div>
         <span>{Math.round(progress)}%</span>
       </div>
       <div className="daily-progress-track" aria-hidden="true"><i style={{width:`${progress}%`}}/></div>

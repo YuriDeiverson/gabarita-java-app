@@ -31,14 +31,17 @@ public class EngagementService {
             SELECT COALESCE((SELECT SUM(dt.completed_minutes) FROM daily_tasks dt WHERE dt.user_id=:u AND dt.plan_id=:p AND dt.task_date=:date),0)
                 +COALESCE((SELECT SUM(ss.effective_seconds/60) FROM study_sessions ss JOIN users su ON su.id=ss.user_id
                   WHERE ss.user_id=:u AND ss.plan_id=:p AND ss.session_kind='QUESTIONS' AND ss.status='COMPLETED'
+                  AND ss.daily_task_id IS NULL
                   AND (ss.ended_at AT TIME ZONE su.timezone)::date=:date),0) studied_minutes,
               COALESCE((SELECT COUNT(*) FROM daily_tasks dt WHERE dt.user_id=:u AND dt.plan_id=:p AND dt.task_date=:date AND dt.status='COMPLETED'),0) tasks_completed,
               COALESCE((SELECT SUM(dt.questions_answered) FROM daily_tasks dt WHERE dt.user_id=:u AND dt.plan_id=:p AND dt.task_date=:date),0)
                 +COALESCE((SELECT SUM(ss.questions_answered) FROM study_sessions ss JOIN users su ON su.id=ss.user_id
                   WHERE ss.user_id=:u AND ss.plan_id=:p AND ss.session_kind='QUESTIONS' AND ss.status='COMPLETED'
+                  AND ss.daily_task_id IS NULL
                   AND (ss.ended_at AT TIME ZONE su.timezone)::date=:date),0) questions_answered,
               COALESCE((SELECT ROUND(100.0*SUM(dt.completed_minutes)/NULLIF(SUM(dt.planned_minutes),0),2)
-                FROM daily_tasks dt WHERE dt.user_id=:u AND dt.plan_id=:p AND dt.task_date=:date),0) goal_percentage
+                FROM daily_tasks dt WHERE dt.user_id=:u AND dt.plan_id=:p AND dt.task_date=:date
+                  AND NOT dt.outside_planned_hours),0) goal_percentage
             """).param("u", userId).param("p", planId).param("date", today).query().singleRow();
         int minutes = number(totals, "studied_minutes"), tasks = number(totals, "tasks_completed"),
                 questions = number(totals, "questions_answered");

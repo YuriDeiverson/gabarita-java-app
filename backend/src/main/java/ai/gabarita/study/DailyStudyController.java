@@ -20,6 +20,7 @@ public class DailyStudyController {
     @GetMapping("/today") public Map<String,Object> today(){return daily.today();}
     @GetMapping("/next") public Map<String,Object> next(@RequestParam(required=false) UUID planId){return planId==null?daily.next():daily.next(planId);}
     @PostMapping("/today/rebalance") public Map<String,Object> rebalance(@Valid @RequestBody RebalanceInput input){return daily.rebalance(input.availableMinutes());}
+    @PostMapping("/tasks/{id}/skip-questions") public Map<String,Object> skipQuestions(@PathVariable UUID id){return daily.skipOptionalQuestions(id);}
     @PostMapping("/tasks/{id}/start") public Map<String,Object> start(@PathVariable UUID id,@RequestBody(required=false) StartInput input){
         var value=input==null?new StartInput("FREE",null,null):input;
         return sessions.start(currentUser.id(),id,value.mode(),value.pomodoro(),value.device());

@@ -15,6 +15,7 @@ interface PlanManagerProps {
 const courseLabel = (plan: StudyPlan) => {
   const course = plan.course_id || plan.courseId;
   if (course === 'seplag_informatica') return 'SEPLAG/AL • Informática';
+  if (course === 'policial_civil') return 'Policial Civil • CEBRASPE';
   if (course === 'tecnico_enfermagem') return 'Técnico em Enfermagem';
   if (course === 'jornalismo') return 'Jornalismo';
   return course || 'Plano personalizado';

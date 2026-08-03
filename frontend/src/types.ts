@@ -12,6 +12,8 @@ export interface StudyCard {
 export interface StudySection {
   id: string;
   title: string;
+  learningTrack?: 'basic' | 'specific';
+  learningOrder?: number;
   icon: string;
   color: string;
   difficulty: 'Fácil' | 'Médio' | 'Difícil';
@@ -58,8 +60,13 @@ export interface StudyBlock {
   id: string;
   day?: string;
   date?: string;
+  isoDate?: string;
   title: string;
   duration: string; // e.g., "2h"
+  durationMinutes?: number;
+  activityType?: 'THEORY' | 'QUESTIONS' | 'REVIEW';
+  isOptional?: boolean;
+  outsidePlannedHours?: boolean;
   methodology: string; // e.g., "30% Teoria, 50% Exercícios, 20% Revisão"
   subtopics: string[];
   done: boolean;

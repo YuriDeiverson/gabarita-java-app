@@ -15,9 +15,9 @@ public class StudySessionController {
     public record PauseInput(String reason){}
     public record FinishInput(@Min(0) Integer questionsAnswered,@Min(0) Integer correctAnswers,String notes){}
     public record CancelInput(String notes){}
-    public record QuestionStartInput(@NotNull UUID planId,@Min(5) @Max(120) int focusMinutes,String device){}
+    public record QuestionStartInput(@NotNull UUID planId,@Min(5) @Max(120) int focusMinutes,String device,UUID dailyTaskId){}
     public record QuestionAnswerInput(@NotBlank String questionId,boolean correct){}
-    @PostMapping("/questions") public Map<String,Object> startQuestions(@Valid @RequestBody QuestionStartInput input){return service.startQuestionPractice(currentUser.id(),input.planId(),input.focusMinutes(),input.device());}
+    @PostMapping("/questions") public Map<String,Object> startQuestions(@Valid @RequestBody QuestionStartInput input){return service.startQuestionPractice(currentUser.id(),input.planId(),input.focusMinutes(),input.device(),input.dailyTaskId());}
     @PostMapping("/{id}/questions") public Map<String,Object> recordQuestion(@PathVariable UUID id,@Valid @RequestBody QuestionAnswerInput input){return service.recordQuestion(currentUser.id(),id,input.questionId(),input.correct());}
     @PostMapping("/{id}/finish-questions") public Map<String,Object> finishQuestions(@PathVariable UUID id,@RequestBody(required=false) CancelInput input){return service.finishQuestionPractice(currentUser.id(),id,input==null?null:input.notes());}
     @GetMapping("/active") public Map<String,Object> active(){return service.activeOrEmpty(currentUser.id());}

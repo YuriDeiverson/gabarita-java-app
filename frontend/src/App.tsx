@@ -1,17 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import HomeTab from './components/HomeTab';
 import StudyTab from './components/StudyTab';
 import QuizTab, { GuidedReviewResult } from './components/QuizTab';
 import ScheduleTab from './components/ScheduleTab';
 import PerformanceTab from './components/PerformanceTab';
 import StudyDashboard from './components/StudyDashboard';
 import QuestionBankTab from './components/QuestionBankTab';
+import CareerTab from './components/CareerTab';
+import InitialStudySetup from './components/InitialStudySetup';
+import { StudyPreferences, loadStudyPreferences, saveStudyPreferences } from './careerPlan';
 import { dailyStudyApi, notificationsApi, studyPlansApi, StudyDashboardData, StudySession } from './services/api';
 import { ActiveStudyContext } from './studyContext';
 import { useAuth } from './auth/AuthContext';
-import { Bell, BookOpen, BookOpenCheck, Calendar, Sparkles, Target, Home as HomeIcon, ChartNoAxesCombined, PanelLeftClose, PanelLeftOpen, ListChecks, Award, X, LogOut, UserRound, Settings2, Flame, Star, ShieldCheck, Clock3, ChevronRight, CheckCheck, RefreshCw, Play, TimerReset } from 'lucide-react';
+import { Bell, BookOpen, BookOpenCheck, BriefcaseBusiness, Calendar, Target, Home as HomeIcon, ChartNoAxesCombined, PanelLeftClose, PanelLeftOpen, ListChecks, Award, X, LogOut, UserRound, Settings2, Flame, Star, ShieldCheck, Clock3, ChevronRight, CheckCheck, RefreshCw, Play, TimerReset } from 'lucide-react';
 
-type AppTab = 'home' | 'study' | 'quiz' | 'questions' | 'schedule' | 'performance';
+type AppTab = 'home' | 'career' | 'study' | 'quiz' | 'questions' | 'schedule' | 'performance';
 
 const hasActiveStudyPlan = () => Boolean(
   (() => {
@@ -30,9 +32,12 @@ const hasActiveStudyPlan = () => Boolean(
 export default function App() {
   const {user,signOut}=useAuth();
   const [hasPlan, setHasPlan] = useState(hasActiveStudyPlan);
+  const [studyPreferences,setStudyPreferences]=useState<StudyPreferences|null>(()=>loadStudyPreferences(user?.id));
+  const [editingPreferences,setEditingPreferences]=useState(false);
   const [activeTab, setActiveTab] = useState<AppTab>(() => {
     const saved = localStorage.getItem('app_active_tab');
-    return saved && saved !== 'home' && !hasActiveStudyPlan() ? 'home' : (saved as AppTab) || 'home';
+    const setupAvailable=Boolean(loadStudyPreferences(user?.id));
+    return saved && saved !== 'home' && !hasActiveStudyPlan() && !(saved==='career'&&setupAvailable) ? 'home' : (saved as AppTab) || 'home';
   });
   const [homeMode, setHomeMode] = useState<'dashboard'|'plans'>(() => hasActiveStudyPlan() ? 'dashboard' : 'plans');
   const [studyContext,setStudyContext]=useState<ActiveStudyContext|null>(()=>{
@@ -42,6 +47,7 @@ export default function App() {
   const [advancingCycle,setAdvancingCycle]=useState(false);
   const [cycleError,setCycleError]=useState('');
   const [dashboardVersion,setDashboardVersion]=useState(0);
+  const [questionDailyTask,setQuestionDailyTask]=useState<{id:string;minutes:number}|null>(null);
   const [profileMenuOpen,setProfileMenuOpen]=useState(false);
   const [mobileProfileOpen,setMobileProfileOpen]=useState(false);
   const [notificationMenuOpen,setNotificationMenuOpen]=useState(false);
@@ -172,6 +178,10 @@ export default function App() {
   },[dashboardVersion,loadHeaderStudyData]);
 
   useEffect(()=>{
+    if(activeTab!=='questions')setQuestionDailyTask(null);
+  },[activeTab]);
+
+  useEffect(()=>{
     const interval=window.setInterval(()=>setHeaderTimerTick(value=>value+1),1_000);
     return()=>window.clearInterval(interval);
   },[]);
@@ -298,7 +308,7 @@ export default function App() {
       if (remotePlans.some(plan => String(plan.id) === String(localPlanId))) return;
 
       localStorage.setItem('study_plan_deleted', 'true');
-      ['seplag_informatica', 'tecnico_enfermagem', 'jornalismo'].forEach(id => {
+      ['seplag_informatica', 'policial_civil', 'tecnico_enfermagem', 'jornalismo'].forEach(id => {
         [
           'study_sections', 'quiz_questions', 'schedule_weeks', 'study_config',
           'study_schedule_progress', 'quiz_answers'
@@ -318,9 +328,15 @@ export default function App() {
     });
   }, []);
 
+  useEffect(()=>{
+    setStudyPreferences(loadStudyPreferences(user?.id));
+    setEditingPreferences(false);
+  },[user?.id]);
+
   useEffect(() => {
-    if (!hasPlan && activeTab !== 'home') setActiveTab('home');
-  }, [hasPlan, activeTab]);
+    if (!studyPreferences && activeTab !== 'home') setActiveTab('home');
+    else if (!hasPlan && activeTab !== 'home' && activeTab !== 'career') setActiveTab('home');
+  }, [hasPlan, activeTab, studyPreferences]);
 
   useEffect(() => {
     localStorage.setItem('app_sidebar_collapsed', String(sidebarCollapsed));
@@ -361,6 +377,13 @@ export default function App() {
     localStorage.removeItem('active_study_context');
     loadGlobalKPIs();
     setHomeMode('dashboard');
+    setActiveTab('home');
+  };
+
+  const handlePreferencesSave=(preferences:StudyPreferences)=>{
+    saveStudyPreferences(preferences,user?.id);
+    setStudyPreferences(preferences);
+    setEditingPreferences(false);
     setActiveTab('home');
   };
 
@@ -424,20 +447,26 @@ export default function App() {
     switch (activeCourse) {
       case 'tecnico_enfermagem':
         return {
-          title: "Gabarita Concursos",
+          title: "Gabaritando Concursos",
           subtitle: "Preparação inteligente e desempenho orientado por dados",
           focus: "Saúde"
         };
       case 'jornalismo':
         return {
-          title: "Gabarita Concursos",
+          title: "Gabaritando Concursos",
           subtitle: "Preparação inteligente e desempenho orientado por dados",
           focus: "Jornalismo"
+        };
+      case 'policial_civil':
+        return {
+          title: "Gabaritando Concursos",
+          subtitle: "Preparação inteligente e desempenho orientado por dados",
+          focus: "Polícia Civil"
         };
       case 'seplag_informatica':
       default:
         return {
-          title: "Gabarita Concursos",
+          title: "Gabaritando Concursos",
           subtitle: "Preparação inteligente e desempenho orientado por dados",
           focus: "Tecnologia"
         };
@@ -448,10 +477,13 @@ export default function App() {
   const isHome = activeTab === 'home';
   const navigationItems = [
     { id: 'home' as AppTab, label: 'Início', mobileLabel: 'Início', icon: HomeIcon },
-    { id: 'study' as AppTab, label: 'Estudar', mobileLabel: 'Estudar', icon: BookOpen },
-    { id: 'quiz' as AppTab, label: 'Revisão', mobileLabel: 'Revisão', icon: Sparkles },
-    { id: 'schedule' as AppTab, label: 'Cronograma', mobileLabel: 'Cronograma', icon: Calendar },
-    { id: 'questions' as AppTab, label: 'Questões', mobileLabel: 'Questões', icon: ListChecks },
+    ...(hasPlan ? [
+      { id: 'study' as AppTab, label: 'Meu plano', mobileLabel: 'Meu plano', icon: BookOpen },
+      { id: 'schedule' as AppTab, label: 'Cronograma', mobileLabel: 'Cronograma', icon: Calendar },
+      { id: 'questions' as AppTab, label: 'Questões', mobileLabel: 'Questões', icon: ListChecks },
+      { id: 'performance' as AppTab, label: 'Desempenho', mobileLabel: 'Desempenho', icon: ChartNoAxesCombined },
+    ] : []),
+    { id: 'career' as AppTab, label: 'Concursos', mobileLabel: 'Concursos', icon: BriefcaseBusiness },
   ];
   const activeNavigationItem = navigationItems.find(item => item.id === activeTab)
     || (activeTab === 'performance'
@@ -623,7 +655,7 @@ export default function App() {
 
   const openPlanManager=()=>{
     setProfileMenuOpen(false);setMobileProfileOpen(false);setNotificationMenuOpen(false);
-    setHomeMode('plans');setActiveTab('home');
+    setActiveTab('career');
   };
   const openProfileDestination=(tab:'schedule'|'performance')=>{
     setProfileMenuOpen(false);setMobileProfileOpen(false);setNotificationMenuOpen(false);setActiveTab(tab);
@@ -663,7 +695,7 @@ export default function App() {
       <button type="button" onClick={()=>openProfileDestination('schedule')}><span><Calendar/><span><strong>Cronograma</strong><small>Planejamento dos estudos</small></span></span><ChevronRight/></button>
     </nav>}
     <div className="profile-account-actions">
-      <button type="button" onClick={openPlanManager}><Settings2/><span>Gerenciar plano</span></button>
+      <button type="button" onClick={openPlanManager}><Settings2/><span>Gerenciar preparações</span></button>
       <button type="button" className="profile-logout" onClick={()=>{setProfileMenuOpen(false);setMobileProfileOpen(false);void signOut();}}><LogOut/><span>Sair</span></button>
     </div>
   </>;
@@ -706,8 +738,94 @@ export default function App() {
     </div>}
   </div>;
 
+  const showContextRail=Boolean(studyPreferences&&!editingPreferences);
+  const contextualExamDate=String(headerStudyData?.plan?.exam_date||headerStudyData?.plan?.examDate||studyPreferences?.examDate||'');
+  const contextualExamDays=(()=>{
+    if(!contextualExamDate)return null;
+    const target=new Date(`${contextualExamDate}T00:00:00`).getTime();
+    if(!Number.isFinite(target))return null;
+    return Math.ceil((target-Date.now())/86_400_000);
+  })();
+  const contextualNextTask=headerStudyData?.tasks?.find(task=>['AVAILABLE','IN_PROGRESS'].includes(task.status))
+    || headerStudyData?.tasks?.find(task=>!['COMPLETED','SKIPPED'].includes(task.status));
+  const contextualProgress=Math.max(0,Math.min(100,Math.round(Number(headerStudyData?.today?.progress_percentage||0))));
+  const contextRail=showContextRail&&<aside className="app-context-rail" aria-label="Resumo e atalhos contextuais">
+    <header className="context-rail-heading">
+      <div><span>Visão rápida</span><h2>{activeNavigationItem.label}</h2></div>
+      <span className="context-rail-live"><i/>{hasPlan?'Plano ativo':'Configuração pronta'}</span>
+    </header>
+
+    {hasPlan?<>
+      <section className="context-primary-card" aria-label="Preparação ativa">
+        <span className="context-card-label">Preparação ativa</span>
+        <h3>{String(headerStudyData?.plan?.title||brand.focus)}</h3>
+        <div className="context-exam-row">
+          <Calendar aria-hidden="true"/>
+          <div><span>Data da prova</span><strong>{contextualExamDate?contextualExamDate.split('-').reverse().join('/'):'A definir'}</strong></div>
+          {contextualExamDays!==null&&<b>{contextualExamDays<0?'Encerrada':contextualExamDays===0?'Hoje':`${contextualExamDays} dias`}</b>}
+        </div>
+      </section>
+
+      <section className="context-progress-card" aria-label="Progresso de hoje">
+        <div className="context-card-heading"><div><span>Progresso de hoje</span><strong>{contextualProgress}%</strong></div><Target aria-hidden="true"/></div>
+        <div className="context-progress-track" aria-hidden="true"><i style={{width:`${contextualProgress}%`}}/></div>
+        <div className="context-progress-meta">
+          <span>{formatMinutes(headerStudyData?.today?.completed_minutes)} estudados</span>
+          <span>{formatMinutes(headerStudyData?.today?.remaining_minutes)} restantes</span>
+        </div>
+      </section>
+
+      <section className="context-next-card" aria-label="Próxima atividade">
+        <div className="context-card-heading"><div><span>Próxima atividade</span><strong>{contextualNextTask?'Pronta para começar':'Rotina concluída'}</strong></div><BookOpen aria-hidden="true"/></div>
+        <h3>{String(contextualNextTask?.topic_title||headerStudyData?.next?.title||'Nenhuma atividade pendente')}</h3>
+        <p>{String(contextualNextTask?.subject_name||'Siga o cronograma para manter a preparação em dia.')}</p>
+        {contextualNextTask&&<button type="button" onClick={()=>{
+          if(contextualNextTask.activity_type==='QUESTIONS'){
+            setQuestionDailyTask({id:contextualNextTask.id,minutes:contextualNextTask.planned_minutes});setActiveTab('questions');
+          }else setActiveTab('study');
+        }}><Play aria-hidden="true"/> {contextualNextTask.activity_type==='QUESTIONS'?'Fazer questões':'Continuar estudando'}</button>}
+      </section>
+
+      {activeHeaderSession&&<section className="context-session-card" aria-label="Sessão em andamento">
+        <span><Clock3 aria-hidden="true"/></span>
+        <div><small>{headerIsBreak?'Intervalo atual':'Sessão em andamento'}</small><strong>{formatClock(headerTimerSeconds)}</strong><p>{String(activeHeaderSession.topic_title||activeHeaderSession.context_title||'Atividade atual')}</p></div>
+      </section>}
+
+      <nav className="context-shortcuts" aria-label="Atalhos">
+        <span>Atalhos</span>
+        <div>
+          <button type="button" onClick={()=>setActiveTab('schedule')}><Calendar aria-hidden="true"/><span>Cronograma</span></button>
+          <button type="button" onClick={()=>setActiveTab('questions')}><ListChecks aria-hidden="true"/><span>Questões</span></button>
+          <button type="button" onClick={()=>setActiveTab('performance')}><ChartNoAxesCombined aria-hidden="true"/><span>Desempenho</span></button>
+        </div>
+      </nav>
+    </>:<>
+      <section className="context-primary-card context-availability-card" aria-label="Disponibilidade configurada">
+        <span className="context-card-label">Disponibilidade configurada</span>
+        <h3>{studyPreferences?.hoursPerDay||0} horas por dia</h3>
+        <p>{studyPreferences?.selectedWeekdays.length||0} dias de estudo por semana</p>
+        <div className="context-exam-row">
+          <Calendar aria-hidden="true"/>
+          <div><span>Data informada</span><strong>{contextualExamDate?contextualExamDate.split('-').reverse().join('/'):'A definir'}</strong></div>
+        </div>
+      </section>
+      <section className="context-guidance-card">
+        <BriefcaseBusiness aria-hidden="true"/>
+        <h3>Escolha sua preparação</h3>
+        <p>Selecione o concurso e o cargo. O edital será distribuído automaticamente no seu cronograma.</p>
+        <button type="button" onClick={()=>setActiveTab('career')}>Explorar concursos <ChevronRight aria-hidden="true"/></button>
+      </section>
+      <nav className="context-shortcuts" aria-label="Ajustes rápidos">
+        <span>Ajustes rápidos</span>
+        <div className="context-shortcuts-single">
+          <button type="button" onClick={()=>{setEditingPreferences(true);setActiveTab('home');}}><Settings2 aria-hidden="true"/><span>Disponibilidade</span></button>
+        </div>
+      </nav>
+    </>}
+  </aside>;
+
   return (
-    <div className={`app-shell min-h-screen bg-slate-50 text-slate-800 flex flex-col ${hasPlan ? 'has-plan' : 'no-plan'} ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${activeHeaderSession&&activeTab!=='home'?'has-active-timer':''}`}>
+    <div className={`app-shell min-h-screen bg-slate-50 text-slate-800 flex flex-col ${hasPlan ? 'has-plan' : 'no-plan'} ${(hasPlan||studyPreferences)?'has-desktop-navigation':''} ${showContextRail?'has-context-rail':''} ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${activeHeaderSession&&activeTab!=='home'?'has-active-timer':''}`}>
       <a className="skip-link" href="#main-content">Pular para o conteúdo principal</a>
       {/* Upper Navigation & App Bar */}
       <header className="app-header bg-white border-b border-slate-200 sticky top-0 z-50">
@@ -722,7 +840,7 @@ export default function App() {
                 {isHome ? (
                   <>
                     <h1 className="text-base font-extrabold tracking-tight text-slate-900">
-                      Gabarita Concursos
+                      Gabaritando Concursos
                     </h1>
                     <p className="text-[10px] text-slate-500 font-medium">
                       Planejamento enxuto para reta final
@@ -762,7 +880,7 @@ export default function App() {
       <main id="main-content" className="app-main" tabIndex={-1}>
         
         {/* Navigation */}
-          {hasPlan && <nav className="app-navigation desktop-app-navigation flex space-x-1 lg:space-x-2 bg-slate-100 p-1.5 rounded-xl self-start w-full md:w-auto" aria-label="Navegação principal">
+          {(hasPlan||studyPreferences) && <nav className="app-navigation desktop-app-navigation flex space-x-1 lg:space-x-2 bg-slate-100 p-1.5 rounded-xl self-start w-full md:w-auto" aria-label="Navegação principal">
             {hasPlan && <div className="sidebar-control">
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600">Painel</p>
@@ -800,14 +918,17 @@ export default function App() {
 
         {/* Tab Content Rendering */}
         <div className="app-content min-w-0 flex-grow transition-all duration-300">
-          {activeTab === 'home' && hasPlan && homeMode === 'dashboard' && <StudyDashboard key={dashboardVersion} initialData={headerStudyData} onManagePlans={()=>setHomeMode('plans')} onOpenStudy={openStudyContext} onOpenQuestions={()=>setActiveTab('questions')} onStudyContextChange={updateStudyContext} onSessionChange={handleSessionChange} />}
-          {activeTab === 'home' && (!hasPlan || homeMode === 'plans') && <HomeTab onPlanGenerated={handlePlanGenerated} onPlansChanged={handlePlansChanged} onBeforeCreatePlan={requestNewPlanConfiguration} />}
+          {activeTab === 'home' && (!studyPreferences || editingPreferences) && <InitialStudySetup initial={studyPreferences} onSave={handlePreferencesSave} />}
+          {activeTab === 'home' && studyPreferences && !editingPreferences && hasPlan && homeMode === 'dashboard' && <StudyDashboard key={dashboardVersion} initialData={headerStudyData} onManagePlans={()=>setActiveTab('career')} onOpenStudy={openStudyContext} onOpenQuestions={(id,minutes)=>{setQuestionDailyTask(id?{id,minutes:minutes||30}:null);setActiveTab('questions');}} onStudyContextChange={updateStudyContext} onSessionChange={handleSessionChange} />}
+          {activeTab === 'home' && studyPreferences && !editingPreferences && !hasPlan && <section className="mx-auto max-w-4xl animate-fade-in rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm sm:p-12"><span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700"><BriefcaseBusiness className="h-7 w-7" /></span><h2 className="mt-5 text-2xl font-black text-slate-950">Sua disponibilidade está pronta</h2><p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-slate-500">Agora acesse Concursos, escolha o edital e depois o cargo. Todo o conteúdo será incluído automaticamente no cronograma.</p><button type="button" onClick={()=>setActiveTab('career')} className="mt-6 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-extrabold text-white hover:bg-indigo-700">Explorar concursos</button></section>}
+          {activeTab === 'career' && studyPreferences && <CareerTab preferences={studyPreferences} onPlanGenerated={handlePlanGenerated} onBeforeCreatePlan={requestNewPlanConfiguration} onEditPreferences={()=>{setEditingPreferences(true);setActiveTab('home');}} onNavigate={tab=>setActiveTab(tab)} onPlansChanged={handlePlansChanged} />}
           {hasPlan && activeTab === 'study' && <StudyTab studyContext={studyContext} onCurrentActivityComplete={openCurrentReview} />}
           {hasPlan && activeTab === 'quiz' && <QuizTab mode="session" studyContext={studyContext} onReviewComplete={showReviewResult} />}
-          {hasPlan && activeTab === 'schedule' && <ScheduleTab studyContext={studyContext} onOpenStudy={openStudyContext} />}
-          {hasPlan && activeTab === 'questions' && <QuestionBankTab onSessionChange={handleSessionChange} />}
+          {hasPlan && activeTab === 'schedule' && <ScheduleTab studyContext={studyContext} onOpenStudy={openStudyContext} onOpenQuestions={()=>{setQuestionDailyTask(null);setActiveTab('questions');}} />}
+          {hasPlan && activeTab === 'questions' && <QuestionBankTab dailyTask={questionDailyTask} onDailyTaskFinished={()=>setQuestionDailyTask(null)} onSessionChange={handleSessionChange} />}
           {hasPlan && activeTab === 'performance' && <PerformanceTab />}
         </div>
+        {contextRail}
       </main>
 
       {reviewResult&&<div className="finish-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="guided-review-result-title">
@@ -874,7 +995,7 @@ export default function App() {
       </div>}
 
       <nav className={`mobile-bottom-nav ${hasPlan?'':'is-no-plan'}`} aria-label="Navegação principal mobile">
-        {(hasPlan?navigationItems.filter(item=>item.id!=='schedule'&&item.id!=='performance'):navigationItems.filter(item=>item.id==='home')).map(item => {
+        {(hasPlan?navigationItems.filter(item=>item.id!=='schedule'&&item.id!=='performance'):studyPreferences?navigationItems:navigationItems.filter(item=>item.id==='home')).map(item => {
           const Icon = item.icon;
           return <button
             key={item.id}

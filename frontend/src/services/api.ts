@@ -64,6 +64,7 @@ export interface ScheduleAgendaItem {
   roadmap_topic_id?: string;
   title: string;
   subject_name: string;
+  topic_title?: string;
   activity_type: string;
   planned_minutes: number;
   studied_minutes: number;
@@ -72,6 +73,8 @@ export interface ScheduleAgendaItem {
   correct_answers: number;
   accuracy?: number | null;
   status: string;
+  is_optional?: boolean;
+  outside_planned_hours?: boolean;
   objective?: string;
   review_points: string[];
 }
@@ -80,6 +83,7 @@ export interface ScheduleAgendaDay {
   date: string;
   status: string;
   planned_minutes: number;
+  extra_question_minutes?: number;
   studied_minutes: number;
   questions_answered: number;
   correct_answers: number;
@@ -98,7 +102,7 @@ export interface DailyTask {
   activity_type: string; planned_minutes: number; completed_minutes: number; question_goal: number;
   questions_answered: number; correct_answers: number; minimum_accuracy: number; achieved_accuracy?: number;
   priority: number; status: string; topic_title: string; subject_name: string; objective?: string;
-  topic_status: string; mastery: number;
+  topic_status: string; mastery: number; is_optional: boolean; outside_planned_hours: boolean;
 }
 
 export interface StudySession {
@@ -147,6 +151,7 @@ export const studyPlansApi = {
     daysPerWeek: number;
     totalWeeks: number;
     blockMinutes?: number;
+    breakMinutes?: number;
     studySections: any[];
     scheduleWeeks: any[];
     settings?: Record<string, unknown>;
@@ -168,6 +173,7 @@ export const studyPlansApi = {
     daysPerWeek: number;
     totalWeeks: number;
     blockMinutes?: number;
+    breakMinutes?: number;
     studySections: any[];
     scheduleWeeks: any[];
     settings?: Record<string, unknown>;
@@ -450,8 +456,8 @@ export const dailyStudyApi = {
   cancel: (id: string, notes?: string) => jsonRequest<StudySession>(`/study/sessions/${id}/cancel`, { method: 'POST', body: JSON.stringify({ notes }) }),
   rebalance: (availableMinutes: number) => jsonRequest<StudyDashboardData>('/study/today/rebalance', { method: 'POST', body: JSON.stringify({ availableMinutes }) }),
   active: () => jsonRequest<Partial<StudySession>>('/study/sessions/active'),
-  startQuestionPractice: (planId:string,focusMinutes:number) => jsonRequest<StudySession>('/study/sessions/questions', {
-    method:'POST',body:JSON.stringify({planId,focusMinutes,device:navigator.userAgent.slice(0,150)})
+  startQuestionPractice: (planId:string,focusMinutes:number,dailyTaskId?:string|null) => jsonRequest<StudySession>('/study/sessions/questions', {
+    method:'POST',body:JSON.stringify({planId,focusMinutes,dailyTaskId,device:navigator.userAgent.slice(0,150)})
   }),
   recordQuestion: (sessionId:string,questionId:string,correct:boolean) => jsonRequest<StudySession>(`/study/sessions/${sessionId}/questions`, {
     method:'POST',body:JSON.stringify({questionId,correct})
@@ -459,6 +465,7 @@ export const dailyStudyApi = {
   finishQuestionPractice: (sessionId:string,notes?:string) => jsonRequest<{session:StudySession;feedback:string[]}>(`/study/sessions/${sessionId}/finish-questions`, {
     method:'POST',body:JSON.stringify({notes})
   }),
+  skipOptionalQuestions: (taskId:string) => jsonRequest<StudyDashboardData>(`/study/tasks/${taskId}/skip-questions`, { method:'POST' }),
 };
 
 export const notificationsApi = {

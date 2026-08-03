@@ -5,6 +5,7 @@ import AuthPage from './components/AuthPage.tsx';
 import {AuthProvider,useAuth} from './auth/AuthContext.tsx';
 import './index.css';
 import './premium.css';
+import './wide-layout.css';
 
 function AuthenticatedRoot(){
   const {session,loading}=useAuth();
