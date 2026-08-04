@@ -233,6 +233,7 @@ export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions
   const [error, setError] = useState("");
   const [modalDate, setModalDate] = useState<string | null>(null);
   const [expandedModalItems, setExpandedModalItems] = useState<string[]>([]);
+  const [mobileCalendarOpen,setMobileCalendarOpen]=useState(false);
   const agendaRequestRef = useRef(0);
   const agendaLoadingCountRef = useRef(0);
   const selectFirstPlannedMonthRef = useRef<string | null>(null);
@@ -352,6 +353,16 @@ export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions
       plannedMonthDays[0],
     [plannedMonthDays, selectedDate],
   );
+  const mobileWeekDays=useMemo(()=>{
+    const start=localDate(selectedDate);
+    start.setDate(start.getDate()-start.getDay());
+    return Array.from({length:7},(_,index)=>{
+      const date=new Date(start);date.setDate(start.getDate()+index);
+      const value=isoDate(date);
+      return {value,date,agenda:agendaByDate.get(value)};
+    });
+  },[agendaByDate,selectedDate]);
+  const selectedAgendaDay=agendaByDate.get(selectedDate);
   const monthStats = useMemo(
     () =>
       monthDays.reduce(
@@ -378,6 +389,11 @@ export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions
   const closeAgendaModal = () => {
     setModalDate(null);
     setExpandedModalItems([]);
+  };
+  const selectMobileDay=(value:string)=>{
+    setSelectedDate(value);
+    const month=firstOfMonth(localDate(value));
+    if(monthKey(month)!==monthKey(activeMonth))setActiveMonth(month);
   };
   const toggleModalItem = (id: string) =>
     setExpandedModalItems((current) =>
@@ -426,9 +442,19 @@ export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions
         </div>
       )}
 
+      <section className="agenda-mobile-view" aria-label="Agenda semanal">
+        <header><div><span>Próximos estudos</span><h2>{longDate(selectedDate)}</h2></div><button type="button" onClick={()=>setMobileCalendarOpen(value=>!value)} aria-expanded={mobileCalendarOpen}><CalendarDays/>{mobileCalendarOpen?'Fechar mês':'Ver mês'}</button></header>
+        <div className="agenda-mobile-week" role="list" aria-label="Dias da semana">
+          {mobileWeekDays.map(day=><button type="button" role="listitem" key={day.value} className={`${day.value===selectedDate?'is-selected':''} ${day.agenda?.items.length?'has-study':''}`} onClick={()=>selectMobileDay(day.value)}><span>{day.date.toLocaleDateString('pt-BR',{weekday:'short'}).replace('.','')}</span><strong>{day.date.getDate()}</strong><i aria-hidden="true"/></button>)}
+        </div>
+        <div className="agenda-mobile-day-list">
+          {selectedAgendaDay?.items.length?selectedAgendaDay.items.map(item=><article key={String(item.id)}><span className={`agenda-mobile-status status-${item.status.toLowerCase()}`}><BookOpen/></span><div><small>{activityLabel[item.activity_type]||item.activity_type} · {duration(number(item.planned_minutes))}</small><strong>{item.title}</strong><p>{item.subject_name}</p></div><button type="button" onClick={()=>openAgendaDay(selectedDate)} aria-label={`Abrir detalhes de ${item.title}`}><ChevronDown/></button></article>):<div className="agenda-mobile-empty"><CalendarDays/><strong>Dia livre no planejamento</strong><p>Selecione outro dia ou abra o calendário mensal.</p></div>}
+        </div>
+      </section>
+
       <div className="agenda-layout">
         <section
-          className="agenda-calendar-card"
+          className={`agenda-calendar-card ${mobileCalendarOpen?'is-mobile-open':''}`}
           aria-label="Calendário mensal de estudos"
         >
           <ReactCalendar

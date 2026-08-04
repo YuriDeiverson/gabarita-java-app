@@ -108,7 +108,7 @@ public class StudyBootstrapService {
             return tasks(userId, planId, date);
         }
 
-        if (createPoliceTasksFromSchedule(planId,userId,date)>0) return tasks(userId,planId,date);
+        if (createTasksFromSchedule(planId,userId,date)>0) return tasks(userId,planId,date);
 
         var rawCandidates = jdbc.sql("""
             SELECT rt.id,rt.planned_minutes,rt.recommended_questions,rt.minimum_accuracy,
@@ -253,10 +253,10 @@ public class StudyBootstrapService {
         } catch(Exception ignored) { /* Em planos antigos, domingo encerra a semana. */ }
         return date.getDayOfWeek()==DayOfWeek.SUNDAY;
     }
-    private int createPoliceTasksFromSchedule(UUID planId,UUID userId,LocalDate date){
-        var plans=jdbc.sql("SELECT course_id,settings::text settings_json,created_at<=now()-interval '14 days' adaptive FROM study_plans WHERE id=:p AND user_id=:u")
+    private int createTasksFromSchedule(UUID planId,UUID userId,LocalDate date){
+        var plans=jdbc.sql("SELECT settings::text settings_json FROM study_plans WHERE id=:p AND user_id=:u")
                 .param("p",planId).param("u",userId).query().listOfRows();
-        if(plans.isEmpty()||!"policial_civil".equals(String.valueOf(plans.getFirst().get("course_id"))))return 0;
+        if(plans.isEmpty())return 0;
         var topics=jdbc.sql("""
             SELECT rt.id,rt.title,rt.subject_name,rt.recommended_questions,rt.minimum_accuracy,rt.priority,
               tp.questions_answered,tp.correct_answers
@@ -264,26 +264,26 @@ public class StudyBootstrapService {
             WHERE rt.plan_id=:p AND rt.active
             """).param("p",planId).param("u",userId).query().listOfRows();
         var byTitle=new HashMap<String,Map<String,Object>>();topics.forEach(topic->byTitle.put(normalize(String.valueOf(topic.get("title"))),topic));
-        var seeds=new ArrayList<PoliceTaskSeed>();
+        var seeds=new ArrayList<ScheduleTaskSeed>();
         try{
             JsonNode settings=json.readTree(String.valueOf(plans.getFirst().get("settings_json")));
             for(JsonNode week:settings.path("legacyScheduleWeeks"))for(JsonNode block:week.path("blocks")){
                 if(!date.toString().equals(block.path("isoDate").asText()))continue;
                 String activity=block.path("activityType").asText("THEORY");
                 String topicTitle=block.path("topicTitle").asText(block.path("title").asText());
-                var topic="QUESTIONS".equals(activity)&&!topics.isEmpty()?topics.getFirst():byTitle.get(normalize(topicTitle));if(topic==null)continue;
+                var topic=byTitle.get(normalize(topicTitle));
+                if(topic==null&&!topics.isEmpty())topic=topics.getFirst();
+                if(topic==null)continue;
                 boolean question="QUESTIONS".equals(activity);
-                boolean optional=question?block.path("isOptional").asBoolean(!lastStudyDayOfWeek(planId,date)):false;
-                boolean outside=question;
-                int minutes=question?(optional?30:60):block.path("durationMinutes").asInt(60);
-                seeds.add(new PoliceTaskSeed(topic,activity,minutes,optional,outside));
+                boolean optional=block.path("isOptional").asBoolean(question&&!lastStudyDayOfWeek(planId,date));
+                boolean outside=block.path("outsidePlannedHours").asBoolean(false);
+                int minutes=block.path("durationMinutes").asInt(60);
+                seeds.add(new ScheduleTaskSeed(topic,activity,minutes,optional,outside));
             }
         }catch(Exception ignored){return 0;}
-        var hourlySeeds=hourlyPoliceSeeds(seeds,topics);
-        boolean adaptive=Boolean.TRUE.equals(plans.getFirst().get("adaptive"));
-        var adjusted=adaptivePoliceMinutes(hourlySeeds,topics,adaptive);int position=0;
-        for(int index=0;index<hourlySeeds.size();index++){
-                var seed=hourlySeeds.get(index);var topic=seed.topic();int minutes=adjusted.get(index);if(minutes<=0)continue;
+        int position=0;
+        for(var seed:seeds){
+                var topic=seed.topic();int minutes=seed.minutes();if(minutes<=0)continue;
                 jdbc.sql("""
                     INSERT INTO daily_tasks(id,user_id,plan_id,roadmap_topic_id,task_date,position,activity_type,
                       planned_minutes,question_goal,minimum_accuracy,priority,status,is_optional,outside_planned_hours)
@@ -298,27 +298,7 @@ public class StudyBootstrapService {
         }
         return position;
     }
-    private List<PoliceTaskSeed> hourlyPoliceSeeds(List<PoliceTaskSeed> seeds,List<Map<String,Object>> topics){
-        if(seeds.isEmpty()||seeds.stream().filter(seed->!"QUESTIONS".equals(seed.activity())).allMatch(seed->seed.minutes()==60))return seeds;
-        int totalSlots=Math.max(1,(int)Math.round(seeds.stream().mapToInt(PoliceTaskSeed::minutes).sum()/60d));
-        int questionSlots=totalSlots>=2?1:0;int theorySlots=totalSlots-questionSlots;
-        var theory=seeds.stream().filter(seed->!"QUESTIONS".equals(seed.activity())).toList();
-        var result=new ArrayList<PoliceTaskSeed>();
-        if(!theory.isEmpty())for(int slot=0;slot<theorySlots;slot++){
-            int index=Math.min(theory.size()-1,(int)Math.floor((double)slot*theory.size()/Math.max(1,theorySlots)));
-            var seed=theory.get(index);result.add(new PoliceTaskSeed(seed.topic(),seed.activity(),60,false,false));
-        }
-        if(questionSlots>0&&!topics.isEmpty()){
-            var question=seeds.stream().filter(seed->"QUESTIONS".equals(seed.activity())).findFirst()
-                    .orElse(new PoliceTaskSeed(topics.getFirst(),"QUESTIONS",30,true,true));
-            result.add(question);
-        }
-        return result;
-    }
-    private List<Integer> adaptivePoliceMinutes(List<PoliceTaskSeed> seeds,List<Map<String,Object>> topics,boolean adaptive){
-        return seeds.stream().map(PoliceTaskSeed::minutes).toList();
-    }
-    private record PoliceTaskSeed(Map<String,Object> topic,String activity,int minutes,boolean optional,boolean outside){}
+    private record ScheduleTaskSeed(Map<String,Object> topic,String activity,int minutes,boolean optional,boolean outside){}
     private String normalize(String value){return java.text.Normalizer.normalize(value,java.text.Normalizer.Form.NFD).replaceAll("\\p{M}","").toLowerCase(Locale.ROOT).trim();}
     private List<Map<String,Object>> learningPathCandidates(List<Map<String,Object>> raw) {
         var specific = raw.stream().filter(row -> "specific".equals(row.get("learning_track")))

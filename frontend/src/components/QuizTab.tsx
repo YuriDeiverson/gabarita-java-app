@@ -3,7 +3,7 @@ import { quizQuestions } from '../data/quizData';
 import { QuestionAnswer, QuestionCategory, Question } from '../types';
 import { passages } from '../data/passagesData';
 import { questionsApi, quizProgressApi } from '../services/api';
-import { CheckCircle2, XCircle, Filter, Sparkles, AlertCircle, Info, Bookmark, Flag, Target } from 'lucide-react';
+import { CheckCircle2, XCircle, Filter, Sparkles, AlertCircle, Info, Bookmark, Flag, Target, ChevronDown } from 'lucide-react';
 import { ActiveStudyContext, findContextCard, normalizeStudyText, questionRelevance } from '../studyContext';
 import { studySections } from '../data/studyData';
 import { filterQuestionsByBoards, questionBoardsFromConfig, questionExamBoard } from '../questionBanks';
@@ -173,6 +173,7 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
 
   const [categoryFilter, setCategoryFilter] = useState<QuestionCategory | 'Todos'>('Todos');
   const [statusFilter, setStatusFilter] = useState<'Todos' | 'Respondidas' | 'Não Respondidas' | 'Corretas' | 'Incorretas' | 'Anuladas'>('Todos');
+  const [mobileFiltersOpen,setMobileFiltersOpen]=useState(false);
   const [visibleQuestions, setVisibleQuestions] = useState(()=>initialReviewDraft?.visibleQuestions||10);
   const [favoriteQuestions, setFavoriteQuestions] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('quiz_favorite_questions') || '[]')); } catch { return new Set(); }
@@ -189,6 +190,9 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
   const [reportedQuestions, setReportedQuestions] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('quiz_reported_questions') || '[]')); } catch { return new Set(); }
   });
+  const [reportDraft,setReportDraft]=useState<{question:Question;reason:string;details:string}|null>(null);
+  const [reportBusy,setReportBusy]=useState(false);
+  const [reportError,setReportError]=useState('');
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -268,14 +272,16 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     });
   };
 
-  const toggleReport = (questionId: number | string) => {
-    const id = String(questionId);
-    setReportedQuestions(current => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      localStorage.setItem('quiz_reported_questions', JSON.stringify([...next]));
-      return next;
-    });
+  const submitReport = async () => {
+    if(!reportDraft||reportBusy)return;setReportBusy(true);setReportError('');
+    try{
+      await questionsApi.report({questionId:String(reportDraft.question.id),courseId:localStorage.getItem('active_course')||'',
+        text:reportDraft.question.text,category:String(reportDraft.question.category||''),reference:reportDraft.question.reference,
+        reason:reportDraft.reason,details:reportDraft.details});
+      const id=String(reportDraft.question.id);setReportedQuestions(current=>{const next=new Set(current);next.add(id);
+        localStorage.setItem('quiz_reported_questions',JSON.stringify([...next]));return next;});setReportDraft(null);
+    }catch(cause){setReportError(cause instanceof Error?cause.message:'Não foi possível enviar a sinalização.');}
+    finally{setReportBusy(false);}
   };
 
   const handleAnswer = async (questionId: number | string, option: QuestionAnswer) => {
@@ -497,7 +503,8 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
       </section>}
 
       {/* Question Filters Row */}
-      <div className="quiz-filters flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+      <button type="button" className="quiz-mobile-filter-trigger" onClick={()=>setMobileFiltersOpen(value=>!value)} aria-expanded={mobileFiltersOpen} aria-controls="question-bank-filters"><span><Filter/>Filtros do banco</span><span>{categoryFilter!=='Todos'||statusFilter!=='Todos'?'Ativos':'Todos'}<ChevronDown/></span></button>
+      <div id="question-bank-filters" className={`quiz-filters ${mobileFiltersOpen?'is-mobile-open':''} flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-slate-100`}>
         <div className="flex items-center gap-2 text-sm font-bold text-slate-700 shrink-0">
           <Filter className="w-4 h-4 text-slate-400" />
           <span>{mode==='session'?'Questões da sessão:':'Filtros do banco:'}</span>
@@ -585,11 +592,11 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
                     ><Bookmark aria-hidden="true" /></button>
                     <button
                       type="button"
-                      onClick={() => toggleReport(q.id)}
+                      onClick={() => { setReportError('');setReportDraft({question:q,reason:'ANSWER',details:''}); }}
                       className={reportedQuestions.has(String(q.id)) ? 'is-reported' : ''}
                       aria-pressed={reportedQuestions.has(String(q.id))}
-                      aria-label={reportedQuestions.has(String(q.id)) ? 'Questão marcada para revisão' : 'Reportar questão'}
-                      title={reportedQuestions.has(String(q.id)) ? 'Questão marcada para revisão' : 'Reportar questão'}
+                      aria-label={reportedQuestions.has(String(q.id)) ? 'Questão já sinalizada' : 'Sinalizar problema na questão'}
+                      title={reportedQuestions.has(String(q.id)) ? 'Questão já sinalizada — clique para atualizar' : 'Sinalizar problema na questão'}
                     ><Flag aria-hidden="true" /></button>
                   </div>
                 </div>
@@ -724,6 +731,17 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
       </div>
 
       {mode==='session'&&stats.answeredCount>=reviewGoal&&<div className="sticky bottom-20 md:bottom-4 z-20 flex justify-center"><button type="button" onClick={completeReview} className="min-h-12 px-7 rounded-full bg-emerald-600 text-white text-sm font-extrabold shadow-lg shadow-emerald-900/20">Concluir revisão e ver resultado</button></div>}
+
+      {reportDraft&&<div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget&&!reportBusy)setReportDraft(null);}}>
+        <section className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="question-report-title">
+          <div className="flex items-start justify-between gap-4"><div><span className="text-xs font-black uppercase tracking-wider text-rose-600">Revisão de conteúdo</span><h3 id="question-report-title" className="mt-1 text-xl font-black text-slate-950">Sinalizar problema na questão</h3></div><button type="button" disabled={reportBusy} onClick={()=>setReportDraft(null)} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100" aria-label="Fechar"><XCircle className="h-5 w-5" /></button></div>
+          <p className="mt-3 line-clamp-3 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">{reportDraft.question.text}</p>
+          <label className="mt-4 block"><span className="mb-1.5 block text-xs font-extrabold text-slate-700">Qual é o problema?</span><select className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-indigo-400" value={reportDraft.reason} onChange={event=>setReportDraft(value=>value?{...value,reason:event.target.value}:value)}><option value="ANSWER">Gabarito incorreto</option><option value="STATEMENT">Erro no enunciado</option><option value="EXPLANATION">Explicação incorreta</option><option value="OUTDATED">Questão desatualizada</option><option value="OTHER">Outro problema</option></select></label>
+          <label className="mt-4 block"><span className="mb-1.5 block text-xs font-extrabold text-slate-700">Explique a sinalização</span><textarea rows={4} maxLength={2000} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-400" value={reportDraft.details} onChange={event=>setReportDraft(value=>value?{...value,details:event.target.value}:value)} placeholder="Ex.: o gabarito deveria ser Errado porque…" /></label>
+          {reportError&&<p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700" role="alert">{reportError}</p>}
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" disabled={reportBusy} onClick={()=>setReportDraft(null)} className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700">Cancelar</button><button type="button" disabled={reportBusy} onClick={()=>void submitReport()} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 text-sm font-extrabold text-white disabled:opacity-60"><Flag className="h-4 w-4" />{reportBusy?'Enviando…':'Enviar sinalização'}</button></div>
+        </section>
+      </div>}
 
       <div ref={loadMoreRef} className="h-px" aria-hidden="true" />
     </div>

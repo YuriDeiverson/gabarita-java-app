@@ -34,7 +34,7 @@ O backend valida localmente cada access token pelo endpoint JWKS do projeto. Em 
 usam HS256, `SUPABASE_JWT_SECRET` pode ser configurado temporariamente, mas a recomendação é ativar uma
 chave assimétrica em Authentication > Signing Keys.
 
-Ao iniciar, o Flyway aplica as migrações `V1` a `V7`. A `V7` conecta `auth.users` a `public.users`, instala
+Ao iniciar, o Flyway aplica as migrações disponíveis, atualmente de `V1` a `V13`. A `V7` conecta `auth.users` a `public.users`, instala
 o gatilho de perfil e remove o acesso direto das roles `anon` e `authenticated` às tabelas da aplicação.
 O navegador usa Supabase somente para autenticação; os dados de estudo passam pela API Spring autenticada.
 

@@ -1,0 +1,332 @@
+/* Responsive application contract: 4 columns on phones, 8 on tablets and
+   the existing 12-column desktop shell from 1200px onward. Imported last. */
+:root {
+  --touch-target: 44px;
+  --mobile-gutter: 16px;
+  --tablet-gutter: 24px;
+}
+
+html, body, #root, .app-shell { max-width: 100%; min-width: 0; }
+html { overflow-x: clip; }
+body { overflow-x: clip; overscroll-behavior-x: none; }
+.app-content, .app-content > *, .app-content section, .app-content article,
+.app-content header, .app-content footer, .app-content form, .app-content fieldset { min-width: 0; }
+.app-content img, .app-content video, .app-content canvas, .app-content iframe { height: auto; max-width: 100%; }
+.app-content h1, .app-content h2, .app-content h3, .app-content h4,
+.app-content p, .app-content dd, .app-content li { overflow-wrap: anywhere; }
+.career-mobile-filter-button, .career-filter-sheet-layer, .agenda-mobile-view,
+.quiz-mobile-filter-trigger { display: none; }
+
+@media (max-width: 1199px) {
+  .app-context-rail { display: none !important; }
+  .app-content button, .app-content [role="button"], .app-content input,
+  .app-content select, .app-content textarea { touch-action: manipulation; }
+  .app-content table {
+    width: 100%;
+    max-width: 100%;
+  }
+  .app-content .table-wrapper, .app-content [class*="table-container"] {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .finish-modal-backdrop, .agenda-modal-backdrop, .career-modal-backdrop {
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-right: max(12px, env(safe-area-inset-right));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    padding-left: max(12px, env(safe-area-inset-left));
+  }
+}
+
+/* Tablet landscape: compact 8-column workspace with an icon navigation rail. */
+@media (min-width: 840px) and (max-width: 1199px) {
+  .app-main, .sidebar-collapsed .app-main {
+    width: 100% !important;
+    max-width: 1199px !important;
+    padding: 24px var(--tablet-gutter) 42px !important;
+    grid-template-columns: 76px minmax(0, 1fr) !important;
+    gap: 24px !important;
+  }
+  .app-main > .app-navigation,
+  .sidebar-collapsed .app-main > .app-navigation {
+    top: 98px !important;
+    width: 76px !important;
+    padding: 8px !important;
+    border-radius: 16px !important;
+  }
+  .app-navigation .sidebar-control { display: none !important; }
+  .app-main > .app-navigation > button,
+  .sidebar-collapsed .app-main > .app-navigation > button {
+    width: 58px !important;
+    min-width: 58px !important;
+    min-height: 52px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+  }
+  .app-main > .app-navigation > button span { display: none !important; }
+  .app-main > .app-navigation > button svg { width: 20px; height: 20px; }
+  .app-content { grid-column: 2 !important; }
+  .app-content > * { width: 100%; margin-inline: 0; }
+  .daily-dashboard { padding-inline: 0; }
+  .career-preparation-grid, .career-catalog-grid, .career-role-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .performance-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+}
+
+/* Phones and portrait tablets share a reachable bottom navigation. */
+@media (max-width: 839px) {
+  body.mobile-sheet-open { overflow: hidden; }
+
+  html { scroll-padding-top: calc(72px + env(safe-area-inset-top)); }
+  body { -webkit-text-size-adjust: 100%; touch-action: manipulation; }
+  body.mobile-profile-open { overflow: hidden; }
+  .desktop-header-content, .desktop-app-navigation { display: none !important; }
+  .app-header {
+    min-height: calc(60px + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+  }
+  .app-header-inner {
+    max-width: 100%;
+    padding-right: max(var(--mobile-gutter), env(safe-area-inset-right)) !important;
+    padding-left: max(var(--mobile-gutter), env(safe-area-inset-left)) !important;
+  }
+  .mobile-header-content {
+    min-height: 60px !important;
+    display: grid !important;
+    grid-template-columns: 40px minmax(0, 1fr) auto !important;
+    align-items: center;
+    gap: 10px !important;
+  }
+  .mobile-header-content h1 { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-account-actions { display: flex !important; }
+  .mobile-account-actions .header-action-button { width: 44px !important; height: 44px !important; min-height: 44px !important; }
+  .app-main, .sidebar-collapsed .app-main,
+  .no-plan .app-main, .no-plan.sidebar-collapsed .app-main {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: calc(100dvh - 60px - env(safe-area-inset-top));
+    padding: 20px max(var(--mobile-gutter), env(safe-area-inset-right)) calc(90px + env(safe-area-inset-bottom)) max(var(--mobile-gutter), env(safe-area-inset-left)) !important;
+    display: block !important;
+  }
+  .has-active-timer .app-main { padding-bottom: calc(148px + env(safe-area-inset-bottom)) !important; }
+  .app-main > .app-navigation { display: none !important; }
+  .app-content, .app-content > * { width: 100%; max-width: 100%; margin-inline: 0; }
+  .app-content button:not(.icon-only), .app-content [role="button"],
+  .app-content input, .app-content select { min-height: var(--touch-target); }
+  .mobile-bottom-nav {
+    position: fixed;
+    z-index: 100;
+    left: 0; right: 0; bottom: 0;
+    min-height: calc(68px + env(safe-area-inset-bottom)) !important;
+    padding: 6px max(6px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left)) !important;
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    border-top: 1px solid var(--line) !important;
+    background: rgb(250 249 245 / .96) !important;
+    box-shadow: 0 -10px 28px rgb(32 39 33 / .09) !important;
+    backdrop-filter: blur(22px) saturate(140%);
+  }
+  .mobile-bottom-nav.is-no-plan { grid-template-columns: repeat(auto-fit, minmax(72px, 116px)) !important; justify-content: center; }
+  .mobile-bottom-nav button {
+    position: relative;
+    min-width: 0;
+    min-height: 54px !important;
+    padding: 5px 2px !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 4px !important;
+  }
+  .mobile-bottom-nav button svg { width: 21px !important; height: 21px !important; }
+  .mobile-bottom-nav button span { max-width: 100%; overflow: hidden; font-size: 10px !important; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-profile-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    padding-top: max(24px, env(safe-area-inset-top));
+    display: flex !important;
+    align-items: flex-end;
+    background: rgb(29 35 30 / .5);
+    backdrop-filter: blur(5px);
+  }
+  .mobile-profile-sheet {
+    width: 100%;
+    max-height: calc(92dvh - env(safe-area-inset-top));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 8px max(16px, env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    border-radius: 24px 24px 0 0;
+    background: var(--surface);
+  }
+  .mobile-profile-sheet button { min-height: var(--touch-target); }
+  .notification-popover {
+    position: fixed !important;
+    top: calc(66px + env(safe-area-inset-top)) !important;
+    right: max(10px, env(safe-area-inset-right)) !important;
+    left: max(10px, env(safe-area-inset-left)) !important;
+    width: auto !important;
+    max-height: min(70dvh, 560px) !important;
+  }
+  .career-mobile-filter-button {
+    width: 100%; min-height: 48px; padding: 0 15px;
+    display: flex; align-items: center; justify-content: center; gap: 9px;
+    border: 1px solid var(--line); border-radius: 11px;
+    background: var(--surface); color: var(--ink); font-size: 13px; font-weight: 700;
+  }
+  .career-mobile-filter-button svg { width: 18px; }
+  .career-mobile-filter-button strong { min-width: 21px; height: 21px; display: grid; place-items: center; border-radius: 999px; background: var(--ink); color: white; font-size: 10px; }
+  .career-filter-grid { display: none !important; }
+  .career-filter-sheet-layer {
+    position: fixed; inset: 0; z-index: 150;
+    padding-top: max(24px, env(safe-area-inset-top));
+    display: flex; align-items: flex-end;
+    background: rgb(29 35 30 / .5); backdrop-filter: blur(5px);
+  }
+  .career-filter-sheet {
+    width: 100%; max-height: calc(92dvh - env(safe-area-inset-top)); overflow-y: auto;
+    padding: 8px max(20px, env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+    border-radius: 24px 24px 0 0; background: var(--surface); box-shadow: 0 -18px 50px rgb(32 39 33 / .18);
+  }
+  .career-sheet-handle { width: 40px; height: 4px; margin: 2px auto 8px; border-radius: 999px; background: var(--line-strong); }
+  .career-filter-sheet > header { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .career-filter-sheet > header h3 { margin: 3px 0 0; font-size: 22px; }
+  .career-filter-sheet > header button { width: 44px; min-height: 44px; display: grid; place-items: center; border: 0; border-radius: 11px; background: var(--surface-2); }
+  .career-filter-sheet-fields { padding: 12px 0 20px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+  .career-filter-sheet-fields label { min-width: 0; display: grid; gap: 6px; }
+  .career-filter-sheet-fields label > span { color: var(--muted); font-size: 11px; font-weight: 700; }
+  .career-filter-sheet-fields select { width: 100%; min-height: 48px; padding-inline: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  .career-filter-sheet > footer { position: sticky; bottom: calc(-18px - env(safe-area-inset-bottom)); padding: 12px 0 calc(18px + env(safe-area-inset-bottom)); display: grid !important; grid-template-columns: 1fr 1.5fr; gap: 9px; background: var(--surface); }
+  .career-filter-sheet > footer button { min-height: 48px; }
+  .agenda-mobile-view { padding: 18px; display: grid; gap: 16px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow-soft); }
+  .agenda-mobile-view > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .agenda-mobile-view > header div { min-width: 0; }
+  .agenda-mobile-view > header span { display: block; color: var(--accent); font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+  .agenda-mobile-view > header h2 { margin: 4px 0 0; overflow: hidden; font-size: 17px; text-overflow: ellipsis; white-space: nowrap; }
+  .agenda-mobile-view > header button { min-height: 44px; padding: 0 11px; display: flex; align-items: center; gap: 6px; flex: none; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); font-size: 10px; font-weight: 750; }
+  .agenda-mobile-view > header button svg { width: 16px; }
+  .agenda-mobile-week { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 5px; }
+  .agenda-mobile-week button { position: relative; min-width: 0; min-height: 62px; padding: 7px 2px; display: grid; place-items: center; align-content: center; gap: 3px; border: 1px solid transparent; border-radius: 11px; background: var(--surface-2); color: var(--muted); }
+  .agenda-mobile-week button span { overflow: hidden; max-width: 100%; font-size: 8px; font-weight: 750; text-overflow: clip; text-transform: uppercase; }
+  .agenda-mobile-week button strong { font-size: 14px; }
+  .agenda-mobile-week button i { width: 4px; height: 4px; border-radius: 50%; background: transparent; }
+  .agenda-mobile-week button.has-study i { background: var(--accent); }
+  .agenda-mobile-week button.is-selected { border-color: var(--ink); background: var(--ink); color: white; }
+  .agenda-mobile-week button.is-selected i { background: white; }
+  .agenda-mobile-day-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
+  .agenda-mobile-day-list article { min-width: 0; min-height: 88px; padding: 12px; display: grid; grid-template-columns: 32px minmax(0,1fr) 34px; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  .agenda-mobile-status { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; background: var(--accent-soft); color: var(--accent); }
+  .agenda-mobile-status svg { width: 15px; }
+  .agenda-mobile-day-list article div { min-width: 0; }
+  .agenda-mobile-day-list article small { display: block; color: var(--muted); font-size: 8px; font-weight: 700; text-transform: uppercase; }
+  .agenda-mobile-day-list article strong { display: block; margin-top: 3px; font-size: 12px; line-height: 1.3; }
+  .agenda-mobile-day-list article p { margin: 2px 0 0; color: var(--muted); font-size: 9px; }
+  .agenda-mobile-day-list article > button { width: 34px; min-height: 44px; display: grid; place-items: center; border: 0; border-radius: 9px; background: var(--surface-2); }
+  .agenda-mobile-day-list article > button svg { width: 16px; transform: rotate(-90deg); }
+  .agenda-mobile-empty { grid-column: 1/-1; padding: 24px 16px; display: grid; justify-items: center; gap: 5px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); text-align: center; }
+  .agenda-mobile-empty svg { width: 24px; }
+  .agenda-mobile-empty strong { color: var(--ink); font-size: 12px; }
+  .agenda-mobile-empty p { margin: 0; font-size: 10px; }
+  .agenda-calendar-card { display: none; }
+  .agenda-calendar-card.is-mobile-open { display: block; }
+  .quiz-mobile-filter-trigger {
+    width: 100%; min-height: 50px; padding: 0 14px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    border: 1px solid var(--line); border-radius: 13px; background: var(--surface); color: var(--ink);
+  }
+  .quiz-mobile-filter-trigger > span { min-width: 0; display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 750; }
+  .quiz-mobile-filter-trigger svg { width: 16px; }
+  .quiz-filters { display: none !important; }
+  .quiz-filters.is-mobile-open { display: flex !important; }
+  .app-content table { display: block; overflow-x: auto; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch; }
+  .performance-periods { width: 100%; }
+  .app-shell > footer { display: none !important; }
+}
+
+/* Smartphone: 4-column single-flow layout and compact, thumb-friendly UI. */
+@media (max-width: 599px) {
+  :root { --mobile-gutter: 16px; }
+  .app-main, .sidebar-collapsed .app-main,
+  .no-plan .app-main, .no-plan.sidebar-collapsed .app-main {
+    padding-top: 14px !important;
+  }
+  .daily-dashboard { padding: 0 !important; gap: 14px !important; }
+  .daily-dashboard-heading { display: none !important; }
+  .daily-main-grid { grid-template-columns: minmax(0,1fr) !important; gap: 12px !important; }
+  .focus-card { order: 1; }
+  .today-plan-card { order: 2; display: flex !important; padding: 16px !important; border-radius: 15px !important; }
+  .mobile-daily-summary { display: none !important; }
+  .focus-objective { display: none !important; }
+  .today-task-list li { min-width: 0; padding-block: 10px; }
+  .today-task-list li > button:not(.skip-question-task) { min-width: 0; min-height: 44px; }
+  .today-task-list li strong, .today-task-list li small { white-space: normal; overflow-wrap: anywhere; }
+  .today-task-list .skip-question-task { min-height: 36px; }
+  .timer-actions button, .less-time-button, .primary-study-action,
+  .secondary-study-action, .finish-study-action { min-height: 48px !important; }
+  .career-page { gap: 20px; }
+  .career-preparation-grid, .career-catalog-grid, .career-role-grid { grid-template-columns: minmax(0,1fr) !important; }
+  .career-filter-sheet-fields { grid-template-columns: minmax(0,1fr); }
+  .career-filter-sheet > footer { grid-template-columns: 1fr; }
+  .agenda-mobile-view { padding: 14px 12px; border-radius: 15px; }
+  .agenda-mobile-day-list { grid-template-columns: minmax(0,1fr); }
+  .agenda-mobile-week { gap: 3px; }
+  .agenda-mobile-week button { min-height: 58px; border-radius: 9px; }
+  .agenda-mobile-view > header h2 { font-size: 15px; }
+  .agenda-modal, .career-modal, .finish-modal {
+    width: 100% !important;
+    max-height: calc(94dvh - env(safe-area-inset-top));
+    border-radius: 22px 22px 0 0 !important;
+  }
+  .question-pomodoro-compact {
+    position: sticky; top: calc(68px + env(safe-area-inset-top)); z-index: 35;
+    padding: 11px !important; border-radius: 14px !important;
+    box-shadow: 0 10px 30px rgb(32 39 33 / .1);
+  }
+  .question-pomodoro-compact .question-pomodoro-body {
+    margin-top: 0 !important; padding-top: 0 !important;
+    grid-template-columns: 104px minmax(0,1fr) !important; gap: 10px !important;
+    border-top: 0 !important;
+  }
+  .question-pomodoro-compact .question-pomodoro-time { justify-self: start; }
+  .question-pomodoro-compact .question-pomodoro-time strong { font-size: 23px; }
+  .question-pomodoro-compact .question-pomodoro-actions { grid-template-columns: minmax(0,1fr) !important; gap: 6px; }
+  .question-pomodoro-compact .question-pomodoro-preset { font-size: 8px; }
+  .question-pomodoro-actions button { min-height: 44px; }
+  #quiz-tab-container [id^="q-card-"] .p-5 { padding: 16px !important; }
+  #quiz-tab-container [role="radio"] { min-height: 52px; }
+  .performance-header { align-items: stretch; }
+  .performance-periods { display: grid !important; grid-template-columns: repeat(3,minmax(0,1fr)) 44px; overflow: visible !important; }
+  .performance-periods button { min-width: 0; min-height: 44px; padding-inline: 5px !important; }
+  .performance-metrics { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
+  .performance-metrics > div { min-height: 112px !important; padding: 14px !important; }
+  .daily-chart { max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: x proximity; }
+  .daily-chart > div { scroll-snap-align: start; }
+  .initial-study-setup input, .app-content input, .app-content select, .app-content textarea { font-size: 16px; }
+}
+
+@media (max-width: 359px) {
+  :root { --mobile-gutter: 12px; }
+  .mobile-header-content { grid-template-columns: 36px minmax(0,1fr) auto !important; gap: 7px !important; }
+  .mobile-brand-mark { width: 34px !important; height: 34px !important; }
+  .mobile-bottom-nav button span { font-size: 8px !important; }
+  .agenda-mobile-view > header { align-items: flex-start; }
+  .agenda-mobile-view > header button { padding-inline: 8px; }
+  .agenda-mobile-week button span { font-size: 7px; }
+  .question-pomodoro-compact .question-pomodoro-body { grid-template-columns: minmax(0,1fr) !important; }
+}
+
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 839px) {
+  .app-header { min-height: calc(52px + env(safe-area-inset-top)); }
+  .mobile-header-content { min-height: 52px !important; }
+  .mobile-brand-mark { width: 34px !important; height: 34px !important; }
+  .app-main, .sidebar-collapsed .app-main { padding-top: 10px !important; }
+  .focus-card { padding: 14px !important; }
+  .timer-stage { grid-template-columns: 128px minmax(0,1fr) !important; }
+  .timer-ring { --ring-size: 128px !important; width: 128px !important; height: 128px !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}

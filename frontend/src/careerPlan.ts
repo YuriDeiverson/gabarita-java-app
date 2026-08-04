@@ -1,10 +1,10 @@
-import { COURSES_CONFIG, DISCURSIVE_TOPIC_ID, generateCustomPlan } from './data/generator';
+import { COURSES_CONFIG, CoursePlanConfig, CourseTopic, DISCURSIVE_TOPIC_ID, generateCustomPlan } from './data/generator';
 import { API_BASE_URL, questionsApi, scheduleApi, studyPlansApi } from './services/api';
+import { Question, StudySection } from './types';
 
-export type CareerContestId = 'policia_civil' | 'fapeal' | 'sesau_al' | 'seplag';
+export type CareerContestId = string;
 
 export interface StudyPreferences {
-  examDate: string;
   selectedWeekdays: number[];
   hoursByWeekday: Record<number, number>;
   hoursPerDay: number;
@@ -22,6 +22,7 @@ export interface CareerRole {
   vacancies?: string;
   estimatedHours?: number;
   sharedTopics?: string[];
+  curriculum?: { topics?: CourseTopic[]; studySections?: StudySection[] };
 }
 
 export interface CareerContest {
@@ -31,7 +32,7 @@ export interface CareerContest {
   organization: string;
   description: string;
   board: string;
-  examDate?: string;
+  examDate: string;
   status: string;
   state: string;
   area: string;
@@ -83,7 +84,7 @@ export const CAREER_CONTESTS: CareerContest[] = [
     acronym: 'SESAU-AL',
     organization: 'Secretaria de Estado da Saúde de Alagoas',
     description: 'Secretaria de Estado da Saúde de Alagoas.',
-    board: 'CEBRASPE', status: 'Edital cadastrado', state: 'Alagoas', area: 'Saúde',
+    board: 'CEBRASPE', examDate: '2026-11-01', status: 'Prova agendada', state: 'Alagoas', area: 'Saúde',
     education: 'Nível técnico', vacancies: 'Conforme edital', remuneration: 'Conforme o cargo e o edital',
     location: 'Estado de Alagoas', stages: 'Prova objetiva e demais etapas previstas no edital.',
     noticeReference: 'Conteúdo programático da SESAU AL cadastrado no sistema.',
@@ -97,7 +98,7 @@ export const CAREER_CONTESTS: CareerContest[] = [
     acronym: 'SEPLAG-AL',
     organization: 'Secretaria de Estado do Planejamento, Gestão e Patrimônio',
     description: 'Secretaria de Estado do Planejamento, Gestão e Patrimônio.',
-    board: 'CEBRASPE', status: 'Edital cadastrado', state: 'Alagoas', area: 'Gestão e Tecnologia',
+    board: 'CEBRASPE', examDate: '2026-07-26', status: 'Prova realizada', state: 'Alagoas', area: 'Gestão e Tecnologia',
     education: 'Nível superior específico', vacancies: 'Conforme edital', remuneration: 'Conforme o cargo e o edital',
     location: 'Estado de Alagoas', stages: 'Prova objetiva e demais etapas previstas no edital.',
     noticeReference: 'Conteúdo programático da SEPLAG cadastrado no sistema.',
@@ -107,6 +108,15 @@ export const CAREER_CONTESTS: CareerContest[] = [
   },
 ];
 
+export const localTodayIso = () => {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+};
+
+export const isContestAvailable = (contest: CareerContest, today = localTodayIso()) =>
+  contest.examDate >= today;
+
 export const preferencesStorageKey = (userId?: string) => `career_study_preferences:${userId || 'local'}`;
 
 export const loadStudyPreferences = (userId?: string): StudyPreferences | null => {
@@ -114,9 +124,8 @@ export const loadStudyPreferences = (userId?: string): StudyPreferences | null =
     const stored = localStorage.getItem(preferencesStorageKey(userId));
     const legacy = localStorage.getItem('study_config');
     const parsed = JSON.parse(stored || legacy || 'null');
-    if (!parsed?.examDate || !Array.isArray(parsed.selectedWeekdays) || parsed.selectedWeekdays.length === 0) return null;
+    if (!Array.isArray(parsed?.selectedWeekdays) || parsed.selectedWeekdays.length === 0) return null;
     return {
-      examDate: parsed.examDate,
       selectedWeekdays: parsed.selectedWeekdays,
       hoursByWeekday: Object.fromEntries(Object.entries(parsed.hoursByWeekday || {}).map(([day, hours]) => [day, Math.max(1, Math.round(Number(hours || 1)))])),
       hoursPerDay: Math.max(1, Math.round(Number(parsed.hoursPerDay || 4))),
@@ -148,12 +157,15 @@ const calculateStudyDays = (examDate: string, weekdays: number[]) => {
 };
 
 export const topicIdsForCareer = (contestId: CareerContestId, role: CareerRole) => {
-  const topics = COURSES_CONFIG[role.courseId].topics;
+  const topics = topicsForCareerRole(role);
   return topics
     .filter(topic => topic.id !== 'legislacao_especifica_fapeal' || contestId === 'fapeal')
     .filter(topic => topic.id !== DISCURSIVE_TOPIC_ID || role.includeDiscursive)
     .map(topic => topic.id);
 };
+
+export const topicsForCareerRole = (role:CareerRole) =>
+  role.curriculum?.topics?.length ? role.curriculum.topics : (COURSES_CONFIG[role.courseId]?.topics || []);
 
 const weekdayName: Record<number, string> = {
   0: 'domingo', 1: 'segunda', 2: 'terca', 3: 'quarta', 4: 'quinta', 5: 'sexta', 6: 'sabado',
@@ -165,12 +177,21 @@ export async function createAutomaticCareerPlan(
   preferences: StudyPreferences,
 ) {
   const blockMinutes = 60;
-  const examDate = contest.examDate || preferences.examDate;
+  if (!isContestAvailable(contest)) throw new Error('A prova deste concurso já foi realizada e a preparação não está mais disponível.');
+  const examDate = contest.examDate;
+  const roleTopics=topicsForCareerRole(role);
   const selectedTopicIds = topicIdsForCareer(contest.id, role);
-  const selectedSubtopicIds = COURSES_CONFIG[role.courseId].topics
+  const selectedSubtopicIds = roleTopics
     .filter(topic => selectedTopicIds.includes(topic.id))
     .flatMap(topic => topic.subtopics.map(subtopic => `${topic.id}::${subtopic}`));
   const totalDays = calculateStudyDays(examDate, preferences.selectedWeekdays);
+  let configOverride:CoursePlanConfig|undefined;
+  if(role.curriculum?.topics?.length&&role.curriculum.studySections?.length){
+    let questions:Question[]=[];
+    try{questions=await questionsApi.forCourse(role.courseId);}catch(error){console.warn('Questões remotas indisponíveis durante a criação do plano.',error);}
+    configOverride={name:role.label,description:`Edital cadastrado para ${contest.label}.`,topics:role.curriculum.topics,
+      studySections:role.curriculum.studySections,quizQuestions:questions};
+  }
   const generated = generateCustomPlan(
     role.courseId,
     examDate,
@@ -180,6 +201,7 @@ export async function createAutomaticCareerPlan(
     preferences.selectedWeekdays,
     selectedSubtopicIds,
     [],
+    configOverride,
   );
   if (!generated.success || generated.sections.length === 0) throw new Error('Não foi possível montar o conteúdo deste cargo.');
 
@@ -221,18 +243,22 @@ export async function createAutomaticCareerPlan(
     };
     let existingPlanId: string | null = null;
     try {
-      existingPlanId = JSON.parse(localStorage.getItem(`${role.courseId}_study_config`) || '{}').studyPlanId || null;
+      const existing = JSON.parse(localStorage.getItem(`${role.courseId}_study_config`) || '{}');
+      if (existing.examDate >= localTodayIso() && existing.contest === contest.id) existingPlanId = existing.studyPlanId || null;
     } catch {}
+    if (!existingPlanId) {
+      const reusable = (await studyPlansApi.getAll(false)).find(plan =>
+        (plan.course_id || plan.courseId) === role.courseId &&
+        (plan.exam_date || plan.examDate) === examDate &&
+        plan.title === role.label
+      );
+      existingPlanId = reusable?.id || null;
+    }
     const plan = existingPlanId && !String(existingPlanId).startsWith('local-')
       ? await studyPlansApi.update(existingPlanId, payload)
       : await studyPlansApi.create(payload);
     await studyPlansApi.activate(plan.id);
     studyPlanId = plan.id;
-    try {
-      await questionsApi.importLegacy(role.courseId, generated.questions);
-    } catch (error) {
-      console.warn('Plano criado, mas algumas questões serão importadas novamente depois.', error);
-    }
   }
 
   const config = {

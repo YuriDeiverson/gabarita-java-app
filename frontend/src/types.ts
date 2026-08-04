@@ -64,7 +64,7 @@ export interface StudyBlock {
   title: string;
   duration: string; // e.g., "2h"
   durationMinutes?: number;
-  activityType?: 'THEORY' | 'QUESTIONS' | 'REVIEW';
+  activityType?: 'THEORY' | 'QUESTIONS' | 'REVIEW' | 'REVISION' | 'SIMULATION' | 'READING' | 'FLASHCARDS';
   isOptional?: boolean;
   outsidePlannedHours?: boolean;
   methodology: string; // e.g., "30% Teoria, 50% Exercícios, 20% Revisão"

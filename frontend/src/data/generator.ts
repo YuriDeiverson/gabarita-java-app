@@ -1105,15 +1105,15 @@ const SUS_ADDITIONAL_CARDS: StudySection['cards'] = [
   },
 ];
 
-export const COURSES_CONFIG: {
-  [key: string]: {
-    name: string;
-    description: string;
-    topics: CourseTopic[];
-    studySections: StudySection[];
-    quizQuestions: any[];
-  }
-} = {
+export interface CoursePlanConfig {
+  name: string;
+  description: string;
+  topics: CourseTopic[];
+  studySections: StudySection[];
+  quizQuestions: Question[];
+}
+
+export const COURSES_CONFIG: Record<string,CoursePlanConfig> = {
   seplag_informatica: {
     name: "SEPLAG Alagoas - Informática",
     description: "Preparação para cargos da área de Tecnologia da Informação, incluindo o Cargo 5 — Gestor Especializado em Ciência e Tecnologia. Abrange o conteúdo completo de conhecimentos específicos de TI.",
@@ -1934,13 +1934,14 @@ export function generateCustomPlan(
   selectedWeekdays?: number[],
   selectedSubtopicIds: string[] = [],
   selectedQuestionBoards: string[] = [],
+  configOverride?: CoursePlanConfig,
 ): {
   success: boolean;
   sections: StudySection[];
   questions: Question[];
   weeks: ScheduleWeek[];
 } {
-  const config = COURSES_CONFIG[course] || COURSES_CONFIG.seplag_informatica;
+  const config = configOverride || COURSES_CONFIG[course] || COURSES_CONFIG.seplag_informatica;
   const selectedSubtopicsByTopic = new Map<string, string[]>();
   selectedSubtopicIds.forEach(value => {
     const separator = value.indexOf('::');
@@ -2201,10 +2202,186 @@ export function generateCustomPlan(
     });
   }
 
+  const deadlineAwareWeeks = applyDeadlineStrategy(
+    generatedWeeks,
+    sectionsToUse,
+    examDateStr,
+    hoursPerDay,
+    course,
+  );
+
   return {
     success: true,
     sections: sectionsToUse,
     questions: questionsToUse,
-    weeks: generatedWeeks
+    weeks: deadlineAwareWeeks
   };
 }
+
+type DeadlineTopic = { section: StudySection; card?: StudySection['cards'][number]; score: number };
+type DeadlineDate = { isoDate: string; day: string; date: string };
+
+function applyDeadlineStrategy(
+  baseWeeks: ScheduleWeek[],
+  sections: StudySection[],
+  examDate: string,
+  hoursPerDay: number,
+  course: string,
+): ScheduleWeek[] {
+  const todayIso = localIso(new Date());
+  const daysToExam = calendarDays(todayIso, examDate);
+  const baseBlocks = baseWeeks.flatMap(week => week.blocks).filter(block => block.isoDate && block.isoDate < examDate);
+  const dateMap = new Map<string, DeadlineDate>();
+  baseBlocks.forEach(block => {
+    if (block.isoDate && !dateMap.has(block.isoDate)) {
+      dateMap.set(block.isoDate, { isoDate: block.isoDate, day: block.day || '', date: block.date || '' });
+    }
+  });
+  const dates = [...dateMap.values()].sort((a, b) => a.isoDate.localeCompare(b.isoDate));
+  if (dates.length === 0) return baseWeeks;
+
+  const ranked = sections.flatMap(section => {
+    const weight = Number.parseFloat(section.weight.replace('%', '')) || 1;
+    const ease = section.difficulty === 'Fácil' ? 1 : section.difficulty === 'Médio' ? .75 : .5;
+    const cards = section.cards.length > 0 ? section.cards : [undefined];
+    return cards.map(card => ({
+      section,
+      card,
+      score: weight * ease * (card?.isQuente || card?.paretoRatio?.toLowerCase().includes('alta') ? 1.25 : 1),
+    }));
+  }).sort((a, b) => b.score - a.score || topicTitle(a).localeCompare(topicTitle(b)));
+  if (ranked.length === 0) return baseWeeks;
+
+  const dailyMinutes = Math.max(60, Math.round(hoursPerDay * 60));
+  if (daysToExam <= 30) {
+    return groupDeadlineWeeks(buildSprint(dates, daysToExam, ranked, dailyMinutes, course), todayIso,
+      daysToExam <= 15
+        ? 'Reta final: Pareto 80/20, 30% teoria e 70% questões; zero conteúdo novo no fechamento'
+        : 'Plano de 1 mês: peso e incidência primeiro, com a última semana dedicada a revisão e simulados');
+  }
+
+  const sprintStart = addCalendarDays(examDate, -21);
+  const sprintDates = dates.filter(date => date.isoDate >= sprintStart);
+  const retained = baseBlocks.filter(block => block.isoDate !== dates[0].isoDate && (!block.isoDate || block.isoDate < sprintStart));
+  retained.push(makeDeadlineBlock(course, dates[0], ranked[0], 'SIMULATION', dailyMinutes,
+    'Diagnóstico inicial: prova antiga completa',
+    'Faça uma prova antiga completa e cronometrada para medir suas fraquezas reais.',
+    ['Precisão por disciplina', 'Tempo por questão', 'Caderno de erros inicial']));
+  retained.push(...buildSprint(sprintDates, 15, ranked, dailyMinutes, course));
+  [1, 7, 30].forEach(offset => {
+    const target = addCalendarDays(dates[0].isoDate, offset);
+    const reviewDate = dates.find(date => date.isoDate >= target);
+    const block = retained.find(item => item.isoDate === reviewDate?.isoDate && item.activityType === 'THEORY');
+    if (block) {
+      block.activityType = 'REVIEW';
+      block.methodology = `Revisão espaçada D+${offset}: recuperação ativa e questões curtas dos erros.`;
+    }
+  });
+  return groupDeadlineWeeks(retained, todayIso,
+    'Ciclo por peso, teoria e questões juntas, revisões D+1/D+7/D+30 e últimas semanas em modo intensivo');
+}
+
+function buildSprint(
+  dates: DeadlineDate[],
+  daysToExam: number,
+  ranked: DeadlineTopic[],
+  dailyMinutes: number,
+  course: string,
+): StudyBlock[] {
+  if (dates.length === 0) return [];
+  const paretoCount = Math.max(1, Math.ceil(ranked.length * .2));
+  const expandedCount = Math.max(paretoCount, Math.ceil(ranked.length * .5));
+  const pool = ranked.slice(0, daysToExam <= 15 ? paretoCount : expandedCount);
+  const mappingDays = dates.length === 1 ? 0 : daysToExam <= 15
+    ? Math.min(2, Math.max(1, dates.length - Math.min(4, Math.max(1, dates.length - 1))))
+    : Math.min(1, Math.max(0, dates.length - 1));
+  const availableFinalDates = dates.slice(Math.min(mappingDays, dates.length - 1));
+  let finalDates = availableFinalDates.filter(date => calendarDays(date.isoDate, dates.at(-1)!.isoDate) < (daysToExam <= 15 ? 4 : 7));
+  if (finalDates.length === 0) finalDates = availableFinalDates.slice(-Math.min(4, availableFinalDates.length));
+  if (daysToExam <= 15 && finalDates.length > 4) finalDates = finalDates.slice(-4);
+  const firstFinal = finalDates[0]?.isoDate;
+  const blocks: StudyBlock[] = [];
+  let pointer = 0;
+  dates.forEach((date, index) => {
+    const topic = pool[pointer++ % pool.length];
+    if (index < mappingDays) {
+      blocks.push(makeDeadlineBlock(course, date, topic, 'READING', dailyMinutes,
+        'Mapeamento do edital × incidência da banca',
+        'Cruze o edital com o histórico da banca e ordene as disciplinas por peso e incidência.',
+        ['Peso de cada disciplina', 'Assuntos mais cobrados pela banca', 'Ranking de prioridade']));
+      return;
+    }
+    if (firstFinal && date.isoDate >= firstFinal) {
+      const finalIndex = finalDates.findIndex(item => item.isoDate === date.isoDate);
+      blocks.push(...localFinalBlocks(course, date, topic, dailyMinutes, finalIndex, finalDates.length));
+      return;
+    }
+    const theory = Math.max(15, Math.round(dailyMinutes * .3));
+    blocks.push(makeDeadlineBlock(course, date, topic, 'THEORY', theory,
+      `Teoria enxuta: ${topic.section.title}`,
+      '30% do tempo: somente resumo, mapa mental e conceitos indispensáveis.', topicDetailsLocal(topic)));
+    blocks.push(makeDeadlineBlock(course, date, topic, 'QUESTIONS', Math.max(15, dailyMinutes - theory),
+      `Questões comentadas: ${topicTitle(topic)}`,
+      '70% do tempo: questões da banca, correção ativa e registro dos erros.', topicDetailsLocal(topic)));
+  });
+  return blocks;
+}
+
+function localFinalBlocks(course: string, date: DeadlineDate, topic: DeadlineTopic, minutes: number, index: number, count: number): StudyBlock[] {
+  if (count === 1) {
+    const simulation = Math.max(15, Math.floor(minutes / 2));
+    return [
+      makeDeadlineBlock(course, date, topic, 'SIMULATION', simulation, 'Simulado cronometrado',
+        'Resolva a prova no tempo oficial e calcule a nota líquida.', ['Todas as disciplinas', 'Gestão do tempo', 'Registro dos erros']),
+      makeDeadlineBlock(course, date, topic, 'FLASHCARDS', minutes - simulation, 'Revisão ativa final',
+        'Somente flashcards e resumos já produzidos. Zero conteúdo novo.', topicDetailsLocal(topic)),
+    ];
+  }
+  if (index === Math.max(0, count - 3)) return [makeDeadlineBlock(course, date, topic, 'SIMULATION', minutes,
+    'Simulado cronometrado', 'Simule as condições reais da prova e corrija ao terminar.', ['Todas as disciplinas', 'Gestão do tempo', 'Nota líquida'])];
+  if (index === count - 2) return [makeDeadlineBlock(course, date, topic, 'REVIEW', minutes,
+    'Dia-colchão: reforço dos erros', 'Reforce exclusivamente os assuntos com mais erros no simulado. Zero conteúdo novo.',
+    ['Caderno de erros', 'Questões erradas', 'Pontos de baixa precisão'])];
+  return [makeDeadlineBlock(course, date, topic, 'FLASHCARDS', minutes,
+    index === count - 1 ? 'Revisão leve pré-prova' : 'Revisão ativa de reta final',
+    'Revise flashcards, resumos e mapas mentais já produzidos. Zero conteúdo novo.', topicDetailsLocal(topic))];
+}
+
+function makeDeadlineBlock(course: string, date: DeadlineDate, topic: DeadlineTopic, activityType: StudyBlock['activityType'],
+  durationMinutes: number, title: string, methodology: string, subtopics: string[]): StudyBlock {
+  return {
+    id: `${course}-${date.isoDate}-${activityType}-${title.replace(/\W+/g, '-').toLowerCase()}`,
+    ...date,
+    title,
+    duration: durationMinutes >= 60 && durationMinutes % 60 === 0 ? `${durationMinutes / 60}h` : `${durationMinutes}min`,
+    durationMinutes,
+    activityType,
+    isOptional: false,
+    outsidePlannedHours: false,
+    methodology,
+    subtopics,
+    done: false,
+  };
+}
+
+function groupDeadlineWeeks(blocks: StudyBlock[], todayIso: string, focus: string): ScheduleWeek[] {
+  const grouped = new Map<number, StudyBlock[]>();
+  blocks.sort((a, b) => (a.isoDate || '').localeCompare(b.isoDate || '')).forEach(block => {
+    const index = Math.max(0, Math.floor(calendarDays(todayIso, block.isoDate || todayIso) / 7));
+    grouped.set(index, [...(grouped.get(index) || []), block]);
+  });
+  return [...grouped.entries()].map(([index, weekBlocks], position) => ({
+    id: `week-${position + 1}`,
+    title: `Semana ${position + 1}`,
+    dateRange: `${formatShort(addCalendarDays(todayIso, index * 7))} a ${formatShort(addCalendarDays(todayIso, index * 7 + 6))}`,
+    focus,
+    blocks: weekBlocks,
+  }));
+}
+
+function topicTitle(topic: DeadlineTopic): string { return topic.card?.title || topic.section.title; }
+function topicDetailsLocal(topic: DeadlineTopic): string[] { return [topicTitle(topic), ...(topic.card?.keyTakeaways || []).slice(0, 2)]; }
+function localIso(date: Date): string { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }
+function calendarDays(from: string, to: string): number { return Math.round((Date.parse(`${to}T12:00:00`) - Date.parse(`${from}T12:00:00`)) / 86_400_000); }
+function addCalendarDays(iso: string, amount: number): string { const date = new Date(`${iso}T12:00:00`); date.setDate(date.getDate() + amount); return localIso(date); }
+function formatShort(iso: string): string { const [, month, day] = iso.split('-'); return `${day}/${month}`; }

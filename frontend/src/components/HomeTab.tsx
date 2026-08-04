@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, MouseEvent } from 'react';
 import ReactCalendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { COURSES_CONFIG, DISCURSIVE_TOPIC_ID, generateCustomPlan } from '../data/generator';
-import { API_BASE_URL, studyPlansApi, scheduleApi, questionsApi, StudyPlan } from '../services/api';
+import { API_BASE_URL, studyPlansApi, scheduleApi, StudyPlan } from '../services/api';
 import { 
   Calendar, 
   Clock, 
@@ -688,11 +688,6 @@ const WEEKDAY_NUMBER_TO_NAME: { [key: number]: string } = {
 
             await studyPlansApi.activate(studyPlan.id);
             studyPlanId = studyPlan.id;
-            try {
-              await questionsApi.importLegacy(selectedCourse, result.questions);
-            } catch (importError) {
-              console.warn('Plano salvo, mas a importação das questões será tentada novamente depois.', importError);
-            }
           } catch (apiError) {
             throw apiError;
           }

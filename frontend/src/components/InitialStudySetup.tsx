@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CalendarDays, Check, Clock3, LoaderCircle } from 'lucide-react';
+import { Check, Clock3, LoaderCircle } from 'lucide-react';
 import { StudyPreferences } from '../careerPlan';
 
 const weekdays = [
@@ -8,19 +8,12 @@ const weekdays = [
   { value: 0, label: 'Dom' },
 ];
 
-const defaultExamDate = () => {
-  const date = new Date();
-  date.setDate(date.getDate() + 90);
-  return date.toISOString().slice(0, 10);
-};
-
 interface Props {
   initial?: StudyPreferences | null;
   onSave: (preferences: StudyPreferences) => void | Promise<void>;
 }
 
 export default function InitialStudySetup({ initial, onSave }: Props) {
-  const [examDate, setExamDate] = useState(initial?.examDate || defaultExamDate);
   const [selectedDays, setSelectedDays] = useState<number[]>(initial?.selectedWeekdays || [1, 2, 3, 4, 5]);
   const [hours, setHours] = useState<Record<number, number>>(initial?.hoursByWeekday || { 1: 4, 2: 4, 3: 4, 4: 4, 5: 4 });
   const [saving, setSaving] = useState(false);
@@ -36,12 +29,6 @@ export default function InitialStudySetup({ initial, onSave }: Props) {
   };
 
   const submit = async () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (!examDate || new Date(`${examDate}T00:00:00`) <= today) {
-      setError('Informe uma data de prova posterior a hoje.');
-      return;
-    }
     if (selectedDays.length === 0) {
       setError('Selecione pelo menos um dia disponível para estudar.');
       return;
@@ -50,7 +37,6 @@ export default function InitialStudySetup({ initial, onSave }: Props) {
     setError('');
     try {
       await onSave({
-        examDate,
         selectedWeekdays: [...selectedDays].sort((a, b) => (a || 7) - (b || 7)),
         hoursByWeekday: Object.fromEntries(selectedDays.map(day => [day, Math.max(1, Number(hours[day] || 1))])),
         hoursPerDay: averageHours,
@@ -65,16 +51,11 @@ export default function InitialStudySetup({ initial, onSave }: Props) {
     <section className="mx-auto max-w-4xl animate-fade-in space-y-6">
       <header className="rounded-3xl bg-slate-950 px-6 py-8 text-white sm:px-10">
         <span className="text-xs font-black uppercase tracking-[0.2em] text-blue-300">Configuração inicial</span>
-        <h2 className="mt-3 text-2xl font-black sm:text-4xl">Quando é a prova e quando você pode estudar?</h2>
-        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-300">Só precisamos dessas informações agora. Concurso, cargo e todo o conteúdo serão escolhidos depois na aba Concursos.</p>
+        <h2 className="mt-3 text-2xl font-black sm:text-4xl">Quando você pode estudar?</h2>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-300">A data da prova já vem cadastrada em cada concurso. Informe apenas sua disponibilidade; ao escolher a preparação, o cronograma será calculado automaticamente.</p>
       </header>
 
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 space-y-8">
-        <label className="block space-y-2">
-          <span className="flex items-center gap-2 text-sm font-extrabold text-slate-800"><CalendarDays className="h-4 w-4 text-indigo-600" /> Data da prova</span>
-          <input type="date" value={examDate} onChange={event => setExamDate(event.target.value)} className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-800 sm:max-w-sm" />
-        </label>
-
         <div className="space-y-4">
           <div>
             <h3 className="flex items-center gap-2 text-sm font-extrabold text-slate-800"><Clock3 className="h-4 w-4 text-indigo-600" /> Disponibilidade de estudo</h3>

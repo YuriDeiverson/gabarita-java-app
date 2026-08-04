@@ -17,6 +17,7 @@ public class StudyPlanService {
     }
 
     List<Map<String,Object>> all(UUID user, boolean archived) {
+        archiveExpired(user);
         return jdbc.sql("""
                 SELECT sp.*,sp.course_id AS course_id,sp.exam_date AS exam_date,sp.is_primary AS is_active,
                   (SELECT COUNT(*) FROM roadmap_topics rt WHERE rt.plan_id=sp.id AND rt.active) total_topics,
@@ -34,6 +35,7 @@ public class StudyPlanService {
                 .orElseThrow(() -> new NoSuchElementException("Plano não encontrado"));
     }
     Map<String,Object> active(UUID user) {
+        archiveExpired(user);
         return jdbc.sql("SELECT *, is_primary AS is_active FROM study_plans WHERE user_id=:u AND is_primary AND status='ACTIVE'")
                 .param("u",user).query().listOfRows().stream().findFirst().orElseThrow(() -> new NoSuchElementException("Nenhum plano principal ativo"));
     }
@@ -69,6 +71,7 @@ public class StudyPlanService {
 
     @Transactional Map<String,Object> duplicate(UUID source, UUID user, String title) {
         var original=one(source,user); UUID id=UUID.randomUUID();
+        if(localDate(original.get("exam_date")).isBefore(today()))throw new IllegalArgumentException("A prova deste plano já foi realizada");
         jdbc.sql("""
           INSERT INTO study_plans(id,user_id,exam_id,course_id,title,exam_date,status,is_template,block_minutes,break_minutes,
           final_sprint_days,weekly_goal_minutes,monthly_goal_minutes,settings)
@@ -81,14 +84,17 @@ public class StudyPlanService {
         audit(id,"DUPLICATED"); return one(id,user);
     }
     @Transactional Map<String,Object> activate(UUID id, UUID user) {
-        one(id,user); jdbc.sql("UPDATE study_plans SET is_primary=false WHERE user_id=:u").param("u",user).update();
+        archiveExpired(user);var plan=one(id,user);
+        if(localDate(plan.get("exam_date")).isBefore(today()))throw new IllegalArgumentException("A prova deste plano já foi realizada");
+        jdbc.sql("UPDATE study_plans SET is_primary=false WHERE user_id=:u").param("u",user).update();
         jdbc.sql("UPDATE study_plans SET is_primary=true,status='ACTIVE',updated_at=now() WHERE id=:id").param("id",id).update(); audit(id,"ACTIVATED"); return one(id,user);
     }
     @Transactional Map<String,Object> archive(UUID id, UUID user) {
         one(id,user); jdbc.sql("UPDATE study_plans SET status='ARCHIVED',is_primary=false,updated_at=now() WHERE id=:id").param("id",id).update(); audit(id,"ARCHIVED"); return one(id,user);
     }
     @Transactional Map<String,Object> restore(UUID id, UUID user) {
-        one(id,user); jdbc.sql("UPDATE study_plans SET status='ACTIVE',updated_at=now() WHERE id=:id").param("id",id).update(); audit(id,"RESTORED"); return one(id,user);
+        var plan=one(id,user);if(localDate(plan.get("exam_date")).isBefore(today()))throw new IllegalArgumentException("A prova deste plano já foi realizada");
+        jdbc.sql("UPDATE study_plans SET status='ACTIVE',updated_at=now() WHERE id=:id").param("id",id).update(); audit(id,"RESTORED"); return one(id,user);
     }
     @Transactional void delete(UUID id, UUID user) {
         one(id,user);
@@ -108,7 +114,15 @@ public class StudyPlanService {
         if(r.unavailablePeriods()!=null) r.unavailablePeriods().forEach(x -> jdbc.sql("INSERT INTO unavailable_periods(id,plan_id,starts_at,ends_at,reason) VALUES(gen_random_uuid(),:p,:s,:e,:r)").param("p",id).param("s",x.startsAt()).param("e",x.endsAt()).param("r",x.reason()).update());
     }
     private void audit(UUID id,String action) { jdbc.sql("INSERT INTO plan_history(plan_id,version,action,snapshot) SELECT id,version,:a,to_jsonb(study_plans) FROM study_plans WHERE id=:id").param("a",action).param("id",id).update(); }
-    private void validate(PlanRequest r) { if(!r.examDate().isAfter(java.time.LocalDate.now())) throw new IllegalArgumentException("A data da prova deve ser futura"); if(r.availability()!=null) r.availability().forEach(a->{if(!a.endTime().isAfter(a.startTime())) throw new IllegalArgumentException("O fim da disponibilidade deve ser posterior ao início");}); }
+    private void archiveExpired(UUID user){jdbc.sql("UPDATE study_plans SET status='ARCHIVED',is_primary=false,updated_at=now() WHERE user_id=:u AND status='ACTIVE' AND exam_date<(now() AT TIME ZONE 'America/Maceio')::date").param("u",user).update();}
+    static java.time.LocalDate localDate(Object value){
+        if(value instanceof java.time.LocalDate date)return date;
+        if(value instanceof java.sql.Date date)return date.toLocalDate();
+        if(value!=null)try{return java.time.LocalDate.parse(String.valueOf(value));}catch(java.time.format.DateTimeParseException ignored){}
+        throw new IllegalArgumentException("Data da prova inválida");
+    }
+    private java.time.LocalDate today(){return java.time.LocalDate.now(java.time.ZoneId.of("America/Maceio"));}
+    private void validate(PlanRequest r) { if(!r.examDate().isAfter(today())) throw new IllegalArgumentException("A data da prova deve ser futura"); if(r.availability()!=null) r.availability().forEach(a->{if(!a.endTime().isAfter(a.startTime())) throw new IllegalArgumentException("O fim da disponibilidade deve ser posterior ao início");}); }
     private int or(Integer value,int fallback){return value==null?fallback:value;}
     private String settings(PlanRequest r) { try { var root=json.createObjectNode(); if(r.settings()!=null) root.set("preferences",r.settings()); if(r.studySections()!=null) root.set("studySections",r.studySections()); if(r.scheduleWeeks()!=null) root.set("legacyScheduleWeeks",r.scheduleWeeks()); if(r.hoursPerDay()!=null) root.put("hoursPerDay",r.hoursPerDay()); if(r.daysPerWeek()!=null) root.put("daysPerWeek",r.daysPerWeek()); return json.writeValueAsString(root); } catch(JsonProcessingException e){throw new IllegalArgumentException("Configuração inválida");} }
 }

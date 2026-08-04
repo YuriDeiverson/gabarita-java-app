@@ -110,6 +110,16 @@ O sistema utiliza PostgreSQL/Supabase. O Flyway cria e atualiza o schema automat
 realiza cadastro, login, confirmação de e-mail e renovação da sessão; a API Spring valida o JWT antes de
 acessar qualquer dado e sempre filtra planos, sessões, simulados e progresso pelo usuário autenticado.
 
+### Painel administrativo
+
+O menu **Administração** aparece apenas quando o JWT do usuário possui `app_metadata.admin: true` ou
+`app_metadata.role: "admin"`. Defina essa informação pelo ambiente administrativo do Supabase e peça ao
+usuário para renovar a sessão. A API também verifica essa permissão em todas as rotas `/api/admin/**`.
+
+O painel permite cadastrar concursos com a data da prova, cargos/editais com conteúdo programático,
+textos de apoio e questões. Concursos ativos, com cargo ativo e prova ainda não realizada entram
+automaticamente no catálogo; depois da data da prova deixam de ser exibidos aos alunos.
+
 ## 🔧 Variáveis de Ambiente
 
 Backend (`backend/.env`):

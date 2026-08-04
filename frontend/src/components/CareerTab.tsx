@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ArrowLeft, BookOpenCheck, BriefcaseBusiness, ChevronRight, Clock3,
-  GraduationCap, ListChecks, LoaderCircle, Search, ShieldCheck, Trash2, X,
+  GraduationCap, ListChecks, LoaderCircle, Search, ShieldCheck, SlidersHorizontal, Trash2, X,
 } from 'lucide-react';
 import {
   CAREER_CONTESTS, CareerContest, CareerRole, StudyPreferences, createAutomaticCareerPlan,
-  topicIdsForCareer,
+  isContestAvailable, localTodayIso, topicIdsForCareer, topicsForCareerRole,
 } from '../careerPlan';
 import { COURSES_CONFIG } from '../data/generator';
-import { StudyPlan, studyPlansApi } from '../services/api';
+import { CatalogContest, StudyPlan, catalogApi, studyPlansApi } from '../services/api';
 import './CareerTab.css';
 
 interface Props {
@@ -33,19 +33,19 @@ interface Preparation {
   studyPlanId?: string;
 }
 
-const courseIds = ['seplag_informatica', 'policial_civil', 'tecnico_enfermagem', 'jornalismo'];
+const baseCourseIds = ['seplag_informatica', 'policial_civil', 'tecnico_enfermagem', 'jornalismo'];
 const weekdayLabels: Record<number, string> = { 0: 'domingo', 1: 'segunda', 2: 'terça', 3: 'quarta', 4: 'quinta', 5: 'sexta', 6: 'sábado' };
 const formatDate = (value?: string) => value ? value.split('-').reverse().join('/') : 'A definir';
 const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const remainingDays = (examDate: string) => Math.max(0, Math.ceil((new Date(`${examDate}T00:00:00`).getTime() - Date.now()) / 86_400_000));
 
-const loadPreparations = (remotePlans: StudyPlan[] = []): Preparation[] => courseIds.flatMap(courseId => {
+const loadPreparations = (contests: CareerContest[], courseIds: string[], remotePlans: StudyPlan[] = []): Preparation[] => courseIds.flatMap(courseId => {
   try {
     const config = JSON.parse(localStorage.getItem(`${courseId}_study_config`) || 'null');
     const weeks = JSON.parse(localStorage.getItem(`${courseId}_schedule_weeks`) || '[]');
-    if (!config) return [];
-    const contest = CAREER_CONTESTS.find(item => item.id === config.contest)
-      || CAREER_CONTESTS.find(item => item.roles.some(role => role.courseId === courseId));
+    if (!config || !config.examDate || config.examDate < localTodayIso()) return [];
+    const contest = contests.find(item => item.id === config.contest)
+      || contests.find(item => item.roles.some(role => role.courseId === courseId));
     if (!contest) return [];
     const blocks = weeks.flatMap((week: { blocks?: Record<string, unknown>[] }) => week.blocks || []);
     const progress = JSON.parse(localStorage.getItem(`${courseId}_study_schedule_progress`) || '{}');
@@ -83,21 +83,51 @@ export default function CareerTab({
   const [error, setError] = useState('');
   const [preparationVersion, setPreparationVersion] = useState(0);
   const [remotePlans, setRemotePlans] = useState<StudyPlan[]>([]);
+  const [remoteContests, setRemoteContests] = useState<CareerContest[]>([]);
   const [search, setSearch] = useState('');
   const [stateFilter, setStateFilter] = useState('');
   const [areaFilter, setAreaFilter] = useState('');
   const [educationFilter, setEducationFilter] = useState('');
   const [boardFilter, setBoardFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    studyPlansApi.getAll(false).then(plans => { if (!cancelled) setRemotePlans(plans); }).catch(() => {});
+    Promise.all([
+      studyPlansApi.getAll(false).catch(() => []),
+      catalogApi.contests().catch(() => [] as CatalogContest[]),
+    ]).then(([plans, catalog]) => {
+      if (cancelled) return;
+      setRemotePlans(plans);
+      setRemoteContests(catalog as CareerContest[]);
+    });
     return () => { cancelled = true; };
   }, [preparationVersion]);
 
-  const preparations = useMemo(() => loadPreparations(remotePlans), [preparationVersion, remotePlans]);
-  const filteredContests = useMemo(() => CAREER_CONTESTS.filter(item => {
+  useEffect(()=>{
+    document.body.classList.toggle('mobile-sheet-open',filtersOpen);
+    const media=window.matchMedia('(max-width: 839px)');
+    const closeForWideScreen=()=>{if(!media.matches)setFiltersOpen(false);};
+    const closeOnEscape=(event:KeyboardEvent)=>{if(event.key==='Escape')setFiltersOpen(false);};
+    media.addEventListener('change',closeForWideScreen);
+    window.addEventListener('keydown',closeOnEscape);
+    return()=>{
+      document.body.classList.remove('mobile-sheet-open');
+      media.removeEventListener('change',closeForWideScreen);
+      window.removeEventListener('keydown',closeOnEscape);
+    };
+  },[filtersOpen]);
+
+  const allContests = useMemo(() => {
+    const merged = new Map<string, CareerContest>(CAREER_CONTESTS.map(item => [item.id, item]));
+    remoteContests.forEach(item => merged.set(item.id, item));
+    return [...merged.values()];
+  }, [remoteContests]);
+  const courseIds = useMemo(() => [...new Set([...baseCourseIds, ...allContests.flatMap(item => item.roles.map(role => role.courseId))])], [allContests]);
+  const preparations = useMemo(() => loadPreparations(allContests, courseIds, remotePlans), [allContests, courseIds, preparationVersion, remotePlans]);
+  const availableContests = useMemo(() => allContests.filter(item => isContestAvailable(item)), [allContests]);
+  const filteredContests = useMemo(() => availableContests.filter(item => {
     const searchable = normalize([item.label, item.acronym, item.organization, ...item.roles.map(role => role.label)].join(' '));
     return (!search || searchable.includes(normalize(search)))
       && (!stateFilter || item.state === stateFilter)
@@ -105,11 +135,11 @@ export default function CareerTab({
       && (!educationFilter || item.education === educationFilter)
       && (!boardFilter || item.board === boardFilter)
       && (!statusFilter || item.status === statusFilter);
-  }), [areaFilter, boardFilter, educationFilter, search, stateFilter, statusFilter]);
+  }), [areaFilter, availableContests, boardFilter, educationFilter, search, stateFilter, statusFilter]);
 
   const roleTopics = (selectedContest: CareerContest, role: CareerRole) => {
     const ids = topicIdsForCareer(selectedContest.id, role);
-    return COURSES_CONFIG[role.courseId].topics.filter(topic => ids.includes(topic.id));
+    return topicsForCareerRole(role).filter(topic => ids.includes(topic.id));
   };
 
   const createPlan = async () => {
@@ -188,12 +218,16 @@ export default function CareerTab({
 
   const selectedRoleTopics = contest && pendingRole ? roleTopics(contest, pendingRole) : [];
   const filters = [
-    { label: 'Estado', value: stateFilter, setter: setStateFilter, options: CAREER_CONTESTS.map(item => item.state) },
-    { label: 'Área', value: areaFilter, setter: setAreaFilter, options: CAREER_CONTESTS.map(item => item.area) },
-    { label: 'Escolaridade', value: educationFilter, setter: setEducationFilter, options: CAREER_CONTESTS.map(item => item.education) },
-    { label: 'Banca', value: boardFilter, setter: setBoardFilter, options: CAREER_CONTESTS.map(item => item.board) },
-    { label: 'Situação do edital', value: statusFilter, setter: setStatusFilter, options: CAREER_CONTESTS.map(item => item.status) },
+    { label: 'Estado', value: stateFilter, setter: setStateFilter, options: availableContests.map(item => item.state) },
+    { label: 'Área', value: areaFilter, setter: setAreaFilter, options: availableContests.map(item => item.area) },
+    { label: 'Escolaridade', value: educationFilter, setter: setEducationFilter, options: availableContests.map(item => item.education) },
+    { label: 'Banca', value: boardFilter, setter: setBoardFilter, options: availableContests.map(item => item.board) },
+    { label: 'Situação do edital', value: statusFilter, setter: setStatusFilter, options: availableContests.map(item => item.status) },
   ];
+  const activeFilterCount=filters.filter(filter=>Boolean(filter.value)).length;
+  const clearFilters=()=>{
+    setStateFilter('');setAreaFilter('');setEducationFilter('');setBoardFilter('');setStatusFilter('');
+  };
 
   return (
     <main className="career-page animate-fade-in">
@@ -213,6 +247,9 @@ export default function CareerTab({
                 placeholder="Buscar concurso, órgão ou cargo"
               />
             </label>
+            <button type="button" className="career-mobile-filter-button" onClick={()=>setFiltersOpen(true)} aria-haspopup="dialog">
+              <SlidersHorizontal aria-hidden="true"/><span>Filtros</span>{activeFilterCount>0&&<strong>{activeFilterCount}</strong>}
+            </button>
             <div className="career-filter-grid">
               {filters.map(filter => (
                 <label key={filter.label}>
@@ -327,7 +364,7 @@ export default function CareerTab({
             </div>
             <dl className="career-detail-grid">
               <div><dt>Banca</dt><dd>{contest.board}</dd></div>
-              <div><dt>Data da prova</dt><dd>{formatDate(contest.examDate || preferences.examDate)}</dd></div>
+              <div><dt>Data da prova</dt><dd>{formatDate(contest.examDate)}</dd></div>
               <div><dt>Vagas</dt><dd>{contest.vacancies}</dd></div>
               <div><dt>Remuneração</dt><dd>{contest.remuneration}</dd></div>
               <div><dt>Local</dt><dd>{contest.location}</dd></div>
@@ -385,7 +422,7 @@ export default function CareerTab({
 
             <div className="career-modal-body">
               <dl className="career-modal-summary">
-                <div><dt>Prova em</dt><dd>{formatDate(contest.examDate || preferences.examDate)}</dd></div>
+                <div><dt>Prova em</dt><dd>{formatDate(contest.examDate)}</dd></div>
                 <div><dt>Disponibilidade</dt><dd>{preferences.hoursPerDay} horas por dia</dd></div>
                 <div className="career-meta-wide"><dt>Dias de estudo</dt><dd>{preferences.selectedWeekdays.map(day => weekdayLabels[day]).join(', ')}</dd></div>
               </dl>
@@ -421,6 +458,19 @@ export default function CareerTab({
           </section>
         </div>,
         document.body,
+      )}
+
+      {filtersOpen&&createPortal(
+        <div className="career-filter-sheet-layer" role="presentation" onMouseDown={event=>event.target===event.currentTarget&&setFiltersOpen(false)}>
+          <section className="career-filter-sheet" role="dialog" aria-modal="true" aria-labelledby="career-filter-title">
+            <div className="career-sheet-handle" aria-hidden="true"/>
+            <header><div><span className="career-eyebrow">Refinar catálogo</span><h3 id="career-filter-title">Filtros</h3></div><button type="button" onClick={()=>setFiltersOpen(false)} aria-label="Fechar filtros"><X/></button></header>
+            <div className="career-filter-sheet-fields">
+              {filters.map(filter=><label key={filter.label}><span>{filter.label}</span><select value={filter.value} onChange={event=>filter.setter(event.target.value)}><option value="">Todos</option>{[...new Set(filter.options)].map(option=><option key={option}>{option}</option>)}</select></label>)}
+            </div>
+            <footer><button type="button" className="career-button career-button-secondary" onClick={clearFilters}>Limpar</button><button type="button" className="career-button career-button-primary" onClick={()=>setFiltersOpen(false)}>Ver {filteredContests.length} concursos</button></footer>
+          </section>
+        </div>,document.body
       )}
 
       {error && !pendingRole && <p role="alert" className="career-error">{error}</p>}

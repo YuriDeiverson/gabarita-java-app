@@ -6,6 +6,7 @@ import java.util.NoSuchElementException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -26,6 +27,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     ResponseEntity<?> conflict(IllegalStateException ex) {
         return error(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    ResponseEntity<?> duplicate(DataIntegrityViolationException ex) {
+        return error(HttpStatus.CONFLICT, "Já existe um cadastro com este código ou há registros vinculados");
     }
 
     @ExceptionHandler(AccessDeniedException.class)

@@ -402,6 +402,8 @@ export const questionsApi = {
     if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to import legacy questions'));
     return response.json();
   },
+  report: (data:{questionId:string;courseId?:string;text:string;category?:string;reference?:string;reason:string;details?:string}) =>
+    jsonRequest<{id:string;status:string;reason:string}>('/questions/reports', { method:'POST',body:JSON.stringify(data) }),
 };
 
 export const simulationsApi = {
@@ -435,12 +437,107 @@ export const analyticsApi = {
 };
 
 const jsonRequest = async <T>(path: string, options?: RequestInit): Promise<T> => {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
-  });
-  if (!response.ok) throw new Error(await getApiErrorMessage(response, 'A operação não foi concluída'));
-  return response.json();
+  const controller = new AbortController();
+  let timeout = 0;
+  try {
+    const response = await Promise.race([
+      fetch(`${API_BASE_URL}${path}`, {
+        ...options,
+        signal: options?.signal || controller.signal,
+        headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
+      }),
+      new Promise<Response>((_, reject) => {
+        timeout = window.setTimeout(() => {
+          controller.abort();
+          reject(new Error('A API demorou mais de 20 segundos para responder. Verifique o backend e tente novamente.'));
+        }, 20_000);
+      }),
+    ]);
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'A operação não foi concluída'));
+    if (response.status === 204) return undefined as T;
+    return response.json();
+  } finally {
+    window.clearTimeout(timeout);
+  }
+};
+
+export interface CatalogRole {
+  databaseId?: string;
+  contestDatabaseId?: string;
+  id: string;
+  label: string;
+  courseId: string;
+  board: string;
+  includeDiscursive?: boolean;
+  requirement?: string;
+  remuneration?: string;
+  vacancies?: string;
+  estimatedHours?: number;
+  curriculum?: { topics?: unknown[]; studySections?: unknown[] };
+  active?: boolean;
+}
+
+export interface CatalogContest {
+  databaseId?: string;
+  id: string;
+  label: string;
+  acronym: string;
+  organization: string;
+  description: string;
+  board: string;
+  examDate: string;
+  status: string;
+  state: string;
+  area: string;
+  education: string;
+  vacancies: string;
+  remuneration: string;
+  location: string;
+  stages: string;
+  noticeReference: string;
+  active?: boolean;
+  roles: CatalogRole[];
+}
+
+export interface AdminPassage { id: string; title: string; content: string; source?: string; }
+export interface AdminQuestion {
+  id: string; courseId: string; category: string; topic: string; board: string; type: string; text: string;
+  correct: string; explanation?: string; reference?: string; status?: string; passageId?: string | null;
+  passageTitle?: string; pendingReports?: number; options: Array<{ label: string; text: string }>;
+}
+export interface AdminQuestionReport {
+  id:string; questionId?:string|null; questionKey:string; questionText:string; courseId:string; category:string; reference?:string;
+  reason:string; details?:string; status:'PENDING'|'RESOLVED'|'DISMISSED'; adminNote?:string;
+  reporterName?:string; reporterEmail?:string; createdAt:string; updatedAt:string;
+}
+
+export const catalogApi = {
+  contests: () => jsonRequest<CatalogContest[]>('/catalog/contests'),
+};
+
+export const adminApi = {
+  catalog: () => jsonRequest<CatalogContest[]>('/admin/catalog'),
+  createContest: (data: Record<string,unknown>) => jsonRequest('/admin/catalog/contests', { method:'POST',body:JSON.stringify(data) }),
+  updateContest: (id:string,data:Record<string,unknown>) => jsonRequest(`/admin/catalog/contests/${id}`, { method:'PUT',body:JSON.stringify(data) }),
+  deleteContest: (id:string) => jsonRequest<void>(`/admin/catalog/contests/${id}`, { method:'DELETE' }),
+  createRole: (data:Record<string,unknown>) => jsonRequest('/admin/catalog/roles', { method:'POST',body:JSON.stringify(data) }),
+  updateRole: (id:string,data:Record<string,unknown>) => jsonRequest(`/admin/catalog/roles/${id}`, { method:'PUT',body:JSON.stringify(data) }),
+  deleteRole: (id:string) => jsonRequest<void>(`/admin/catalog/roles/${id}`, { method:'DELETE' }),
+  passages: () => jsonRequest<AdminPassage[]>('/admin/content/passages'),
+  createPassage: (data:Record<string,unknown>) => jsonRequest('/admin/content/passages', { method:'POST',body:JSON.stringify(data) }),
+  updatePassage: (id:string,data:Record<string,unknown>) => jsonRequest(`/admin/content/passages/${id}`, { method:'PUT',body:JSON.stringify(data) }),
+  deletePassage: (id:string) => jsonRequest<void>(`/admin/content/passages/${id}`, { method:'DELETE' }),
+  questions: (filters:{query?:string;courseId?:string;limit?:number}={}) => {
+    const params=new URLSearchParams();if(filters.query)params.set('query',filters.query);if(filters.courseId)params.set('courseId',filters.courseId);
+    params.set('limit',String(filters.limit||50));return jsonRequest<AdminQuestion[]>(`/admin/content/questions?${params}`);
+  },
+  createQuestion: (data:Record<string,unknown>) => jsonRequest('/admin/content/questions', { method:'POST',body:JSON.stringify(data) }),
+  updateQuestion: (id:string,data:Record<string,unknown>) => jsonRequest(`/admin/content/questions/${id}`, { method:'PUT',body:JSON.stringify(data) }),
+  deleteQuestion: (id:string) => jsonRequest<void>(`/admin/content/questions/${id}`, { method:'DELETE' }),
+  questionReports: (status='PENDING') => jsonRequest<AdminQuestionReport[]>(`/admin/content/question-reports?status=${encodeURIComponent(status)}`),
+  reviewQuestionReport: (id:string,status:'RESOLVED'|'DISMISSED',adminNote='') => jsonRequest(`/admin/content/question-reports/${id}`, {
+    method:'PATCH',body:JSON.stringify({status,adminNote}),
+  }),
 };
 
 export const dailyStudyApi = {

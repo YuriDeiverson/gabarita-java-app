@@ -49,8 +49,9 @@ public class ScheduleEngine {
             var item=new LinkedHashMap<String,Object>();
             item.put("id",task.get("id"));item.put("roadmap_topic_id",task.get("roadmap_topic_id"));
             boolean optionalQuestion=questionPractice&&Boolean.TRUE.equals(task.get("is_optional"));
-            item.put("title",questionPractice?(optionalQuestion?"Questões extras do dia":"Revisão semanal com questões"):task.get("subject_name"));
-            item.put("subject_name",questionPractice?(optionalQuestion?"Treino opcional fora da carga planejada":"Fechamento semanal obrigatório"):task.get("subject_name"));
+            String activity=String.valueOf(task.get("activity_type"));
+            item.put("title",activityTitle(activity,optionalQuestion,String.valueOf(task.get("subject_name"))));
+            item.put("subject_name",questionPractice?(optionalQuestion?"Treino opcional fora da carga planejada":"Treinamento por questões"):task.get("subject_name"));
             item.put("topic_title",questionPractice?"":task.get("title"));
             item.put("activity_type",task.get("activity_type"));item.put("planned_minutes",task.get("planned_minutes"));
             item.put("studied_minutes",task.get("completed_minutes"));item.put("question_goal",task.get("question_goal"));
@@ -81,8 +82,8 @@ public class ScheduleEngine {
                     item.put("id",block.path("id").asText("planned-"+date));
                     if(topic!=null)item.put("roadmap_topic_id",topic.get("id"));
                     boolean optionalQuestion=questionPractice&&block.path("isOptional").asBoolean(false);
-                    item.put("title",questionPractice?(optionalQuestion?"Questões extras do dia":"Revisão semanal com questões"):subjectTitle);
-                    item.put("subject_name",questionPractice?(optionalQuestion?"Treino opcional fora da carga planejada":"Fechamento semanal obrigatório"):subjectTitle);
+                    item.put("title",activityTitle(activityType,optionalQuestion,block.path("title").asText(subjectTitle)));
+                    item.put("subject_name",questionPractice?(optionalQuestion?"Treino opcional fora da carga planejada":"Treinamento por questões"):subjectTitle);
                     item.put("topic_title",questionPractice?"":topicTitle);
                     item.put("activity_type",activityType);
                     item.put("planned_minutes",block.path("durationMinutes").asInt(parseMinutes(block.path("duration").asText())));
@@ -130,8 +131,11 @@ public class ScheduleEngine {
         if(sections.isEmpty()) throw new IllegalArgumentException("Informe ao menos um assunto");
         var dates=LocalDate.now().datesUntil(r.examDate()).filter(d->hours.containsKey(d.getDayOfWeek())).toList();
         if(dates.isEmpty()) throw new IllegalArgumentException("Não há dias disponíveis até a prova");
+        long daysToExam=ChronoUnit.DAYS.between(LocalDate.now(),r.examDate());
+        if(daysToExam<=30) return generateDeadlineSchedule(dates,hours,sections,daysToExam);
         int preferredBlock=60;
-        if("policial_civil".equals(r.courseId())) return generatePoliceSchedule(dates,hours,sections,preferredBlock);
+        if("policial_civil".equals(r.courseId())) return applyLongRangeStrategy(
+                generatePoliceSchedule(dates,hours,sections,preferredBlock),dates,hours,sections,r.examDate());
         double weightSum=sections.stream().mapToDouble(Section::weight).sum();
         int totalMinutes=dates.stream().mapToInt(d->availableMinutes(hours.get(d.getDayOfWeek()))).sum();
         var assigned=new HashMap<String,Double>(); var pointers=new HashMap<String,Integer>();
@@ -186,7 +190,155 @@ public class ScheduleEngine {
             }
         }
         var result=new ArrayList<Map<String,Object>>(); int i=0;
-        for(var e:byWeek.entrySet()){var w=new LinkedHashMap<String,Object>();w.put("id","week-"+i);w.put("title","Semana "+(++i));w.put("dateRange",e.getKey().format(BR)+" - "+e.getKey().plusDays(6).format(BR));w.put("focus","Plano equilibrado conforme suas prioridades");w.put("blocks",e.getValue());result.add(w);} return result;
+        for(var e:byWeek.entrySet()){var w=new LinkedHashMap<String,Object>();w.put("id","week-"+i);w.put("title","Semana "+(++i));w.put("dateRange",e.getKey().format(BR)+" - "+e.getKey().plusDays(6).format(BR));w.put("focus","Plano equilibrado conforme suas prioridades");w.put("blocks",e.getValue());result.add(w);} return applyLongRangeStrategy(result,dates,hours,sections,r.examDate());
+    }
+
+    private List<Map<String,Object>> generateDeadlineSchedule(List<LocalDate> dates,Map<DayOfWeek,Double> hours,
+            List<Section> sections,long daysToExam){
+        var ranked=rankedTopics(sections);
+        int paretoCount=Math.max(1,(int)Math.ceil(ranked.size()*.20));
+        int expandedCount=Math.max(paretoCount,(int)Math.ceil(ranked.size()*.50));
+        var priorityPool=ranked.subList(0,Math.min(ranked.size(),daysToExam<=15?paretoCount:expandedCount));
+        int mappingDays=dates.size()==1?0:daysToExam<=15
+                ?Math.min(2,Math.max(1,dates.size()-Math.min(4,Math.max(1,dates.size()-1))))
+                :Math.min(1,Math.max(0,dates.size()-1));
+        int finalWindow=daysToExam<=15?4:7;
+        int finalDays=Math.min(4,Math.max(1,dates.size()-mappingDays));
+        var finalCandidates=dates.subList(Math.min(mappingDays,dates.size()-1),dates.size());
+        var finalDates=finalCandidates.stream().filter(date->ChronoUnit.DAYS.between(date,dates.getLast().plusDays(1))<=finalWindow)
+                .toList();
+        if(finalDates.isEmpty()) finalDates=dates.subList(Math.max(mappingDays,dates.size()-finalDays),dates.size());
+        else if(daysToExam<=15&&finalDates.size()>4) finalDates=finalDates.subList(finalDates.size()-4,finalDates.size());
+        finalDays=finalDates.size();
+        LocalDate firstFinal=finalDates.getFirst();
+        var blocks=new ArrayList<Map<String,Object>>();int counter=0,topicPointer=0;
+        for(int index=0;index<dates.size();index++){
+            LocalDate date=dates.get(index);int minutes=availableMinutes(hours.get(date.getDayOfWeek()));
+            TopicChoice topic=priorityPool.get(topicPointer++%priorityPool.size());
+            if(index<mappingDays){
+                blocks.add(block("deadline-"+(counter++),date,topic,"READING",minutes,
+                        "Mapeamento do edital × incidência da banca",
+                        "Cruze o edital com o histórico da banca e ordene as disciplinas por peso e incidência, não pela quantidade de tópicos.",
+                        List.of("Peso de cada disciplina","Assuntos mais cobrados pela banca","Ranking de prioridade por incidência"),false,false));
+            }else if(!date.isBefore(firstFinal)){
+                int finalIndex=finalDates.indexOf(date);
+                blocks.addAll(finalBlocks(date,topic,minutes,finalIndex,finalDays,counter));counter+=2;
+            }else{
+                int theory=Math.max(15,(int)Math.round(minutes*.30));
+                int questions=Math.max(15,minutes-theory);
+                if(theory+questions>minutes) theory=Math.max(1,minutes-questions);
+                blocks.add(block("deadline-"+(counter++),date,topic,"THEORY",theory,
+                        "Teoria enxuta: "+topic.section().title(),
+                        "30% do tempo: apenas resumo, mapa mental e conceitos indispensáveis do subtópico prioritário.",
+                        topicDetails(topic),false,false));
+                blocks.add(block("deadline-"+(counter++),date,topic,"QUESTIONS",questions,
+                        "Questões comentadas: "+topic.title(),
+                        "70% do tempo: questões da banca, correção ativa e registro dos erros.",
+                        topicDetails(topic),false,false));
+            }
+        }
+        String focus=daysToExam<=15
+                ?"Reta final de 15 dias: Pareto 80/20, 30% teoria e 70% questões; sem conteúdo novo no fechamento"
+                :"Plano de 1 mês: peso e incidência primeiro; teoria enxuta com questões e última semana de revisão";
+        return weeks(blocks,focus);
+    }
+
+    private List<Map<String,Object>> finalBlocks(LocalDate date,TopicChoice topic,int minutes,int index,int count,int counter){
+        if(count==1){
+            int simulation=Math.max(15,minutes/2);
+            return List.of(
+                    block("deadline-"+counter,date,topic,"SIMULATION",simulation,"Simulado cronometrado",
+                            "Resolva uma prova completa ou bloco proporcional no tempo oficial e calcule a nota líquida.",
+                            List.of("Todas as disciplinas integradas","Gestão do tempo","Registro dos erros"),false,false),
+                    block("deadline-"+(counter+1),date,topic,"FLASHCARDS",Math.max(1,minutes-simulation),"Revisão ativa final",
+                            "Revise somente flashcards, mapas e resumos já produzidos. Zero conteúdo novo.",topicDetails(topic),false,false));
+        }
+        boolean simulation=index==Math.max(0,count-3);
+        boolean cushion=index==count-2;
+        if(simulation)return List.of(block("deadline-"+counter,date,topic,"SIMULATION",minutes,"Simulado cronometrado",
+                "Simule as condições reais da prova e faça a correção imediatamente após o término.",
+                List.of("Todas as disciplinas integradas","Gestão do tempo","Análise da nota líquida"),false,false));
+        if(cushion)return List.of(block("deadline-"+counter,date,topic,"REVIEW",minutes,"Dia-colchão: reforço dos erros",
+                "Use este dia para reforçar exclusivamente os assuntos com mais erros no simulado. Zero conteúdo novo.",
+                List.of("Caderno de erros","Questões erradas no simulado","Pontos de baixa precisão"),false,false));
+        return List.of(block("deadline-"+counter,date,topic,"FLASHCARDS",minutes,
+                index==count-1?"Revisão leve pré-prova":"Revisão ativa de reta final",
+                "Revise flashcards, resumos e mapas mentais já produzidos. Zero conteúdo novo.",topicDetails(topic),false,false));
+    }
+
+    private List<Map<String,Object>> applyLongRangeStrategy(List<Map<String,Object>> base,List<LocalDate> dates,
+            Map<DayOfWeek,Double> hours,List<Section> sections,LocalDate examDate){
+        LocalDate sprintStart=examDate.minusDays(21);
+        var sprintDates=dates.stream().filter(date->!date.isBefore(sprintStart)).toList();
+        var retained=base.stream().flatMap(week->((List<Map<String,Object>>)week.get("blocks")).stream())
+                .filter(block->{LocalDate date=(LocalDate)block.get("isoDate");return !date.equals(dates.getFirst())&&!sprintDates.contains(date);})
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        TopicChoice diagnostic=rankedTopics(sections).getFirst();
+        retained.add(block("diagnostic-0",dates.getFirst(),diagnostic,"SIMULATION",
+                availableMinutes(hours.get(dates.getFirst().getDayOfWeek())),"Diagnóstico inicial: prova antiga completa",
+                "Faça uma prova antiga completa e cronometrada para medir suas fraquezas reais antes de ajustar o ciclo.",
+                List.of("Precisão por disciplina","Tempo por questão","Caderno de erros inicial"),false,false));
+        if(!sprintDates.isEmpty()){
+            var sprint=generateDeadlineSchedule(sprintDates,hours,sections,15);
+            sprint.forEach(week->retained.addAll((List<Map<String,Object>>)week.get("blocks")));
+        }
+        markSpacedReview(retained,dates,1);
+        markSpacedReview(retained,dates,7);
+        markSpacedReview(retained,dates,30);
+        return weeks(retained,"Ciclo por peso com teoria e questões desde o início; revisões D+1, D+7 e D+30 e reta final em modo intensivo");
+    }
+
+    private void markSpacedReview(List<Map<String,Object>> blocks,List<LocalDate> dates,int offset){
+        LocalDate target=dates.getFirst().plusDays(offset);
+        var studyDate=dates.stream().filter(date->!date.isBefore(target)).findFirst();
+        if(studyDate.isEmpty())return;
+        blocks.stream().filter(block->studyDate.get().equals(block.get("isoDate")))
+                .filter(block->"THEORY".equals(block.get("activityType"))).findFirst().ifPresent(block->{
+                    block.put("activityType","REVIEW");
+                    block.put("methodology","Revisão espaçada D+"+offset+": recuperação ativa antes de consultar o resumo e questões curtas dos erros.");
+                });
+    }
+
+    private List<TopicChoice> rankedTopics(List<Section> sections){
+        var result=new ArrayList<TopicChoice>();
+        for(Section section:sections){
+            if(section.cards().isEmpty())result.add(new TopicChoice(section,null,priority(section,null)));
+            else for(JsonNode card:section.cards())result.add(new TopicChoice(section,card,priority(section,card)));
+        }
+        result.sort(Comparator.comparingDouble(TopicChoice::score).reversed().thenComparing(TopicChoice::title));
+        return result;
+    }
+
+    private double priority(Section section,JsonNode card){
+        String difficulty=normalize(section.difficulty());
+        double learnability=difficulty.contains("facil")?1:difficulty.contains("medio")?0.75:0.5;
+        double incidence=card!=null&&(card.path("isQuente").asBoolean()||normalize(card.path("paretoRatio").asText()).contains("alta"))?1.25:1;
+        return Math.max(1,section.weight())*learnability*incidence;
+    }
+
+    private Map<String,Object> block(String id,LocalDate date,TopicChoice topic,String activity,int minutes,String title,
+            String methodology,List<String> details,boolean optional,boolean outside){
+        var block=new LinkedHashMap<String,Object>();block.put("id",id);block.put("day",weekday(date.getDayOfWeek()));
+        block.put("date",date.format(BR));block.put("isoDate",date);block.put("title",title);
+        block.put("subjectTitle",topic.section().title());block.put("topicTitle",topic.title());block.put("activityType",activity);
+        block.put("duration",formatMinutes(minutes));block.put("durationMinutes",minutes);
+        if("QUESTIONS".equals(activity)||"SIMULATION".equals(activity))block.put("questionGoal",Math.max(10,minutes/3));
+        block.put("isOptional",optional);block.put("outsidePlannedHours",outside);
+        block.put("methodology",methodology);block.put("subtopics",details);block.put("done",false);return block;
+    }
+
+    private List<String> topicDetails(TopicChoice topic){
+        var details=new ArrayList<String>();details.add(topic.title());
+        if(topic.card()!=null)topic.card().path("keyTakeaways").forEach(value->{if(details.size()<3)details.add(value.asText());});
+        return details;
+    }
+
+    private List<Map<String,Object>> weeks(List<Map<String,Object>> blocks,String focus){
+        blocks.sort(Comparator.comparing(block->(LocalDate)block.get("isoDate")));
+        var grouped=new LinkedHashMap<LocalDate,List<Map<String,Object>>>();
+        for(var block:blocks){LocalDate date=(LocalDate)block.get("isoDate");grouped.computeIfAbsent(date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)),ignored->new ArrayList<>()).add(block);}
+        var result=new ArrayList<Map<String,Object>>();int index=0;
+        for(var entry:grouped.entrySet()){var week=new LinkedHashMap<String,Object>();week.put("id","week-"+index);week.put("title","Semana "+(++index));week.put("dateRange",entry.getKey().format(BR)+" - "+entry.getKey().plusDays(6).format(BR));week.put("focus",focus);week.put("blocks",entry.getValue());result.add(week);}return result;
     }
 
     private List<Map<String,Object>> generatePoliceSchedule(List<LocalDate> dates,Map<DayOfWeek,Double> hours,
@@ -317,9 +469,18 @@ public class ScheduleEngine {
         return Map.of("planId",planId,"blocksCreated",created,"warning",created<topics.size()?"Tempo insuficiente: reduza assuntos ou aumente a disponibilidade":"Cronograma recalculado com sucesso");
     }
     private record Section(String id,String title,double weight,String difficulty,String learningTrack,int learningOrder,List<JsonNode> cards){}
+    private record TopicChoice(Section section,JsonNode card,double score){private String title(){return card==null?section.title():card.path("title").asText(section.title());}}
     private record PoliceAllocation(String group,int minutes){}
     private static final class ScaledAllocation{private final String group;private int units;private final double remainder;private final int position;private ScaledAllocation(String group,int units,double remainder,int position){this.group=group;this.units=units;this.remainder=remainder;this.position=position;}private String group(){return group;}private double remainder(){return remainder;}private int position(){return position;}}
     private List<String> reviewPoints(Object content){try{return textItems(json.readTree(String.valueOf(content)).path("keyTakeaways"));}catch(Exception ignored){return List.of();}}
+    private String activityTitle(String activity,boolean optional,String fallback){return switch(activity){
+        case "QUESTIONS"->optional?"Questões extras do dia":"Questões comentadas";
+        case "SIMULATION"->"Simulado cronometrado";
+        case "FLASHCARDS"->"Revisão por flashcards";
+        case "READING"->"Mapeamento do edital × banca";
+        case "REVIEW","REVISION"->fallback;
+        default->fallback;
+    };}
     private List<String> textItems(JsonNode node){var values=new ArrayList<String>();if(node!=null&&node.isArray())for(JsonNode value:node){if(values.size()==3)break;String text=value.asText().trim();if(!text.isBlank())values.add(text);}return values;}
     private int number(Object value){return value instanceof Number number?number.intValue():0;}
     private int blockMinutes(Section section,JsonNode card,int preferredMinutes){return 60;}

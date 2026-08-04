@@ -6,6 +6,7 @@ import {AuthProvider,useAuth} from './auth/AuthContext.tsx';
 import './index.css';
 import './premium.css';
 import './wide-layout.css';
+import './responsive.css';
 
 function AuthenticatedRoot(){
   const {session,loading}=useAuth();

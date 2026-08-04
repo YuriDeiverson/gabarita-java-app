@@ -6,21 +6,27 @@ import PerformanceTab from './components/PerformanceTab';
 import StudyDashboard from './components/StudyDashboard';
 import QuestionBankTab from './components/QuestionBankTab';
 import CareerTab from './components/CareerTab';
+import AdminPanel from './components/AdminPanel';
 import InitialStudySetup from './components/InitialStudySetup';
 import { StudyPreferences, loadStudyPreferences, saveStudyPreferences } from './careerPlan';
 import { dailyStudyApi, notificationsApi, studyPlansApi, StudyDashboardData, StudySession } from './services/api';
 import { ActiveStudyContext } from './studyContext';
 import { useAuth } from './auth/AuthContext';
-import { Bell, BookOpen, BookOpenCheck, BriefcaseBusiness, Calendar, Target, Home as HomeIcon, ChartNoAxesCombined, PanelLeftClose, PanelLeftOpen, ListChecks, Award, X, LogOut, UserRound, Settings2, Flame, Star, ShieldCheck, Clock3, ChevronRight, CheckCheck, RefreshCw, Play, TimerReset } from 'lucide-react';
+import { Bell, BookOpen, BookOpenCheck, BriefcaseBusiness, Calendar, Target, Home as HomeIcon, ChartNoAxesCombined, PanelLeftClose, PanelLeftOpen, ListChecks, Award, X, LogOut, UserRound, Settings2, Flame, Star, ShieldCheck, Clock3, ChevronRight, CheckCheck, RefreshCw, Play, TimerReset, Menu } from 'lucide-react';
 
-type AppTab = 'home' | 'career' | 'study' | 'quiz' | 'questions' | 'schedule' | 'performance';
+type AppTab = 'home' | 'career' | 'study' | 'quiz' | 'questions' | 'schedule' | 'performance' | 'admin';
 
 const hasActiveStudyPlan = () => Boolean(
   (() => {
     if (localStorage.getItem('study_plan_deleted') === 'true') return false;
     const courseId = localStorage.getItem('active_course');
+    let examDate = '';
+    try { examDate = JSON.parse(localStorage.getItem(`${courseId}_study_config`) || '{}').examDate || ''; } catch {}
+    const now = new Date();
+    const today = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
     return Boolean(
       courseId &&
+      examDate >= today &&
       localStorage.getItem(`${courseId}_study_config`) &&
       localStorage.getItem(`${courseId}_study_sections`) &&
       localStorage.getItem(`${courseId}_quiz_questions`) &&
@@ -31,13 +37,14 @@ const hasActiveStudyPlan = () => Boolean(
 
 export default function App() {
   const {user,signOut}=useAuth();
+  const isAdmin=Boolean(user?.app_metadata?.admin===true||user?.app_metadata?.role==='admin');
   const [hasPlan, setHasPlan] = useState(hasActiveStudyPlan);
   const [studyPreferences,setStudyPreferences]=useState<StudyPreferences|null>(()=>loadStudyPreferences(user?.id));
   const [editingPreferences,setEditingPreferences]=useState(false);
   const [activeTab, setActiveTab] = useState<AppTab>(() => {
     const saved = localStorage.getItem('app_active_tab');
     const setupAvailable=Boolean(loadStudyPreferences(user?.id));
-    return saved && saved !== 'home' && !hasActiveStudyPlan() && !(saved==='career'&&setupAvailable) ? 'home' : (saved as AppTab) || 'home';
+    return saved && saved !== 'home' && !hasActiveStudyPlan() && !(saved==='career'&&setupAvailable) && !(saved==='admin'&&isAdmin) ? 'home' : (saved as AppTab) || 'home';
   });
   const [homeMode, setHomeMode] = useState<'dashboard'|'plans'>(() => hasActiveStudyPlan() ? 'dashboard' : 'plans');
   const [studyContext,setStudyContext]=useState<ActiveStudyContext|null>(()=>{
@@ -334,9 +341,10 @@ export default function App() {
   },[user?.id]);
 
   useEffect(() => {
-    if (!studyPreferences && activeTab !== 'home') setActiveTab('home');
-    else if (!hasPlan && activeTab !== 'home' && activeTab !== 'career') setActiveTab('home');
-  }, [hasPlan, activeTab, studyPreferences]);
+    if (activeTab === 'admin' && !isAdmin) setActiveTab('home');
+    else if (!studyPreferences && activeTab !== 'home' && !(isAdmin && activeTab === 'admin')) setActiveTab('home');
+    else if (!hasPlan && activeTab !== 'home' && activeTab !== 'career' && !(isAdmin && activeTab === 'admin')) setActiveTab('home');
+  }, [hasPlan, activeTab, isAdmin, studyPreferences]);
 
   useEffect(() => {
     localStorage.setItem('app_sidebar_collapsed', String(sidebarCollapsed));
@@ -484,6 +492,7 @@ export default function App() {
       { id: 'performance' as AppTab, label: 'Desempenho', mobileLabel: 'Desempenho', icon: ChartNoAxesCombined },
     ] : []),
     { id: 'career' as AppTab, label: 'Concursos', mobileLabel: 'Concursos', icon: BriefcaseBusiness },
+    ...(isAdmin ? [{ id: 'admin' as AppTab, label: 'Administração', mobileLabel: 'Admin', icon: ShieldCheck }] : []),
   ];
   const activeNavigationItem = navigationItems.find(item => item.id === activeTab)
     || (activeTab === 'performance'
@@ -657,7 +666,7 @@ export default function App() {
     setProfileMenuOpen(false);setMobileProfileOpen(false);setNotificationMenuOpen(false);
     setActiveTab('career');
   };
-  const openProfileDestination=(tab:'schedule'|'performance')=>{
+  const openProfileDestination=(tab:'schedule'|'performance'|'admin')=>{
     setProfileMenuOpen(false);setMobileProfileOpen(false);setNotificationMenuOpen(false);setActiveTab(tab);
   };
   const toggleNotifications=()=>{
@@ -693,6 +702,9 @@ export default function App() {
     {hasPlan&&<nav className="profile-destinations" aria-label="Áreas do perfil">
       <button type="button" onClick={()=>openProfileDestination('performance')}><span><ChartNoAxesCombined/><span><strong>Progresso</strong><small>Resultados e evolução</small></span></span><ChevronRight/></button>
       <button type="button" onClick={()=>openProfileDestination('schedule')}><span><Calendar/><span><strong>Cronograma</strong><small>Planejamento dos estudos</small></span></span><ChevronRight/></button>
+    </nav>}
+    {isAdmin&&<nav className="profile-destinations" aria-label="Administração">
+      <button type="button" onClick={()=>openProfileDestination('admin')}><span><ShieldCheck/><span><strong>Administração</strong><small>Catálogo e conteúdos</small></span></span><ChevronRight/></button>
     </nav>}
     <div className="profile-account-actions">
       <button type="button" onClick={openPlanManager}><Settings2/><span>Gerenciar preparações</span></button>
@@ -738,8 +750,8 @@ export default function App() {
     </div>}
   </div>;
 
-  const showContextRail=Boolean(studyPreferences&&!editingPreferences);
-  const contextualExamDate=String(headerStudyData?.plan?.exam_date||headerStudyData?.plan?.examDate||studyPreferences?.examDate||'');
+  const showContextRail=Boolean(studyPreferences&&!editingPreferences&&activeTab!=='admin');
+  const contextualExamDate=String(headerStudyData?.plan?.exam_date||headerStudyData?.plan?.examDate||'');
   const contextualExamDays=(()=>{
     if(!contextualExamDate)return null;
     const target=new Date(`${contextualExamDate}T00:00:00`).getTime();
@@ -804,10 +816,7 @@ export default function App() {
         <span className="context-card-label">Disponibilidade configurada</span>
         <h3>{studyPreferences?.hoursPerDay||0} horas por dia</h3>
         <p>{studyPreferences?.selectedWeekdays.length||0} dias de estudo por semana</p>
-        <div className="context-exam-row">
-          <Calendar aria-hidden="true"/>
-          <div><span>Data informada</span><strong>{contextualExamDate?contextualExamDate.split('-').reverse().join('/'):'A definir'}</strong></div>
-        </div>
+        <p>A data será definida automaticamente quando você escolher um concurso.</p>
       </section>
       <section className="context-guidance-card">
         <BriefcaseBusiness aria-hidden="true"/>
@@ -825,7 +834,7 @@ export default function App() {
   </aside>;
 
   return (
-    <div className={`app-shell min-h-screen bg-slate-50 text-slate-800 flex flex-col ${hasPlan ? 'has-plan' : 'no-plan'} ${(hasPlan||studyPreferences)?'has-desktop-navigation':''} ${showContextRail?'has-context-rail':''} ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${activeHeaderSession&&activeTab!=='home'?'has-active-timer':''}`}>
+    <div className={`app-shell min-h-screen bg-slate-50 text-slate-800 flex flex-col ${hasPlan ? 'has-plan' : 'no-plan'} ${(hasPlan||studyPreferences||isAdmin)?'has-desktop-navigation':''} ${showContextRail?'has-context-rail':''} ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${activeHeaderSession&&activeTab!=='home'?'has-active-timer':''}`}>
       <a className="skip-link" href="#main-content">Pular para o conteúdo principal</a>
       {/* Upper Navigation & App Bar */}
       <header className="app-header bg-white border-b border-slate-200 sticky top-0 z-50">
@@ -880,7 +889,7 @@ export default function App() {
       <main id="main-content" className="app-main" tabIndex={-1}>
         
         {/* Navigation */}
-          {(hasPlan||studyPreferences) && <nav className="app-navigation desktop-app-navigation flex space-x-1 lg:space-x-2 bg-slate-100 p-1.5 rounded-xl self-start w-full md:w-auto" aria-label="Navegação principal">
+          {(hasPlan||studyPreferences||isAdmin) && <nav className="app-navigation desktop-app-navigation flex space-x-1 lg:space-x-2 bg-slate-100 p-1.5 rounded-xl self-start w-full md:w-auto" aria-label="Navegação principal">
             {hasPlan && <div className="sidebar-control">
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600">Painel</p>
@@ -927,6 +936,7 @@ export default function App() {
           {hasPlan && activeTab === 'schedule' && <ScheduleTab studyContext={studyContext} onOpenStudy={openStudyContext} onOpenQuestions={()=>{setQuestionDailyTask(null);setActiveTab('questions');}} />}
           {hasPlan && activeTab === 'questions' && <QuestionBankTab dailyTask={questionDailyTask} onDailyTaskFinished={()=>setQuestionDailyTask(null)} onSessionChange={handleSessionChange} />}
           {hasPlan && activeTab === 'performance' && <PerformanceTab />}
+          {isAdmin && activeTab === 'admin' && <AdminPanel />}
         </div>
         {contextRail}
       </main>
@@ -989,13 +999,13 @@ export default function App() {
       {mobileProfileOpen&&<div className="mobile-profile-layer" role="presentation" onMouseDown={event=>event.target===event.currentTarget&&setMobileProfileOpen(false)}>
         <aside className="mobile-profile-sheet" role="dialog" aria-modal="true" aria-labelledby="mobile-profile-title">
           <div className="mobile-profile-handle" aria-hidden="true"/>
-          <header><div><span>Conta e progresso</span><h2 id="mobile-profile-title">Seu perfil</h2></div><button type="button" onClick={()=>setMobileProfileOpen(false)} aria-label="Fechar perfil"><X/></button></header>
+          <header><div><span>Navegação e conta</span><h2 id="mobile-profile-title">Mais opções</h2></div><button type="button" onClick={()=>setMobileProfileOpen(false)} aria-label="Fechar menu"><X/></button></header>
           {profileContent()}
         </aside>
       </div>}
 
       <nav className={`mobile-bottom-nav ${hasPlan?'':'is-no-plan'}`} aria-label="Navegação principal mobile">
-        {(hasPlan?navigationItems.filter(item=>item.id!=='schedule'&&item.id!=='performance'):studyPreferences?navigationItems:navigationItems.filter(item=>item.id==='home')).map(item => {
+        {(hasPlan?navigationItems.filter(item=>!['schedule','performance','admin'].includes(item.id)):studyPreferences||isAdmin?navigationItems.filter(item=>item.id!=='admin'):navigationItems.filter(item=>item.id==='home')).map(item => {
           const Icon = item.icon;
           return <button
             key={item.id}
@@ -1008,8 +1018,8 @@ export default function App() {
             <span>{item.mobileLabel}</span>
           </button>;
         })}
-        <button type="button" onClick={()=>{setMobileProfileOpen(true);setNotificationMenuOpen(false);}} aria-current={mobileProfileOpen||activeTab==='schedule'||activeTab==='performance'?'page':undefined} aria-label="Abrir perfil">
-          <UserRound aria-hidden="true"/><span>Perfil</span>
+        <button type="button" onClick={()=>{setMobileProfileOpen(true);setNotificationMenuOpen(false);}} aria-current={mobileProfileOpen||activeTab==='schedule'||activeTab==='performance'||activeTab==='admin'?'page':undefined} aria-label="Abrir mais opções">
+          <Menu aria-hidden="true"/><span>Mais</span>
         </button>
       </nav>
 
