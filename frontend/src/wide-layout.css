@@ -53,6 +53,13 @@
     margin-inline: 0;
   }
 
+  .app-shell.has-context-rail #study-tab-container,
+  .app-shell.has-context-rail #study-tab-container > .study-reader-shell {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+
   .app-shell.has-context-rail .app-context-rail {
     position: sticky;
     top: 100px;

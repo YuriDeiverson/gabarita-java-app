@@ -6,12 +6,14 @@ import { Question } from '../types';
 
 const clock=(seconds:number)=>`${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;
 
-interface Props { dailyTask?: {id:string;minutes:number}|null; onDailyTaskFinished?:()=>void; onSessionChange?: (session?: Partial<StudySession> | null) => void; }
+interface Props { dailyTask?: {id:string;minutes:number}|null; initialQuestionId?:string; onDailyTaskFinished?:()=>void; onSessionChange?: (session?: Partial<StudySession> | null) => void; }
+type QuestionTimerMode='POMODORO_50'|'POMODORO_25'|'FREE';
 
-export default function QuestionBankTab({dailyTask,onDailyTaskFinished,onSessionChange}:Props){
+export default function QuestionBankTab({dailyTask,initialQuestionId,onDailyTaskFinished,onSessionChange}:Props){
   const [session,setSession]=useState<StudySession|null>(null);
   const [blockingSession,setBlockingSession]=useState<Partial<StudySession>|null>(null);
-  const focusMinutes=dailyTask?.minutes===30?30:50;
+  const [timerMode,setTimerMode]=useState<QuestionTimerMode>(dailyTask&&dailyTask.minutes<=35?'POMODORO_25':'POMODORO_50');
+  const focusMinutes=timerMode==='POMODORO_25'?25:50;
   const [loadedAt,setLoadedAt]=useState(Date.now());
   const [tick,setTick]=useState(0);
   const [busy,setBusy]=useState(false);
@@ -32,25 +34,35 @@ export default function QuestionBankTab({dailyTask,onDailyTaskFinished,onSession
   useEffect(()=>{const interval=window.setInterval(()=>setTick(value=>value+1),1000);return()=>clearInterval(interval);},[]);
   const elapsed=session?Number(session.elapsed_seconds||0)+(session.status==='RUNNING'?Math.max(0,Math.floor((Date.now()-loadedAt)/1000)):0):0;
   void tick;
-  const config=(()=>{try{return JSON.parse(session?.pomodoro_config||'{}') as {focusMinutes?:number};}catch{return {};}})();
+  const config=(()=>{try{return JSON.parse(session?.pomodoro_config||'{}') as {focusMinutes?:number;shortBreakMinutes?:number;targetCycles?:number};}catch{return {};}})();
   const cycle=Number(session?.pomodoro_cycle||0);
+  const targetCycles=Math.max(1,Number(config.targetCycles||1));
+  const freeMode=session?session.mode==='FREE':timerMode==='FREE';
+  const targetMet=!freeMode&&Boolean(session)&&cycle>=targetCycles;
   const cycleLength=Math.max(1,Number(config.focusMinutes||focusMinutes))*60;
   const cycleElapsed=session?Math.max(0,elapsed-cycle*cycleLength):0;
   const focusRemaining=session?Math.max(0,cycleLength-cycleElapsed):focusMinutes*60;
+  const pauseSeconds=session?.status==='PAUSED'&&session.paused_at?Math.max(0,Math.floor((Date.now()-new Date(session.paused_at).getTime())/1000)):0;
+  const breakSeconds=Math.max(1,Number(config.shortBreakMinutes||10))*60;
+  const breakRemaining=Math.max(0,breakSeconds-pauseSeconds);
+  const isPomodoroBreak=!targetMet&&session?.mode==='POMODORO'&&session.status==='PAUSED'&&session.pause_reason==='POMODORO_FOCUS_COMPLETE';
+  const timerDisplay=isPomodoroBreak?breakRemaining:freeMode?elapsed:targetMet?0:focusRemaining;
 
   useEffect(()=>{
     if(!session||session.status!=='RUNNING'||!config.focusMinutes)return;
     const key=`${session.id}:${cycle}`;
     if(elapsed<(cycle+1)*config.focusMinutes*60||autoPauseKey.current===key)return;
     autoPauseKey.current=key;setBusy(true);
-    dailyStudyApi.pause(session.id,'POMODORO_FOCUS_COMPLETE').then(updated=>{setSession(updated);setLoadedAt(Date.now());setSummary(`Ciclo ${cycle+1} concluído. Faça uma pausa antes de continuar.`);onSessionChange?.(updated);})
+    dailyStudyApi.pause(session.id,'POMODORO_FOCUS_COMPLETE').then(updated=>{setSession(updated);setLoadedAt(Date.now());setSummary(cycle+1>=targetCycles
+      ?`Carga planejada concluída em ${targetCycles} ciclo(s). Finalize a sessão.`
+      :`Ciclo ${cycle+1} de ${targetCycles} concluído. Faça uma pausa antes de continuar.`);onSessionChange?.(updated);})
       .catch(requestError=>setError(requestError instanceof Error?requestError.message:'Não foi possível pausar.')).finally(()=>setBusy(false));
-  },[session?.id,session?.status,cycle,elapsed,config.focusMinutes]);
+  },[session?.id,session?.status,cycle,elapsed,config.focusMinutes,targetCycles]);
 
   const start=async()=>{
     if(!planId||String(planId).startsWith('local-')){setError('Salve e ative o plano no servidor para usar o Pomodoro persistente.');return;}
     setBusy(true);setError('');setSummary('');
-    try{const started=await dailyStudyApi.startQuestionPractice(planId,focusMinutes,dailyTask?.id);setSession(started);setLoadedAt(Date.now());onSessionChange?.(started);}
+    try{const started=await dailyStudyApi.startQuestionPractice(planId,{mode:timerMode==='FREE'?'FREE':'POMODORO',focusMinutes,dailyTaskId:dailyTask?.id});setSession(started);setLoadedAt(Date.now());onSessionChange?.(started);}
     catch(requestError){setError(requestError instanceof Error?requestError.message:'Não foi possível iniciar o Pomodoro.');}
     finally{setBusy(false);}
   };
@@ -69,17 +81,17 @@ export default function QuestionBankTab({dailyTask,onDailyTaskFinished,onSession
     <section className="question-pomodoro-card question-pomodoro-compact" aria-label="Pomodoro de questões">
       {error&&<div className="question-timer-message is-error">{error}<button onClick={()=>setError('')} aria-label="Fechar aviso"><X/></button></div>}
       {summary&&<div className="question-timer-message"><CheckCircle2/>{summary}</div>}
-      {blockingSession&&<div className="question-timer-message is-warning">Existe uma sessão de estudo em andamento: <strong>{blockingSession.topic_title||'atividade atual'}</strong>. Finalize-a antes de iniciar o Pomodoro de questões.</div>}
+      {blockingSession&&<div className="question-timer-message is-warning">Existe uma sessão de estudo em andamento: <strong>{blockingSession.topic_title||'atividade atual'}</strong>. Finalize-a antes de iniciar uma nova sessão de questões.</div>}
       <div className="question-pomodoro-body">
-        <div className={`question-pomodoro-time ${session?.status==='PAUSED'?'is-paused':''}`}><Clock3/><strong>{clock(focusRemaining)}</strong><span>{session?.status==='PAUSED'?'Pausado':session?`Foco de ${Number(config.focusMinutes||focusMinutes)} min`:`Pronto para ${focusMinutes} min`}</span></div>
+        <div className={`question-pomodoro-time ${session?.status==='PAUSED'?'is-paused':''}`}><Clock3/><strong>{clock(timerDisplay)}</strong><span>{targetMet?'Carga planejada concluída':isPomodoroBreak?`Descanso de 10 min · próximo ciclo ${cycle+1} de ${targetCycles}`:freeMode?session?session.status==='PAUSED'?'Tempo livre pausado':'Tempo estudado · sem limite':'Tempo livre · sem limite':session?.status==='PAUSED'?`Pausado · ciclo ${cycle+1} de ${targetCycles}`:session?`Ciclo ${cycle+1} de ${targetCycles} · foco de ${Number(config.focusMinutes||focusMinutes)} min`:`Pronto para ${focusMinutes} min de foco`}</span></div>
         <div className="question-pomodoro-actions">
-          {!session&&<><span className="question-pomodoro-preset">50 min de foco + 10 min de descanso</span><button disabled={busy||Boolean(blockingSession)} onClick={start}><Play/> Iniciar Pomodoro</button></>}
+          {!session&&<><select aria-label="Modo do timer de questões" value={timerMode} onChange={event=>setTimerMode(event.target.value as QuestionTimerMode)}><option value="POMODORO_50">50 min + 10 min</option><option value="POMODORO_25">25 min + 10 min</option><option value="FREE">Tempo livre</option></select><span className="question-pomodoro-preset">{timerMode==='FREE'?'Sem limite de tempo':`${focusMinutes} min de foco + 10 min de descanso`}</span><button disabled={busy||Boolean(blockingSession)} onClick={start}><Play/> {timerMode==='FREE'?'Iniciar sessão':'Iniciar Pomodoro'}</button></>}
           {session?.status==='RUNNING'&&<button disabled={busy} onClick={pause}><Pause/> Pausar</button>}
-          {session?.status==='PAUSED'&&<button disabled={busy} onClick={resume}><Play/> Continuar</button>}
+          {session?.status==='PAUSED'&&!targetMet&&<button disabled={busy} onClick={resume}><Play/> Continuar</button>}
           {session&&<button className="finish-question-pomodoro" disabled={busy} onClick={finish}><Square/> Finalizar</button>}
         </div>
       </div>
     </section>
-    <QuizTab mode="all" onQuestionAnswered={recordAnswer}/>
+    <QuizTab mode="all" initialQuestionId={initialQuestionId} onQuestionAnswered={recordAnswer}/>
   </div>;
 }

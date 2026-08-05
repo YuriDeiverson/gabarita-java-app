@@ -16,6 +16,19 @@ public class CatalogController {
     @GetMapping("/contests")
     public List<Map<String,Object>> contests(){return catalog(false);}
 
+    @GetMapping("/study-library")
+    public List<Map<String,Object>> studyLibrary(){
+        var rows=jdbc.sql("""
+          SELECT id::text id,canonical_key,title,discipline,base_content,key_takeaways::text key_takeaways_json,
+            content_blocks::text content_blocks_json,updated_at FROM shared_study_subjects ORDER BY discipline,title
+          """).query().listOfRows();var result=new ArrayList<Map<String,Object>>();
+        for(var row:rows){var item=new LinkedHashMap<String,Object>();item.put("id",row.get("id"));item.put("canonicalKey",row.get("canonical_key"));
+            item.put("title",row.get("title"));item.put("discipline",row.get("discipline"));item.put("content",row.get("base_content"));
+            try{item.put("keyTakeaways",json.readTree(String.valueOf(row.get("key_takeaways_json"))));}catch(Exception ignored){item.put("keyTakeaways",List.of());}
+            try{item.put("contentBlocks",json.readTree(String.valueOf(row.get("content_blocks_json"))));}catch(Exception ignored){item.put("contentBlocks",List.of());}
+            item.put("updatedAt",row.get("updated_at"));result.add(item);}return result;
+    }
+
     List<Map<String,Object>> catalog(boolean includeInactive){
         var contests=jdbc.sql("""
           SELECT id,code,label,acronym,organization,description,board,exam_date,status,state,area,education,

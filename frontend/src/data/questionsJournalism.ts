@@ -1463,9 +1463,65 @@ const balancingContexts = [
   'Sob a perspectiva das práticas contemporâneas de comunicação social, analise o item seguinte:'
 ];
 
-const createBalancingErradoQuestion = (id: number, index: number): Question => {
-  const template =
+const scientificDisclosureBalancingTemplates = [
+  {
+    text: 'a divulgação científica institucional deve suprimir incertezas, limitações metodológicas e conflitos de interesse, pois tais elementos enfraquecem a adesão pública à ciência.',
+    explanation: 'Errado. Comunicação científica responsável contextualiza achados, limites, riscos e incertezas sem transformar divulgação em propaganda enganosa.'
+  },
+  {
+    text: 'resultados preliminares de uma pesquisa podem ser apresentados ao público como conclusões definitivas, desde que tenham potencial para gerar ampla repercussão jornalística.',
+    explanation: 'Errado. Resultados preliminares exigem identificação clara de seu estágio, cautela na linguagem e contextualização das limitações antes da divulgação.'
+  },
+  {
+    text: 'o jornalista científico deve adotar integralmente a interpretação fornecida pela instituição pesquisadora, dispensando a consulta a especialistas independentes.',
+    explanation: 'Errado. A apuração independente, o contraditório técnico e a consulta a fontes sem conflito de interesse fortalecem a qualidade da cobertura científica.'
+  },
+  {
+    text: 'percentuais de risco relativo podem ser divulgados isoladamente, sem valores absolutos ou contexto amostral, porque essa simplificação sempre facilita a compreensão pública.',
+    explanation: 'Errado. Risco relativo sem valores absolutos, tamanho da amostra e contexto pode produzir percepção distorcida da relevância dos achados.'
+  },
+  {
+    text: 'a publicação de um artigo em periódico científico elimina a necessidade de o jornalista verificar desenho metodológico, tamanho da amostra e eventuais conflitos de interesse.',
+    explanation: 'Errado. A publicação acadêmica não substitui a análise crítica da metodologia, das limitações e dos interesses envolvidos na pesquisa.'
+  },
+  {
+    text: 'em matérias sobre saúde, relações estatísticas observadas entre duas variáveis podem ser apresentadas como prova de causalidade, ainda que o estudo tenha caráter apenas observacional.',
+    explanation: 'Errado. Correlação não demonstra causalidade, especialmente em estudos observacionais sujeitos a fatores de confusão.'
+  },
+  {
+    text: 'a ausência de significância estatística comprova necessariamente que o fenômeno investigado não existe e torna desnecessária qualquer explicação sobre poder estatístico ou intervalo de confiança.',
+    explanation: 'Errado. Ausência de significância pode decorrer de diferentes fatores e deve ser interpretada com tamanho amostral, poder estatístico e intervalos de confiança.'
+  },
+  {
+    text: 'embargos de divulgação autorizam jornalistas a publicar resultados antes do horário acordado sempre que outro veículo mencionar informalmente a pesquisa nas redes sociais.',
+    explanation: 'Errado. O embargo integra um acordo profissional e seu eventual rompimento deve ser confirmado formalmente, não presumido a partir de menções informais.'
+  },
+  {
+    text: 'na cobertura de inovação, todo pedido de patente deve ser tratado como comprovação de eficácia comercial e de impacto social da tecnologia descrita.',
+    explanation: 'Errado. O depósito de patente protege uma invenção, mas não comprova viabilidade comercial, eficácia prática nem impacto social.'
+  },
+  {
+    text: 'a linguagem acessível na divulgação científica exige retirar números, condições e ressalvas do estudo, ainda que esses elementos sejam indispensáveis para interpretar corretamente o resultado.',
+    explanation: 'Errado. Tornar o conteúdo acessível significa explicar dados e ressalvas com clareza, não eliminar informações necessárias à compreensão responsável.'
+  }
+];
+
+const createBalancingErradoQuestion = (
+  id: number,
+  index: number,
+  templateUsage: Map<string, number>
+): Question => {
+  const selectedTemplate =
     balancingErradoTemplates[stableHash(`balancing-template-${index}`) % balancingErradoTemplates.length];
+  const usageKey = `${selectedTemplate.category}:${selectedTemplate.reference}`;
+  const usageIndex = templateUsage.get(usageKey) || 0;
+  templateUsage.set(usageKey, usageIndex + 1);
+  const scientificVariant = selectedTemplate.category === 'Divulgação Científica'
+    ? scientificDisclosureBalancingTemplates[usageIndex % scientificDisclosureBalancingTemplates.length]
+    : null;
+  const template = scientificVariant
+    ? { ...selectedTemplate, ...scientificVariant }
+    : selectedTemplate;
   const context =
     balancingContexts[stableHash(`balancing-context-${index}`) % balancingContexts.length];
 
@@ -1488,9 +1544,10 @@ const balanceJournalismSpecificAnswers = (questions: Question[]): Question[] => 
   let counts = countSpecific();
   let balanceIndex = 0;
   let nextId = Math.max(...balanced.map(q => Number(q.id)), 0) + 1;
+  const templateUsage = new Map<string, number>();
 
   while (counts.errado < counts.certo - 1) {
-    balanced.push(createBalancingErradoQuestion(nextId, balanceIndex));
+    balanced.push(createBalancingErradoQuestion(nextId, balanceIndex, templateUsage));
     nextId++;
     balanceIndex++;
     counts = countSpecific();

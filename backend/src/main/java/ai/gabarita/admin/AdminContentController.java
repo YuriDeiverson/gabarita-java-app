@@ -22,6 +22,7 @@ public class AdminContentController {
     public record QuestionRequest(@NotBlank String courseId,@NotBlank String category,String topic,@NotBlank String board,
       @NotBlank String type,@NotBlank String text,@NotBlank String correct,String explanation,String reference,
       UUID passageId,List<@Valid OptionRequest> options,String status){}
+    public record QuestionBatchRequest(@NotEmpty @Size(max=500) List<@Valid QuestionRequest> questions){}
     public record ReportReviewRequest(@Pattern(regexp="RESOLVED|DISMISSED") String status,String adminNote){}
 
     @GetMapping("/passages") public List<Map<String,Object>> passages(){currentUser.requireAdmin();
@@ -41,10 +42,11 @@ public class AdminContentController {
         jdbc.sql("UPDATE questions SET passage_id=NULL WHERE passage_id=:id").param("id",id).update();
         jdbc.sql("DELETE FROM passages WHERE id=:id").param("id",id).update();}
 
-    @GetMapping("/questions") public List<Map<String,Object>> questions(@RequestParam(required=false) String query,
-      @RequestParam(required=false) String courseId,@RequestParam(defaultValue="50") @Min(1) @Max(100) int limit){currentUser.requireAdmin();
-        String search=text(query);String course=text(courseId);
-        if(search.isBlank()&&course.isBlank())return List.of();
+    @GetMapping("/questions") public Map<String,Object> questions(@RequestParam(required=false) String query,
+      @RequestParam(required=false) String courseId,@RequestParam(required=false) String area,
+      @RequestParam(defaultValue="1") @Min(1) int page,
+      @RequestParam(defaultValue="10") @Min(1) @Max(50) int pageSize){currentUser.requireAdmin();
+        String search=text(query);String course=text(courseId);String normalizedArea=text(area);int offset=(page-1)*pageSize;
         String sql="""
           SELECT q.id,q.board,q.type,q.statement,q.explanation,q.status,q.correct_answer #>> '{}' correct,
             q.passage_id,q.metadata::text metadata_json,p.title passage_title,
@@ -53,14 +55,33 @@ public class AdminContentController {
             (SELECT COUNT(*) FROM question_reports qr WHERE qr.question_id=q.id AND qr.status='PENDING') pending_reports
           FROM questions q LEFT JOIN passages p ON p.id=q.passage_id
           WHERE (:course='' OR q.metadata->>'courseId'=:course)
+            AND (:area='' OR q.metadata->>'category'=:area)
             AND (:search='' OR q.statement ILIKE :pattern OR q.id::text ILIKE :pattern OR q.board ILIKE :pattern
               OR q.metadata->>'category' ILIKE :pattern OR q.metadata->>'topic' ILIKE :pattern
               OR q.metadata->>'reference' ILIKE :pattern)
-          ORDER BY pending_reports DESC,q.updated_at DESC,q.created_at DESC LIMIT :limit
+          ORDER BY pending_reports DESC,q.updated_at DESC,q.created_at DESC LIMIT :pageSize OFFSET :offset
           """;
-        var rows=jdbc.sql(sql).param("course",course).param("search",search).param("pattern","%"+search+"%").param("limit",limit)
+        var rows=jdbc.sql(sql).param("course",course).param("area",normalizedArea).param("search",search).param("pattern","%"+search+"%")
+          .param("pageSize",pageSize).param("offset",offset)
           .query().listOfRows();var result=new ArrayList<Map<String,Object>>();
-        for(var row:rows)result.add(question(row));return result;}
+        for(var row:rows)result.add(question(row));
+        int total=jdbc.sql("""
+          SELECT COUNT(*) FROM questions q
+          WHERE (:course='' OR q.metadata->>'courseId'=:course)
+            AND (:area='' OR q.metadata->>'category'=:area)
+            AND (:search='' OR q.statement ILIKE :pattern OR q.id::text ILIKE :pattern OR q.board ILIKE :pattern
+              OR q.metadata->>'category' ILIKE :pattern OR q.metadata->>'topic' ILIKE :pattern
+              OR q.metadata->>'reference' ILIKE :pattern)
+          """).param("course",course).param("area",normalizedArea).param("search",search).param("pattern","%"+search+"%")
+          .query(Integer.class).single();
+        var areaRows=jdbc.sql("""
+          SELECT DISTINCT BTRIM(metadata->>'category') area FROM questions
+          WHERE (:course='' OR metadata->>'courseId'=:course)
+            AND COALESCE(BTRIM(metadata->>'category'),'')<>'' ORDER BY area
+          """).param("course",course).query().listOfRows();
+        var areas=areaRows.stream().map(row->String.valueOf(row.get("area"))).toList();
+        int totalPages=total==0?0:(int)Math.ceil(total/(double)pageSize);
+        return Map.of("items",result,"page",page,"pageSize",pageSize,"total",total,"totalPages",totalPages,"areas",areas);}
 
     @GetMapping("/question-reports") public List<Map<String,Object>> reports(@RequestParam(defaultValue="PENDING") String status){currentUser.requireAdmin();
         String normalized=status.trim().toUpperCase(Locale.ROOT);
@@ -92,6 +113,18 @@ public class AdminContentController {
     @PostMapping("/questions") @ResponseStatus(HttpStatus.CREATED) @Transactional
     public Map<String,Object> createQuestion(@Valid @RequestBody QuestionRequest r){currentUser.requireAdmin();UUID id=UUID.randomUUID();
         saveQuestion(id,r,false);return questionById(id);}
+
+    @PostMapping("/questions/batch") @ResponseStatus(HttpStatus.CREATED) @Transactional
+    public Map<String,Object> createQuestions(@Valid @RequestBody QuestionBatchRequest request){currentUser.requireAdmin();
+        var ids=new ArrayList<String>();int index=0;
+        for(var question:request.questions()){
+            UUID id=UUID.randomUUID();
+            try{saveQuestion(id,question,false);}
+            catch(RuntimeException error){throw new IllegalArgumentException("Questão "+(index+1)+": "+fallback(error.getMessage(),"dados inválidos"),error);}
+            ids.add(id.toString());index++;
+        }
+        return Map.of("imported",ids.size(),"ids",ids);
+    }
 
     @PutMapping("/questions/{id}") @Transactional
     public Map<String,Object> updateQuestion(@PathVariable UUID id,@Valid @RequestBody QuestionRequest r){currentUser.requireAdmin();

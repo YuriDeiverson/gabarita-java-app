@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { quizQuestions } from '../data/quizData';
 import { QuestionAnswer, QuestionCategory, Question } from '../types';
 import { passages } from '../data/passagesData';
-import { questionsApi, quizProgressApi } from '../services/api';
-import { CheckCircle2, XCircle, Filter, Sparkles, AlertCircle, Info, Bookmark, Flag, Target, ChevronDown } from 'lucide-react';
+import { QuestionNote, questionsApi, quizProgressApi } from '../services/api';
+import { CheckCircle2, XCircle, Filter, Sparkles, AlertCircle, Info, Bookmark, Flag, Target, ChevronDown, LoaderCircle, NotebookPen, Save, Trash2 } from 'lucide-react';
 import { ActiveStudyContext, findContextCard, normalizeStudyText, questionRelevance } from '../studyContext';
 import { studySections } from '../data/studyData';
 import { filterQuestionsByBoards, questionBoardsFromConfig, questionExamBoard } from '../questionBanks';
@@ -13,6 +14,7 @@ interface QuizTabProps {
   studyContext?: ActiveStudyContext | null;
   onQuestionAnswered?: (question:Question,correct:boolean)=>void|Promise<void>;
   onReviewComplete?: (result:GuidedReviewResult)=>void;
+  initialQuestionId?: string;
 }
 
 export interface GuidedReviewResult { topicTitle:string; subjectName:string; answered:number; correct:number; wrong:number; accuracy:number; }
@@ -145,7 +147,7 @@ const writeGuidedReviewDraft=(key:string|null,draft:Omit<GuidedReviewDraft,'upda
   catch(error){console.warn('Não foi possível salvar o progresso local da revisão.',error);}
 };
 
-export default function QuizTab({mode='session',studyContext,onQuestionAnswered,onReviewComplete}:QuizTabProps) {
+export default function QuizTab({mode='session',studyContext,onQuestionAnswered,onReviewComplete,initialQuestionId}:QuizTabProps) {
   const reviewDraftKey=useMemo(()=>mode==='session'&&studyContext?guidedReviewDraftKey(studyContext):null,
     [mode,studyContext?.roadmapTopicId,studyContext?.topicTitle]);
   const initialReviewDraft=useMemo(()=>readGuidedReviewDraft(reviewDraftKey),[reviewDraftKey]);
@@ -178,6 +180,10 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
   const [favoriteQuestions, setFavoriteQuestions] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('quiz_favorite_questions') || '[]')); } catch { return new Set(); }
   });
+  const [questionNotes,setQuestionNotes]=useState<QuestionNote[]>([]);
+  const [noteDraft,setNoteDraft]=useState<{question:Question;note:string}|null>(null);
+  const [noteBusy,setNoteBusy]=useState(false);
+  const [noteError,setNoteError]=useState('');
   const [cycleAnswers,setCycleAnswers]=useState<{[key:string]:QuestionAnswer}>(()=>initialReviewDraft?.answers||{});
   const [draftQuestionIds,setDraftQuestionIds]=useState<string[]>(()=>initialReviewDraft?.questionIds||[]);
   const [usedBeforeCycle,setUsedBeforeCycle]=useState<Set<string>>(()=>{
@@ -194,6 +200,28 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
   const [reportBusy,setReportBusy]=useState(false);
   const [reportError,setReportError]=useState('');
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const openedQuestionRef=useRef('');
+
+  const currentCourseId=localStorage.getItem('active_course')||'';
+
+  useEffect(()=>{
+    questionsApi.notes().then(items=>{
+      setQuestionNotes(items);
+      setFavoriteQuestions(current=>{
+        const next=new Set(current);
+        items.filter(item=>item.course_id===currentCourseId).forEach(item=>next.add(String(item.question_id)));
+        localStorage.setItem('quiz_favorite_questions',JSON.stringify([...next]));
+        return next;
+      });
+    }).catch(error=>console.warn('Anotações de questões indisponíveis.',error));
+  },[currentCourseId]);
+
+  useEffect(()=>{
+    if(!noteDraft)return;
+    const previousOverflow=document.body.style.overflow;
+    document.body.style.overflow='hidden';
+    return()=>{document.body.style.overflow=previousOverflow;};
+  },[noteDraft]);
 
   useEffect(() => {
     const courseId = localStorage.getItem('active_course');
@@ -262,14 +290,44 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     if(mode==='all')setVisibleQuestions(10);
   }, [categoryFilter, statusFilter, mode]);
 
-  const toggleFavorite = (questionId: number | string) => {
-    const id = String(questionId);
-    setFavoriteQuestions(current => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      localStorage.setItem('quiz_favorite_questions', JSON.stringify([...next]));
-      return next;
-    });
+  const noteForQuestion=(questionId:number|string)=>questionNotes.find(item=>
+    item.course_id===currentCourseId&&String(item.question_id)===String(questionId));
+
+  const openNoteEditor=(question:Question)=>{
+    const existing=noteForQuestion(question.id);
+    setNoteError('');
+    setNoteDraft({question,note:existing?.note||''});
+  };
+
+  const saveQuestionNote=async()=>{
+    if(!noteDraft||noteBusy)return;
+    if(!noteDraft.note.trim()){setNoteError('Escreva o que você identificou ou precisa estudar.');return;}
+    setNoteBusy(true);setNoteError('');
+    try{
+      const saved=await questionsApi.saveNote({questionId:String(noteDraft.question.id),courseId:currentCourseId,
+        text:noteDraft.question.text,category:String(noteDraft.question.category||''),topic:noteDraft.question.topic,
+        reference:noteDraft.question.reference,note:noteDraft.note.trim()});
+      setQuestionNotes(current=>[saved,...current.filter(item=>item.id!==saved.id&&!(item.course_id===saved.course_id&&String(item.question_id)===String(saved.question_id)))]);
+      setFavoriteQuestions(current=>{const next=new Set(current);next.add(String(noteDraft.question.id));
+        localStorage.setItem('quiz_favorite_questions',JSON.stringify([...next]));return next;});
+      setNoteDraft(null);
+    }catch(cause){setNoteError(cause instanceof Error?cause.message:'Não foi possível salvar a anotação.');}
+    finally{setNoteBusy(false);}
+  };
+
+  const removeQuestionNote=async()=>{
+    if(!noteDraft||noteBusy)return;
+    const existing=noteForQuestion(noteDraft.question.id);
+    if(!existing){setNoteDraft(null);return;}
+    setNoteBusy(true);setNoteError('');
+    try{
+      await questionsApi.deleteNote(String(noteDraft.question.id),currentCourseId);
+      setQuestionNotes(current=>current.filter(item=>item.id!==existing.id));
+      setFavoriteQuestions(current=>{const next=new Set(current);next.delete(String(noteDraft.question.id));
+        localStorage.setItem('quiz_favorite_questions',JSON.stringify([...next]));return next;});
+      setNoteDraft(null);
+    }catch(cause){setNoteError(cause instanceof Error?cause.message:'Não foi possível remover a anotação.');}
+    finally{setNoteBusy(false);}
   };
 
   const submitReport = async () => {
@@ -441,6 +499,16 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     });
   }, [categoryFilter, statusFilter, activeAnswers, scopedQuestions]);
 
+  useEffect(()=>{
+    if(mode!=='all'||!initialQuestionId||openedQuestionRef.current===initialQuestionId)return;
+    const targetIndex=scopedQuestions.findIndex(question=>String(question.id)===String(initialQuestionId));
+    if(targetIndex<0)return;
+    openedQuestionRef.current=initialQuestionId;
+    setCategoryFilter('Todos');setStatusFilter('Todos');
+    setVisibleQuestions(current=>Math.max(current,targetIndex+1));
+    window.setTimeout(()=>document.getElementById(`q-card-${initialQuestionId}`)?.scrollIntoView({behavior:'smooth',block:'center'}),120);
+  },[initialQuestionId,mode,scopedQuestions]);
+
   const completeReview=()=>{
     if(mode!=='session'||stats.answeredCount<reviewGoal||!studyContext)return;
     if(reviewDraftKey)localStorage.removeItem(reviewDraftKey);
@@ -553,6 +621,7 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
             const isAnswered = !!userAnswer;
             const isAnnulled = q.correct === 'Anulada';
             const isCorrect = !isAnnulled && userAnswer === q.correct;
+            const savedNote = noteForQuestion(q.id);
 
             return (
               <div
@@ -584,11 +653,11 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
                     {q.reference && <span className="question-reference text-[10px] text-slate-400 font-mono">{q.reference}</span>}
                     <button
                       type="button"
-                      onClick={() => toggleFavorite(q.id)}
+                      onClick={() => openNoteEditor(q)}
                       className={favoriteQuestions.has(String(q.id)) ? 'is-active' : ''}
                       aria-pressed={favoriteQuestions.has(String(q.id))}
-                      aria-label={favoriteQuestions.has(String(q.id)) ? 'Remover questão dos favoritos' : 'Favoritar questão'}
-                      title={favoriteQuestions.has(String(q.id)) ? 'Remover dos favoritos' : 'Favoritar questão'}
+                      aria-label={savedNote ? 'Editar anotação da questão' : 'Salvar questão e criar anotação'}
+                      title={savedNote ? 'Editar sua anotação' : 'Salvar questão e anotar'}
                     ><Bookmark aria-hidden="true" /></button>
                     <button
                       type="button"
@@ -617,6 +686,7 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
                 {/* Question Text */}
                 <div className="p-5 space-y-4">
                   <p className="text-slate-800 text-sm leading-relaxed font-medium">{q.text}</p>
+                  {savedNote&&<aside className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 text-xs leading-5 text-slate-700"><span className="mb-1 flex items-center gap-1.5 font-extrabold text-indigo-700"><NotebookPen className="h-3.5 w-3.5"/>Sua anotação</span><p className="whitespace-pre-wrap">{savedNote.note}</p></aside>}
 
                   {/* Actions (Buttons for answering) */}
                   <div className="space-y-3">
@@ -731,6 +801,16 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
       </div>
 
       {mode==='session'&&stats.answeredCount>=reviewGoal&&<div className="sticky bottom-20 md:bottom-4 z-20 flex justify-center"><button type="button" onClick={completeReview} className="min-h-12 px-7 rounded-full bg-emerald-600 text-white text-sm font-extrabold shadow-lg shadow-emerald-900/20">Concluir revisão e ver resultado</button></div>}
+
+      {noteDraft&&createPortal(<div className="question-note-modal-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget&&!noteBusy)setNoteDraft(null);}}>
+        <section className="question-note-modal w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="question-note-title">
+          <div className="flex items-start justify-between gap-4"><div><span className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-indigo-600"><Bookmark className="h-4 w-4"/>Questão salva</span><h3 id="question-note-title" className="mt-1 text-xl font-black text-slate-950">O que você quer lembrar?</h3></div><button type="button" disabled={noteBusy} onClick={()=>setNoteDraft(null)} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100" aria-label="Fechar"><XCircle className="h-5 w-5"/></button></div>
+          <p className="mt-4 line-clamp-4 rounded-2xl bg-slate-50 p-4 text-xs leading-5 text-slate-600">{noteDraft.question.text}</p>
+          <label className="mt-4 block"><span className="mb-1.5 block text-xs font-extrabold text-slate-700">Sua anotação</span><textarea autoFocus required rows={6} maxLength={4000} className="w-full resize-y rounded-2xl border border-slate-200 px-4 py-3 text-sm leading-6 text-slate-800 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100" value={noteDraft.note} onChange={event=>setNoteDraft(current=>current?{...current,note:event.target.value}:current)} placeholder="Ex.: errei porque confundi correlação com causalidade. Revisar metodologia científica e tipos de estudo."/><span className="mt-1 block text-right text-[10px] font-bold text-slate-400">{noteDraft.note.length}/4000</span></label>
+          {noteError&&<p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700" role="alert">{noteError}</p>}
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-between"><div>{noteForQuestion(noteDraft.question.id)&&<button type="button" disabled={noteBusy} onClick={()=>void removeQuestionNote()} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-rose-200 px-4 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-60"><Trash2 className="h-4 w-4"/>Remover dos salvos</button>}</div><div className="flex flex-col-reverse gap-2 sm:flex-row"><button type="button" disabled={noteBusy} onClick={()=>setNoteDraft(null)} className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700">Cancelar</button><button type="button" disabled={noteBusy||!noteDraft.note.trim()} onClick={()=>void saveQuestionNote()} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 text-sm font-extrabold text-white disabled:opacity-60">{noteBusy?<LoaderCircle className="h-4 w-4 animate-spin"/>:<Save className="h-4 w-4"/>}{noteBusy?'Salvando…':'Salvar anotação'}</button></div></div>
+        </section>
+      </div>,document.body)}
 
       {reportDraft&&<div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget&&!reportBusy)setReportDraft(null);}}>
         <section className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="question-report-title">

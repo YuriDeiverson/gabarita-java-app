@@ -60,7 +60,7 @@ public class StudySessionService {
             VALUES(gen_random_uuid(),:u,:p,:t,:date,
               (SELECT COALESCE(MAX(position),-1)+1 FROM daily_tasks WHERE user_id=:u AND plan_id=:p AND task_date=:date),
               'REVIEW',:minutes,:questions,:accuracy,:priority,'AVAILABLE')
-            ON CONFLICT(user_id,plan_id,task_date,roadmap_topic_id,activity_type) DO UPDATE SET
+            ON CONFLICT(user_id,plan_id,task_date,roadmap_topic_id,activity_type,cycle_index) DO UPDATE SET
               completed_minutes=0,questions_answered=0,correct_answers=0,achieved_accuracy=NULL,
               completed_at=NULL,status='AVAILABLE',updated_at=now()
             RETURNING id
@@ -71,8 +71,9 @@ public class StudySessionService {
     }
 
     @Transactional
-    public Map<String,Object> startQuestionPractice(UUID userId, UUID planId, int focusMinutes, String device,UUID dailyTaskId) {
+    public Map<String,Object> startQuestionPractice(UUID userId, UUID planId, String requestedMode, int focusMinutes, String device,UUID dailyTaskId) {
         if(focusMinutes<5||focusMinutes>120) throw new IllegalArgumentException("O foco deve ter entre 5 e 120 minutos");
+        boolean freeMode="FREE".equalsIgnoreCase(requestedMode);String mode=freeMode?"FREE":"POMODORO";
         int owned=jdbc.sql("SELECT COUNT(*) FROM study_plans WHERE id=:p AND user_id=:u AND status='ACTIVE'")
                 .param("p",planId).param("u",userId).query(Integer.class).single();
         if(owned==0) throw new NoSuchElementException("Plano não encontrado");
@@ -94,14 +95,18 @@ public class StudySessionService {
             throw new IllegalStateException("Finalize ou pause a sessão de estudo atual antes de iniciar questões.");
         }
         UUID id=UUID.randomUUID();
-        String config="{\"focusMinutes\":"+focusMinutes+",\"shortBreakMinutes\":10,\"longBreakMinutes\":10,\"cycles\":4}";
+        int plannedMinutes=task==null?focusMinutes:number(task,"planned_minutes");
+        int targetCycles=freeMode?1:task==null?1:Math.max(1,(int)Math.ceil(plannedMinutes/(focusMinutes+10d)));
+        String config=freeMode?null:"{\"focusMinutes\":"+focusMinutes+",\"shortBreakMinutes\":10,\"longBreakMinutes\":10,\"cycles\":4,\"targetCycles\":"+targetCycles+"}";
         jdbc.sql("""
             INSERT INTO study_sessions(id,user_id,plan_id,daily_task_id,roadmap_topic_id,started_at,active_since,status,mode,pomodoro,device,session_kind,context_title)
-            VALUES(:id,:u,:p,:task,:topic,now(),now(),'RUNNING','POMODORO',CAST(:config AS jsonb),:device,'QUESTIONS',:title)
+            VALUES(:id,:u,:p,:task,:topic,now(),now(),'RUNNING',:mode,CAST(:config AS jsonb),:device,'QUESTIONS',:title)
             """).param("id",id).param("u",userId).param("p",planId)
                 .param("task",dailyTaskId).param("topic",task==null?null:task.get("roadmap_topic_id"))
-                .param("config",config).param("device",device)
-                .param("title",task==null?"Banco completo de questões":Boolean.TRUE.equals(task.get("is_optional"))?"Questões extras do dia":"Revisão semanal com questões").update();
+                .param("mode",mode).param("config",config).param("device",device)
+                .param("title",task==null?"Banco completo de questões"
+                        :!Boolean.TRUE.equals(task.get("outside_planned_hours"))?"Questões de fechamento"
+                        :Boolean.TRUE.equals(task.get("is_optional"))?"Questões extras do dia":"Revisão semanal com questões").update();
         if(dailyTaskId!=null)jdbc.sql("UPDATE daily_tasks SET status='IN_PROGRESS',updated_at=now() WHERE id=:id AND status IN('PENDING','AVAILABLE')")
                 .param("id",dailyTaskId).update();
         return one(userId,id);
@@ -111,7 +116,7 @@ public class StudySessionService {
     public Map<String,Object> recordQuestion(UUID userId,UUID sessionId,String questionId,boolean correct){
         var session=one(userId,sessionId);
         if(!"QUESTIONS".equals(session.get("session_kind"))||!"RUNNING".equals(session.get("status")))
-            throw new IllegalStateException("Continue o Pomodoro antes de contabilizar esta questão.");
+            throw new IllegalStateException("Continue a sessão antes de contabilizar esta questão.");
         jdbc.sql("SELECT id FROM study_sessions WHERE id=:s FOR UPDATE").param("s",sessionId).query(UUID.class).single();
         jdbc.sql("""
             INSERT INTO question_session_answers(session_id,question_id,correct) VALUES(:s,:q,:correct)

@@ -211,59 +211,94 @@ public class ScheduleEngine {
         else if(daysToExam<=15&&finalDates.size()>4) finalDates=finalDates.subList(finalDates.size()-4,finalDates.size());
         finalDays=finalDates.size();
         LocalDate firstFinal=finalDates.getFirst();
-        var blocks=new ArrayList<Map<String,Object>>();int counter=0,topicPointer=0;
+        var blocks=new ArrayList<Map<String,Object>>();int[] counter={0};int[] topicPointer={0};
         for(int index=0;index<dates.size();index++){
             LocalDate date=dates.get(index);int minutes=availableMinutes(hours.get(date.getDayOfWeek()));
-            TopicChoice topic=priorityPool.get(topicPointer++%priorityPool.size());
             if(index<mappingDays){
-                blocks.add(block("deadline-"+(counter++),date,topic,"READING",minutes,
-                        "Mapeamento do edital × incidência da banca",
-                        "Cruze o edital com o histórico da banca e ordene as disciplinas por peso e incidência, não pela quantidade de tópicos.",
-                        List.of("Peso de cada disciplina","Assuntos mais cobrados pela banca","Ranking de prioridade por incidência"),false,false));
+                blocks.addAll(deadlineDayBlocks(date,minutes,ranked,priorityPool,topicPointer,counter,"READING",
+                        "Mapeamento prioritário do edital",
+                        "Pomodoro de reta final: cruze o assunto com a incidência da banca e registre somente os pontos decisivos."));
             }else if(!date.isBefore(firstFinal)){
                 int finalIndex=finalDates.indexOf(date);
-                blocks.addAll(finalBlocks(date,topic,minutes,finalIndex,finalDays,counter));counter+=2;
+                String activity=finalIndex==Math.max(0,finalDays-3)?"SIMULATION":finalIndex==finalDays-2?"REVIEW":"FLASHCARDS";
+                String title=switch(activity){
+                    case "SIMULATION"->"Simulado dirigido de reta final";
+                    case "REVIEW"->"Dia-colchão: reforço dos erros";
+                    default->finalIndex==finalDays-1?"Revisão leve pré-prova":"Revisão ativa de reta final";
+                };
+                blocks.addAll(deadlineDayBlocks(date,minutes,ranked,priorityPool,topicPointer,counter,activity,title,
+                        "Pomodoro de reta final: revise o que já foi estudado, corrija erros e não abra conteúdo novo."));
             }else{
-                int theory=Math.max(15,(int)Math.round(minutes*.30));
-                int questions=Math.max(15,minutes-theory);
-                if(theory+questions>minutes) theory=Math.max(1,minutes-questions);
-                blocks.add(block("deadline-"+(counter++),date,topic,"THEORY",theory,
-                        "Teoria enxuta: "+topic.section().title(),
-                        "30% do tempo: apenas resumo, mapa mental e conceitos indispensáveis do subtópico prioritário.",
-                        topicDetails(topic),false,false));
-                blocks.add(block("deadline-"+(counter++),date,topic,"QUESTIONS",questions,
-                        "Questões comentadas: "+topic.title(),
-                        "70% do tempo: questões da banca, correção ativa e registro dos erros.",
-                        topicDetails(topic),false,false));
+                blocks.addAll(deadlineDayBlocks(date,minutes,ranked,priorityPool,topicPointer,counter,"THEORY",
+                        "Teoria enxuta de alta incidência",
+                        "Pomodoro 50+10: estude apenas os conceitos de maior retorno e produza uma síntese curta."));
             }
         }
         String focus=daysToExam<=15
-                ?"Reta final de 15 dias: Pareto 80/20, 30% teoria e 70% questões; sem conteúdo novo no fechamento"
-                :"Plano de 1 mês: peso e incidência primeiro; teoria enxuta com questões e última semana de revisão";
+                ?"Reta final de 15 dias: prioridade por peso, apoio leve e questões no encerramento de todos os dias"
+                :"Plano de 1 mês: peso e incidência primeiro, assunto leve de apoio e fechamento diário com questões";
         return weeks(blocks,focus);
     }
 
-    private List<Map<String,Object>> finalBlocks(LocalDate date,TopicChoice topic,int minutes,int index,int count,int counter){
-        if(count==1){
-            int simulation=Math.max(15,minutes/2);
-            return List.of(
-                    block("deadline-"+counter,date,topic,"SIMULATION",simulation,"Simulado cronometrado",
-                            "Resolva uma prova completa ou bloco proporcional no tempo oficial e calcule a nota líquida.",
-                            List.of("Todas as disciplinas integradas","Gestão do tempo","Registro dos erros"),false,false),
-                    block("deadline-"+(counter+1),date,topic,"FLASHCARDS",Math.max(1,minutes-simulation),"Revisão ativa final",
-                            "Revise somente flashcards, mapas e resumos já produzidos. Zero conteúdo novo.",topicDetails(topic),false,false));
+    private List<Map<String,Object>> deadlineDayBlocks(LocalDate date,int minutes,List<TopicChoice> ranked,
+            List<TopicChoice> priorityPool,int[] topicPointer,int[] counter,String contentActivity,
+            String contentTitle,String contentMethodology){
+        var result=new ArrayList<Map<String,Object>>();
+        int highMinutes,lightMinutes=0,questionMinutes;
+        if(minutes<=30){
+            highMinutes=Math.max(1,(int)Math.ceil(minutes*.60));questionMinutes=Math.max(1,minutes-highMinutes);
+        }else if(minutes<60){
+            highMinutes=(int)Math.ceil(minutes*.60);questionMinutes=minutes-highMinutes;
+        }else if(minutes==60){
+            // Um único horário curto: 25 min de assunto, 10 min de intervalo e 25 min de questões.
+            highMinutes=35;questionMinutes=25;
+        }else if(minutes<120){
+            questionMinutes=Math.max(25,(int)Math.round(minutes*.40));highMinutes=minutes-questionMinutes;
+        }else{
+            questionMinutes=60;
+            int contentMinutes=minutes-questionMinutes;
+            if(minutes>120&&ranked.size()>1){lightMinutes=Math.min(60,contentMinutes/2);}
+            highMinutes=contentMinutes-lightMinutes;
         }
-        boolean simulation=index==Math.max(0,count-3);
-        boolean cushion=index==count-2;
-        if(simulation)return List.of(block("deadline-"+counter,date,topic,"SIMULATION",minutes,"Simulado cronometrado",
-                "Simule as condições reais da prova e faça a correção imediatamente após o término.",
-                List.of("Todas as disciplinas integradas","Gestão do tempo","Análise da nota líquida"),false,false));
-        if(cushion)return List.of(block("deadline-"+counter,date,topic,"REVIEW",minutes,"Dia-colchão: reforço dos erros",
-                "Use este dia para reforçar exclusivamente os assuntos com mais erros no simulado. Zero conteúdo novo.",
-                List.of("Caderno de erros","Questões erradas no simulado","Pontos de baixa precisão"),false,false));
-        return List.of(block("deadline-"+counter,date,topic,"FLASHCARDS",minutes,
-                index==count-1?"Revisão leve pré-prova":"Revisão ativa de reta final",
-                "Revise flashcards, resumos e mapas mentais já produzidos. Zero conteúdo novo.",topicDetails(topic),false,false));
+
+        var studiedTopics=new ArrayList<String>();
+        int highRemaining=highMinutes;
+        while(highRemaining>0){
+            int duration=Math.min(60,highRemaining);
+            TopicChoice high=priorityPool.get(topicPointer[0]++%priorityPool.size());
+            String title=contentTitle+": "+high.title();
+            var item=block("deadline-"+(counter[0]++),date,high,contentActivity,duration,title,
+                    duration==35?"Pomodoro curto: 25 minutos de foco e 10 minutos de intervalo.":contentMethodology,
+                    topicDetails(high),false,false);
+            item.put("priorityBand","HIGH");result.add(item);studiedTopics.add(high.title());highRemaining-=duration;
+        }
+        if(lightMinutes>0){
+            TopicChoice light=lightTopic(ranked,studiedTopics,topicPointer[0]);
+            var item=block("deadline-"+(counter[0]++),date,light,contentActivity,lightMinutes,
+                    "Assunto leve de apoio: "+light.title(),
+                    "Pomodoro 50+10: consolide um assunto de menor peso sem retirar o foco da prioridade do dia.",
+                    topicDetails(light),false,false);
+            item.put("priorityBand","LIGHT");result.add(item);studiedTopics.add(light.title());
+        }
+        TopicChoice questionTopic=priorityPool.get(Math.floorMod(topicPointer[0]-1,priorityPool.size()));
+        var questionDetails=new ArrayList<String>(studiedTopics);
+        if(questionDetails.isEmpty())questionDetails.add(questionTopic.title());
+        var questions=block("deadline-"+(counter[0]++),date,questionTopic,"QUESTIONS",questionMinutes,
+                "Questões de fechamento",
+                questionMinutes<30?"Tempo livre: resolva e corrija questões até encerrar a disponibilidade do dia."
+                        :"Finalize o dia resolvendo questões dos assuntos estudados e registrando os erros.",
+                questionDetails,false,false);
+        questions.put("priorityBand","PRACTICE");result.add(questions);
+        return result;
+    }
+
+    private TopicChoice lightTopic(List<TopicChoice> ranked,List<String> excluded,int rotation){
+        var candidates=new ArrayList<TopicChoice>();
+        for(int index=ranked.size()-1;index>=0;index--){
+            TopicChoice candidate=ranked.get(index);
+            if(!excluded.contains(candidate.title()))candidates.add(candidate);
+        }
+        return candidates.isEmpty()?ranked.getLast():candidates.get(Math.floorMod(rotation,candidates.size()));
     }
 
     private List<Map<String,Object>> applyLongRangeStrategy(List<Map<String,Object>> base,List<LocalDate> dates,
@@ -490,7 +525,7 @@ public class ScheduleEngine {
         return dates.stream().noneMatch(other->other.isAfter(date)
                 && other.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).equals(week));
     }
-    private int availableMinutes(double hours){return Math.max(60,(int)Math.round(hours)*60);}
+    private int availableMinutes(double hours){return Math.max(15,(int)Math.round(hours*60));}
     private int parseMinutes(String value){try{String normalized=value.toLowerCase();int hours=0,minutes=0;var hour=java.util.regex.Pattern.compile("(\\d+)h").matcher(normalized);if(hour.find())hours=Integer.parseInt(hour.group(1));var minute=java.util.regex.Pattern.compile("(\\d+)min").matcher(normalized);if(minute.find())minutes=Integer.parseInt(minute.group(1));return Math.max(15,hours*60+minutes);}catch(Exception ignored){return 60;}}
     private String normalize(String value){return java.text.Normalizer.normalize(value,java.text.Normalizer.Form.NFD).replaceAll("\\p{M}","").toLowerCase(Locale.ROOT).trim();}
     private double weight(String s){try{return Double.parseDouble(s.replace("%",""));}catch(Exception e){return 1;}}

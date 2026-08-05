@@ -101,19 +101,26 @@ public class DailyStudyService {
 
     @Transactional
     public Map<String,Object> rebalance(int availableMinutes) {
-        if(availableMinutes<30||availableMinutes>720) throw new IllegalArgumentException("Informe entre 30 minutos e 12 horas");
+        if(availableMinutes<15||availableMinutes>720) throw new IllegalArgumentException("Informe entre 15 minutos e 12 horas");
         var plan=activePlan(); UUID planId=(UUID)plan.get("id"); LocalDate date=bootstrap.userToday(currentUser.id());
         var tasks=jdbc.sql("""
             SELECT * FROM daily_tasks WHERE user_id=:u AND plan_id=:p AND task_date=:date
               AND status NOT IN('COMPLETED','SKIPPED') AND NOT outside_planned_hours
             ORDER BY CASE WHEN activity_type IN('REVIEW','REVISION') THEN 0 ELSE 1 END,priority DESC,position
             """).param("u",currentUser.id()).param("p",planId).param("date",date).query().listOfRows();
+        boolean deadline=!localDate(plan.get("exam_date")).isAfter(date.plusDays(30));
+        var closingQuestions=deadline?tasks.stream().filter(task->"QUESTIONS".equals(task.get("activity_type"))).findFirst():Optional.<Map<String,Object>>empty();
+        if(closingQuestions.isPresent()){
+            rebalanceDeadlineTasks(tasks,closingQuestions.get(),availableMinutes,date);
+            engagement.createNotification(currentUser.id(),planId,"PLAN_REBALANCED","Plano de hoje reorganizado",
+                    "A prioridade e as questões de fechamento foram preservadas para caber em "+availableMinutes+" minutos.","NORMAL");
+            return today();
+        }
         int remaining=availableMinutes;
         for(var task:tasks){
             UUID id=(UUID)task.get("id");
             if(remaining<=0){
-                jdbc.sql("UPDATE daily_tasks SET task_date=:tomorrow,status='MOVED',updated_at=now() WHERE id=:id")
-                    .param("tomorrow",date.plusDays(1)).param("id",id).update();
+                moveTask(id,date.plusDays(1));
             }else{
                 int planned=Math.max(15,Math.min(number(task,"planned_minutes"),remaining));
                 jdbc.sql("UPDATE daily_tasks SET planned_minutes=:minutes,status=CASE WHEN status='MOVED' THEN 'PENDING' ELSE status END,updated_at=now() WHERE id=:id")
@@ -123,6 +130,41 @@ public class DailyStudyService {
         engagement.createNotification(currentUser.id(),planId,"PLAN_REBALANCED","Plano de hoje reorganizado",
                 "As prioridades foram preservadas para caber em "+availableMinutes+" minutos.","NORMAL");
         return today();
+    }
+
+    private void rebalanceDeadlineTasks(List<Map<String,Object>> tasks,Map<String,Object> questions,int availableMinutes,LocalDate date){
+        int contentMinutes,questionMinutes;
+        if(availableMinutes<=30){contentMinutes=Math.max(1,(int)Math.ceil(availableMinutes*.60));questionMinutes=availableMinutes-contentMinutes;}
+        else if(availableMinutes==60){contentMinutes=35;questionMinutes=25;}
+        else if(availableMinutes<120){questionMinutes=Math.max(25,(int)Math.round(availableMinutes*.40));contentMinutes=availableMinutes-questionMinutes;}
+        else{questionMinutes=60;contentMinutes=availableMinutes-questionMinutes;}
+
+        int remaining=contentMinutes;
+        for(var task:tasks){
+            if(task.get("id").equals(questions.get("id")))continue;
+            UUID id=(UUID)task.get("id");
+            if(remaining<=0){moveTask(id,date.plusDays(1));continue;}
+            int planned=Math.min(number(task,"planned_minutes"),remaining);
+            updateTaskMinutes(id,planned);remaining-=planned;
+        }
+        updateTaskMinutes((UUID)questions.get("id"),Math.max(1,questionMinutes));
+    }
+
+    private void moveTask(UUID id,LocalDate date){
+        jdbc.sql("""
+                UPDATE daily_tasks moving SET task_date=:date,status='MOVED',
+                  cycle_index=(SELECT COALESCE(MAX(existing.cycle_index),-1)+1 FROM daily_tasks existing
+                    WHERE existing.user_id=moving.user_id AND existing.plan_id=moving.plan_id
+                      AND existing.task_date=:date AND existing.roadmap_topic_id=moving.roadmap_topic_id
+                      AND existing.activity_type=moving.activity_type),updated_at=now()
+                WHERE moving.id=:id
+                """)
+                .param("date",date).param("id",id).update();
+    }
+
+    private void updateTaskMinutes(UUID id,int minutes){
+        jdbc.sql("UPDATE daily_tasks SET planned_minutes=:minutes,status=CASE WHEN status='MOVED' THEN 'PENDING' ELSE status END,updated_at=now() WHERE id=:id")
+                .param("minutes",minutes).param("id",id).update();
     }
 
     @Transactional
@@ -226,5 +268,10 @@ public class DailyStudyService {
                 .param("today",today).param("u",currentUser.id()).update();
     }
     private void assertPlan(UUID id){if(jdbc.sql("SELECT COUNT(*) FROM study_plans WHERE id=:p AND user_id=:u").param("p",id).param("u",currentUser.id()).query(Integer.class).single()==0)throw new NoSuchElementException("Plano não encontrado");}
+    private LocalDate localDate(Object value){
+        if(value instanceof LocalDate date)return date;
+        if(value instanceof java.sql.Date date)return date.toLocalDate();
+        return LocalDate.parse(String.valueOf(value));
+    }
     private int number(Map<String,Object> row,String key){Object v=row.get(key);return v instanceof Number n?n.intValue():0;}
 }

@@ -139,7 +139,7 @@ public class StudyBootstrapService {
                 INSERT INTO daily_tasks(id,user_id,plan_id,roadmap_topic_id,task_date,position,activity_type,
                   planned_minutes,question_goal,minimum_accuracy,priority,status)
                 VALUES(gen_random_uuid(),:u,:p,:t,:date,:pos,:type,:minutes,:questions,:accuracy,:priority,:status)
-                ON CONFLICT(user_id,plan_id,task_date,roadmap_topic_id,activity_type) DO NOTHING
+                ON CONFLICT(user_id,plan_id,task_date,roadmap_topic_id,activity_type,cycle_index) DO NOTHING
                 """).param("u", userId).param("p", planId).param("t", topic.get("id"))
                     .param("date", date).param("pos", position).param("type", type).param("minutes", planned)
                     .param("questions", topic.get("recommended_questions")).param("accuracy", topic.get("minimum_accuracy"))
@@ -153,7 +153,7 @@ public class StudyBootstrapService {
                 INSERT INTO daily_tasks(id,user_id,plan_id,roadmap_topic_id,task_date,position,activity_type,
                   planned_minutes,question_goal,minimum_accuracy,priority,status,is_optional,outside_planned_hours)
                 VALUES(gen_random_uuid(),:u,:p,:t,:date,:pos,'QUESTIONS',:minutes,:questions,:accuracy,:priority,:status,:optional,true)
-                ON CONFLICT(user_id,plan_id,task_date,roadmap_topic_id,activity_type) DO NOTHING
+                ON CONFLICT(user_id,plan_id,task_date,roadmap_topic_id,activity_type,cycle_index) DO NOTHING
                 """).param("u", userId).param("p", planId).param("t", reference.get("id"))
                     .param("date", date).param("pos", position).param("minutes", questionsMinutes)
                     .param("questions", Math.max(10, questionsMinutes / 3)).param("accuracy", reference.get("minimum_accuracy"))
@@ -278,7 +278,7 @@ public class StudyBootstrapService {
                 boolean optional=block.path("isOptional").asBoolean(question&&!lastStudyDayOfWeek(planId,date));
                 boolean outside=block.path("outsidePlannedHours").asBoolean(false);
                 int minutes=block.path("durationMinutes").asInt(60);
-                seeds.add(new ScheduleTaskSeed(topic,activity,minutes,optional,outside));
+                seeds.add(new ScheduleTaskSeed(topic,activity,minutes,optional,outside,seeds.size()));
             }
         }catch(Exception ignored){return 0;}
         int position=0;
@@ -286,19 +286,19 @@ public class StudyBootstrapService {
                 var topic=seed.topic();int minutes=seed.minutes();if(minutes<=0)continue;
                 jdbc.sql("""
                     INSERT INTO daily_tasks(id,user_id,plan_id,roadmap_topic_id,task_date,position,activity_type,
-                      planned_minutes,question_goal,minimum_accuracy,priority,status,is_optional,outside_planned_hours)
-                    VALUES(gen_random_uuid(),:u,:p,:t,:date,:position,:activity,:minutes,:questions,:accuracy,:priority,:status,:optional,:outside)
-                    ON CONFLICT(user_id,plan_id,task_date,roadmap_topic_id,activity_type) DO NOTHING
+                      planned_minutes,question_goal,minimum_accuracy,priority,status,is_optional,outside_planned_hours,cycle_index)
+                    VALUES(gen_random_uuid(),:u,:p,:t,:date,:position,:activity,:minutes,:questions,:accuracy,:priority,:status,:optional,:outside,:cycle)
+                    ON CONFLICT(user_id,plan_id,task_date,roadmap_topic_id,activity_type,cycle_index) DO NOTHING
                     """).param("u",userId).param("p",planId).param("t",topic.get("id")).param("date",date)
                         .param("position",position).param("activity",seed.activity()).param("minutes",minutes)
                         .param("questions",topic.get("recommended_questions")).param("accuracy",topic.get("minimum_accuracy"))
                         .param("priority",topic.get("priority")).param("status",position==0?"AVAILABLE":"PENDING")
-                        .param("optional",seed.optional()).param("outside",seed.outside()).update();
+                        .param("optional",seed.optional()).param("outside",seed.outside()).param("cycle",seed.cycle()).update();
                 position++;
         }
         return position;
     }
-    private record ScheduleTaskSeed(Map<String,Object> topic,String activity,int minutes,boolean optional,boolean outside){}
+    private record ScheduleTaskSeed(Map<String,Object> topic,String activity,int minutes,boolean optional,boolean outside,int cycle){}
     private String normalize(String value){return java.text.Normalizer.normalize(value,java.text.Normalizer.Form.NFD).replaceAll("\\p{M}","").toLowerCase(Locale.ROOT).trim();}
     private List<Map<String,Object>> learningPathCandidates(List<Map<String,Object>> raw) {
         var specific = raw.stream().filter(row -> "specific".equals(row.get("learning_track")))

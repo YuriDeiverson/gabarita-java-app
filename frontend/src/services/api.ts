@@ -40,6 +40,7 @@ export interface StudyPlan {
   completed_topics?: number;
   created_at?: string;
   updated_at?: string;
+  settings?: Record<string, unknown> | string;
 }
 
 export interface QuizProgress {
@@ -378,6 +379,19 @@ export const scheduleApi = {
   },
 };
 
+export interface QuestionNote {
+  id: string;
+  question_id: string;
+  course_id: string;
+  question_text: string;
+  category: string;
+  topic: string;
+  reference: string;
+  note: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export const questionsApi = {
   forCourse: async (courseId: string): Promise<import('../types').Question[]> => {
     const response = await fetch(`${API_BASE_URL}/questions/course/${encodeURIComponent(courseId)}`);
@@ -404,6 +418,13 @@ export const questionsApi = {
   },
   report: (data:{questionId:string;courseId?:string;text:string;category?:string;reference?:string;reason:string;details?:string}) =>
     jsonRequest<{id:string;status:string;reason:string}>('/questions/reports', { method:'POST',body:JSON.stringify(data) }),
+  notes: () => jsonRequest<QuestionNote[]>('/questions/notes'),
+  saveNote: (data:{questionId:string;courseId?:string;text:string;category?:string;topic?:string;reference?:string;note:string}) =>
+    jsonRequest<QuestionNote>('/questions/notes', {method:'PUT',body:JSON.stringify(data)}),
+  deleteNote: (questionId:string,courseId='') => {
+    const params=new URLSearchParams({questionId,courseId});
+    return jsonRequest<void>(`/questions/notes?${params}`, {method:'DELETE'});
+  },
 };
 
 export const simulationsApi = {
@@ -499,11 +520,30 @@ export interface CatalogContest {
   roles: CatalogRole[];
 }
 
+export interface SharedStudySubject {
+  id: string;
+  canonicalKey: string;
+  title: string;
+  discipline: string;
+  content: string;
+  keyTakeaways: string[];
+  contentBlocks: Array<{id:string;title:string;content:string;keyTakeaways?:string[];createdAt?:string}>;
+  updatedAt?: string;
+}
+
 export interface AdminPassage { id: string; title: string; content: string; source?: string; }
 export interface AdminQuestion {
   id: string; courseId: string; category: string; topic: string; board: string; type: string; text: string;
   correct: string; explanation?: string; reference?: string; status?: string; passageId?: string | null;
   passageTitle?: string; pendingReports?: number; options: Array<{ label: string; text: string }>;
+}
+export interface AdminQuestionPage {
+  items: AdminQuestion[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  areas: string[];
 }
 export interface AdminQuestionReport {
   id:string; questionId?:string|null; questionKey:string; questionText:string; courseId:string; category:string; reference?:string;
@@ -513,6 +553,7 @@ export interface AdminQuestionReport {
 
 export const catalogApi = {
   contests: () => jsonRequest<CatalogContest[]>('/catalog/contests'),
+  studyLibrary: () => jsonRequest<SharedStudySubject[]>('/catalog/study-library'),
 };
 
 export const adminApi = {
@@ -523,15 +564,41 @@ export const adminApi = {
   createRole: (data:Record<string,unknown>) => jsonRequest('/admin/catalog/roles', { method:'POST',body:JSON.stringify(data) }),
   updateRole: (id:string,data:Record<string,unknown>) => jsonRequest(`/admin/catalog/roles/${id}`, { method:'PUT',body:JSON.stringify(data) }),
   deleteRole: (id:string) => jsonRequest<void>(`/admin/catalog/roles/${id}`, { method:'DELETE' }),
+  addStudyMaterial: (roleId:string,data:{sectionId:string;cardId:string;title:string;content:string;keyTakeaways:string[]}) =>
+    jsonRequest<{id:string;title:string;synchronizedPlans:number}>(`/admin/catalog/roles/${roleId}/materials`, {method:'POST',body:JSON.stringify(data)}),
+  updateStudyMaterial: (roleId:string,materialId:string,data:{sectionId:string;cardId:string;title:string;content:string;keyTakeaways:string[]}) =>
+    jsonRequest<{id:string;title:string;synchronizedPlans:number}>(`/admin/catalog/roles/${roleId}/materials/${materialId}`, {method:'PUT',body:JSON.stringify(data)}),
+  deleteStudyMaterial: (roleId:string,materialId:string,sectionId:string,cardId:string) => {
+    const params=new URLSearchParams({sectionId,cardId});return jsonRequest<void>(`/admin/catalog/roles/${roleId}/materials/${materialId}?${params}`, {method:'DELETE'});
+  },
+  updateBaseStudyMaterial: (roleId:string,data:{sectionId:string;cardId:string;content:string;keyTakeaways:string[]}) =>
+    jsonRequest<{cardId:string;synchronizedPlans:number}>(`/admin/catalog/roles/${roleId}/materials/base`, {method:'PUT',body:JSON.stringify(data)}),
+  deleteBaseStudyMaterial: (roleId:string,sectionId:string,cardId:string) => {
+    const params=new URLSearchParams({sectionId,cardId});return jsonRequest<void>(`/admin/catalog/roles/${roleId}/materials/base?${params}`, {method:'DELETE'});
+  },
+  createStudyDiscipline: (roleId:string,title:string) =>
+    jsonRequest<{id:string;title:string}>(`/admin/catalog/roles/${roleId}/disciplines`, {method:'POST',body:JSON.stringify({title})}),
+  createStudySubject: (roleId:string,sectionId:string,title:string) =>
+    jsonRequest<{id:string;title:string;sharedSubjectId:string;synchronizedPlans:number}>(`/admin/catalog/roles/${roleId}/subjects`, {method:'POST',body:JSON.stringify({sectionId,title})}),
+  deleteStudySubject: (roleId:string,sectionId:string,cardId:string) => {
+    const params=new URLSearchParams({sectionId});
+    return jsonRequest<{cardId:string;title:string;synchronizedPlans:number}>(`/admin/catalog/roles/${roleId}/subjects/${encodeURIComponent(cardId)}?${params}`, {method:'DELETE'});
+  },
+  deleteStudyDiscipline: (roleId:string,sectionId:string) =>
+    jsonRequest<{sectionId:string;title:string;synchronizedPlans:number}>(`/admin/catalog/roles/${roleId}/disciplines/${encodeURIComponent(sectionId)}`, {method:'DELETE'}),
   passages: () => jsonRequest<AdminPassage[]>('/admin/content/passages'),
   createPassage: (data:Record<string,unknown>) => jsonRequest('/admin/content/passages', { method:'POST',body:JSON.stringify(data) }),
   updatePassage: (id:string,data:Record<string,unknown>) => jsonRequest(`/admin/content/passages/${id}`, { method:'PUT',body:JSON.stringify(data) }),
   deletePassage: (id:string) => jsonRequest<void>(`/admin/content/passages/${id}`, { method:'DELETE' }),
-  questions: (filters:{query?:string;courseId?:string;limit?:number}={}) => {
+  questions: (filters:{query?:string;courseId?:string;area?:string;page?:number;pageSize?:number}={}) => {
     const params=new URLSearchParams();if(filters.query)params.set('query',filters.query);if(filters.courseId)params.set('courseId',filters.courseId);
-    params.set('limit',String(filters.limit||50));return jsonRequest<AdminQuestion[]>(`/admin/content/questions?${params}`);
+    if(filters.area)params.set('area',filters.area);params.set('page',String(filters.page||1));params.set('pageSize',String(filters.pageSize||10));
+    return jsonRequest<AdminQuestionPage>(`/admin/content/questions?${params}`);
   },
   createQuestion: (data:Record<string,unknown>) => jsonRequest('/admin/content/questions', { method:'POST',body:JSON.stringify(data) }),
+  importQuestions: (questions:Record<string,unknown>[]) => jsonRequest<{imported:number;ids:string[]}>('/admin/content/questions/batch', {
+    method:'POST',body:JSON.stringify({questions}),
+  }),
   updateQuestion: (id:string,data:Record<string,unknown>) => jsonRequest(`/admin/content/questions/${id}`, { method:'PUT',body:JSON.stringify(data) }),
   deleteQuestion: (id:string) => jsonRequest<void>(`/admin/content/questions/${id}`, { method:'DELETE' }),
   questionReports: (status='PENDING') => jsonRequest<AdminQuestionReport[]>(`/admin/content/question-reports?status=${encodeURIComponent(status)}`),
@@ -553,8 +620,8 @@ export const dailyStudyApi = {
   cancel: (id: string, notes?: string) => jsonRequest<StudySession>(`/study/sessions/${id}/cancel`, { method: 'POST', body: JSON.stringify({ notes }) }),
   rebalance: (availableMinutes: number) => jsonRequest<StudyDashboardData>('/study/today/rebalance', { method: 'POST', body: JSON.stringify({ availableMinutes }) }),
   active: () => jsonRequest<Partial<StudySession>>('/study/sessions/active'),
-  startQuestionPractice: (planId:string,focusMinutes:number,dailyTaskId?:string|null) => jsonRequest<StudySession>('/study/sessions/questions', {
-    method:'POST',body:JSON.stringify({planId,focusMinutes,dailyTaskId,device:navigator.userAgent.slice(0,150)})
+  startQuestionPractice: (planId:string,data:{mode:'FREE'|'POMODORO';focusMinutes:number;dailyTaskId?:string|null}) => jsonRequest<StudySession>('/study/sessions/questions', {
+    method:'POST',body:JSON.stringify({planId,...data,device:navigator.userAgent.slice(0,150)})
   }),
   recordQuestion: (sessionId:string,questionId:string,correct:boolean) => jsonRequest<StudySession>(`/study/sessions/${sessionId}/questions`, {
     method:'POST',body:JSON.stringify({questionId,correct})

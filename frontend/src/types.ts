@@ -5,6 +5,13 @@ export interface StudyCard {
   isQuente: boolean;
   content: string; // Markdown or rich HTML-friendly text
   keyTakeaways: string[];
+  contentBlocks?: Array<{
+    id: string;
+    title: string;
+    content: string;
+    keyTakeaways?: string[];
+    createdAt?: string;
+  }>;
   materials?: string[];
   tools?: string[];
 }
@@ -65,6 +72,7 @@ export interface StudyBlock {
   duration: string; // e.g., "2h"
   durationMinutes?: number;
   activityType?: 'THEORY' | 'QUESTIONS' | 'REVIEW' | 'REVISION' | 'SIMULATION' | 'READING' | 'FLASHCARDS';
+  priorityBand?: 'HIGH' | 'LIGHT' | 'PRACTICE';
   isOptional?: boolean;
   outsidePlannedHours?: boolean;
   methodology: string; // e.g., "30% Teoria, 50% Exercícios, 20% Revisão"

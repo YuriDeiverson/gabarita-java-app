@@ -19,6 +19,9 @@ public class QuestionController {
       @NotBlank String correct,String explanation,String reference,String passageId){}
     public record ReportRequest(@NotBlank String questionId,String courseId,@NotBlank String text,String category,
       String reference,@NotBlank String reason,String details){}
+    public record QuestionNoteRequest(@NotBlank @Size(max=180) String questionId,@Size(max=120) String courseId,
+      @NotBlank String text,@Size(max=180) String category,@Size(max=220) String topic,@Size(max=300) String reference,
+      @NotBlank @Size(max=4000) String note){}
     @GetMapping("/course/{courseId}") public List<Map<String,Object>> byCourse(@PathVariable String courseId) {
       return jdbc.sql("""
         SELECT q.id::text id,COALESCE(q.metadata->>'category',s.name,'Geral') category,
@@ -74,6 +77,31 @@ public class QuestionController {
         """).param("question",questionId,Types.OTHER).param("key",questionKey).param("user",user).param("reason",reason)
         .param("details",text(r.details())).param("snapshot",snapshot).query().singleRow();
     }
+
+    @GetMapping("/notes")
+    public List<Map<String,Object>> notes(){UUID user=currentUser.id();return jdbc.sql("""
+      SELECT id::text id,question_id,course_id,question_text,category,topic,reference,note,created_at,updated_at
+      FROM user_question_notes WHERE user_id=:user ORDER BY updated_at DESC
+      """).param("user",user).query().listOfRows();}
+
+    @PutMapping("/notes")
+    public Map<String,Object> saveNote(@Valid @RequestBody QuestionNoteRequest r){UUID user=currentUser.id();
+      String course=text(r.courseId());String questionId=r.questionId().trim();String key=course+":"+questionId;
+      return jdbc.sql("""
+        INSERT INTO user_question_notes(user_id,question_key,question_id,course_id,question_text,category,topic,reference,note)
+        VALUES(:user,:key,:question,:course,:text,:category,:topic,:reference,:note)
+        ON CONFLICT(user_id,question_key) DO UPDATE SET question_text=EXCLUDED.question_text,category=EXCLUDED.category,
+          topic=EXCLUDED.topic,reference=EXCLUDED.reference,note=EXCLUDED.note,updated_at=now()
+        RETURNING id::text id,question_id,course_id,question_text,category,topic,reference,note,created_at,updated_at
+        """).param("user",user).param("key",key).param("question",questionId).param("course",course)
+        .param("text",r.text().trim()).param("category",text(r.category())).param("topic",text(r.topic()))
+        .param("reference",text(r.reference())).param("note",r.note().trim()).query().singleRow();}
+
+    @DeleteMapping("/notes") @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
+    public void deleteNote(@RequestParam @Size(max=180) String questionId,@RequestParam(required=false) @Size(max=120) String courseId){
+      UUID user=currentUser.id();String key=text(courseId)+":"+questionId.trim();
+      jdbc.sql("DELETE FROM user_question_notes WHERE user_id=:user AND question_key=:key")
+        .param("user",user).param("key",key).update();}
 
     private String reportReason(String value){String reason=value.trim().toUpperCase(Locale.ROOT);
       if(!Set.of("ANSWER","STATEMENT","EXPLANATION","OUTDATED","OTHER").contains(reason))throw new IllegalArgumentException("Motivo de sinalização inválido");return reason;}

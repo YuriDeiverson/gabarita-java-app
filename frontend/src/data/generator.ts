@@ -2252,12 +2252,12 @@ function applyDeadlineStrategy(
   }).sort((a, b) => b.score - a.score || topicTitle(a).localeCompare(topicTitle(b)));
   if (ranked.length === 0) return baseWeeks;
 
-  const dailyMinutes = Math.max(60, Math.round(hoursPerDay * 60));
+  const dailyMinutes = Math.max(15, Math.round(hoursPerDay * 60));
   if (daysToExam <= 30) {
     return groupDeadlineWeeks(buildSprint(dates, daysToExam, ranked, dailyMinutes, course), todayIso,
       daysToExam <= 15
-        ? 'Reta final: Pareto 80/20, 30% teoria e 70% questões; zero conteúdo novo no fechamento'
-        : 'Plano de 1 mês: peso e incidência primeiro, com a última semana dedicada a revisão e simulados');
+        ? 'Reta final: prioridade por peso, apoio leve e questões no encerramento de todos os dias'
+        : 'Plano de 1 mês: peso e incidência primeiro, assunto leve de apoio e fechamento diário com questões');
   }
 
   const sprintStart = addCalendarDays(examDate, -21);
@@ -2301,50 +2301,59 @@ function buildSprint(
   if (daysToExam <= 15 && finalDates.length > 4) finalDates = finalDates.slice(-4);
   const firstFinal = finalDates[0]?.isoDate;
   const blocks: StudyBlock[] = [];
-  let pointer = 0;
+  const pointer = { value: 0 };
   dates.forEach((date, index) => {
-    const topic = pool[pointer++ % pool.length];
     if (index < mappingDays) {
-      blocks.push(makeDeadlineBlock(course, date, topic, 'READING', dailyMinutes,
-        'Mapeamento do edital × incidência da banca',
-        'Cruze o edital com o histórico da banca e ordene as disciplinas por peso e incidência.',
-        ['Peso de cada disciplina', 'Assuntos mais cobrados pela banca', 'Ranking de prioridade']));
+      blocks.push(...localDeadlineDayBlocks(course,date,dailyMinutes,ranked,pool,pointer,'READING',
+        'Mapeamento prioritário do edital','Pomodoro de reta final: cruze o assunto com a incidência da banca e registre somente os pontos decisivos.'));
       return;
     }
     if (firstFinal && date.isoDate >= firstFinal) {
       const finalIndex = finalDates.findIndex(item => item.isoDate === date.isoDate);
-      blocks.push(...localFinalBlocks(course, date, topic, dailyMinutes, finalIndex, finalDates.length));
+      const activity: StudyBlock['activityType'] = finalIndex === Math.max(0, finalDates.length - 3) ? 'SIMULATION'
+        : finalIndex === finalDates.length - 2 ? 'REVIEW' : 'FLASHCARDS';
+      const title = activity === 'SIMULATION' ? 'Simulado dirigido de reta final'
+        : activity === 'REVIEW' ? 'Dia-colchão: reforço dos erros'
+        : finalIndex === finalDates.length - 1 ? 'Revisão leve pré-prova' : 'Revisão ativa de reta final';
+      blocks.push(...localDeadlineDayBlocks(course,date,dailyMinutes,ranked,pool,pointer,activity,title,
+        'Pomodoro de reta final: revise o que já foi estudado, corrija erros e não abra conteúdo novo.'));
       return;
     }
-    const theory = Math.max(15, Math.round(dailyMinutes * .3));
-    blocks.push(makeDeadlineBlock(course, date, topic, 'THEORY', theory,
-      `Teoria enxuta: ${topic.section.title}`,
-      '30% do tempo: somente resumo, mapa mental e conceitos indispensáveis.', topicDetailsLocal(topic)));
-    blocks.push(makeDeadlineBlock(course, date, topic, 'QUESTIONS', Math.max(15, dailyMinutes - theory),
-      `Questões comentadas: ${topicTitle(topic)}`,
-      '70% do tempo: questões da banca, correção ativa e registro dos erros.', topicDetailsLocal(topic)));
+    blocks.push(...localDeadlineDayBlocks(course,date,dailyMinutes,ranked,pool,pointer,'THEORY',
+      'Teoria enxuta de alta incidência','Pomodoro 50+10: estude apenas os conceitos de maior retorno e produza uma síntese curta.'));
   });
   return blocks;
 }
 
-function localFinalBlocks(course: string, date: DeadlineDate, topic: DeadlineTopic, minutes: number, index: number, count: number): StudyBlock[] {
-  if (count === 1) {
-    const simulation = Math.max(15, Math.floor(minutes / 2));
-    return [
-      makeDeadlineBlock(course, date, topic, 'SIMULATION', simulation, 'Simulado cronometrado',
-        'Resolva a prova no tempo oficial e calcule a nota líquida.', ['Todas as disciplinas', 'Gestão do tempo', 'Registro dos erros']),
-      makeDeadlineBlock(course, date, topic, 'FLASHCARDS', minutes - simulation, 'Revisão ativa final',
-        'Somente flashcards e resumos já produzidos. Zero conteúdo novo.', topicDetailsLocal(topic)),
-    ];
+function localDeadlineDayBlocks(course:string,date:DeadlineDate,minutes:number,ranked:DeadlineTopic[],pool:DeadlineTopic[],
+  pointer:{value:number},contentActivity:StudyBlock['activityType'],contentTitle:string,contentMethodology:string):StudyBlock[]{
+  let highMinutes:number,lightMinutes=0,questionMinutes:number;
+  if(minutes<=30){highMinutes=Math.max(1,Math.ceil(minutes*.6));questionMinutes=Math.max(1,minutes-highMinutes);}
+  else if(minutes<60){highMinutes=Math.ceil(minutes*.6);questionMinutes=minutes-highMinutes;}
+  else if(minutes===60){highMinutes=35;questionMinutes=25;}
+  else if(minutes<120){questionMinutes=Math.max(25,Math.round(minutes*.4));highMinutes=minutes-questionMinutes;}
+  else{questionMinutes=60;const contentMinutes=minutes-questionMinutes;if(minutes>120&&ranked.length>1)lightMinutes=Math.min(60,Math.floor(contentMinutes/2));highMinutes=contentMinutes-lightMinutes;}
+
+  const result:StudyBlock[]=[];const studied:string[]=[];let highRemaining=highMinutes;let highIndex=0;
+  while(highRemaining>0){
+    const duration=Math.min(60,highRemaining);const topic=pool[pointer.value++%pool.length];highIndex++;
+    const block=makeDeadlineBlock(course,date,topic,contentActivity,duration,
+      `${contentTitle}: ${topicTitle(topic)}${highMinutes>60?` · Bloco ${highIndex}`:''}`,
+      duration===35?'Pomodoro curto: 25 minutos de foco e 10 minutos de intervalo.':contentMethodology,topicDetailsLocal(topic));
+    block.priorityBand='HIGH';result.push(block);studied.push(topicTitle(topic));highRemaining-=duration;
   }
-  if (index === Math.max(0, count - 3)) return [makeDeadlineBlock(course, date, topic, 'SIMULATION', minutes,
-    'Simulado cronometrado', 'Simule as condições reais da prova e corrija ao terminar.', ['Todas as disciplinas', 'Gestão do tempo', 'Nota líquida'])];
-  if (index === count - 2) return [makeDeadlineBlock(course, date, topic, 'REVIEW', minutes,
-    'Dia-colchão: reforço dos erros', 'Reforce exclusivamente os assuntos com mais erros no simulado. Zero conteúdo novo.',
-    ['Caderno de erros', 'Questões erradas', 'Pontos de baixa precisão'])];
-  return [makeDeadlineBlock(course, date, topic, 'FLASHCARDS', minutes,
-    index === count - 1 ? 'Revisão leve pré-prova' : 'Revisão ativa de reta final',
-    'Revise flashcards, resumos e mapas mentais já produzidos. Zero conteúdo novo.', topicDetailsLocal(topic))];
+  if(lightMinutes>0){
+    const lightCandidates=[...ranked].reverse().filter(topic=>!studied.includes(topicTitle(topic)));
+    const light=lightCandidates.length?lightCandidates[pointer.value%lightCandidates.length]:ranked.at(-1)!;
+    const block=makeDeadlineBlock(course,date,light,contentActivity,lightMinutes,`Assunto leve de apoio: ${topicTitle(light)}`,
+      'Pomodoro 50+10: consolide um assunto de menor peso sem retirar o foco da prioridade do dia.',topicDetailsLocal(light));
+    block.priorityBand='LIGHT';result.push(block);studied.push(topicTitle(light));
+  }
+  const questionTopic=pool[Math.max(0,pointer.value-1)%pool.length];
+  const questions=makeDeadlineBlock(course,date,questionTopic,'QUESTIONS',questionMinutes,'Questões de fechamento',
+    questionMinutes<30?'Tempo livre: resolva e corrija questões até encerrar a disponibilidade do dia.'
+      :'Finalize o dia resolvendo questões dos assuntos estudados e registrando os erros.',studied.length?studied:topicDetailsLocal(questionTopic));
+  questions.priorityBand='PRACTICE';result.push(questions);return result;
 }
 
 function makeDeadlineBlock(course: string, date: DeadlineDate, topic: DeadlineTopic, activityType: StudyBlock['activityType'],
