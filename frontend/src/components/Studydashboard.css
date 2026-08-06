@@ -309,6 +309,9 @@
   gap: var(--space-5);
   align-items: start;
 }
+.daily-main-grid.daily-main-grid-single { grid-template-columns: minmax(0, 1fr); }
+.daily-dashboard .today-plan-card,
+.daily-dashboard .mobile-daily-summary { display: none; }
 
 .focus-card {
   background: var(--surface);

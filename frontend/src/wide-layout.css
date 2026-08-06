@@ -105,6 +105,10 @@
     gap: 16px !important;
   }
 
+  .app-shell.has-context-rail .daily-main-grid.daily-main-grid-single {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
   .app-shell.has-context-rail .focus-card {
     padding: 20px;
     gap: 16px;
@@ -216,6 +220,34 @@
   background: var(--surface);
   box-shadow: var(--shadow-soft);
 }
+
+.app-shell.is-home-tab .app-context-rail .context-default-card { display: none; }
+.context-home-streak-card {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  border-color: #efcf92 !important;
+  background: #fff9eb !important;
+}
+.context-home-streak-card > svg {
+  width: 36px;
+  height: 36px;
+  padding: 8px;
+  border-radius: 10px;
+  color: #a96812;
+  background: #fff0c7;
+}
+.context-home-streak-card > div { display: grid; gap: 1px; min-width: 0; }
+.context-home-streak-card span { color: #8c6c35; font-size: 9px; font-weight: 700; }
+.context-home-streak-card strong { color: #634519; font-size: 17px; line-height: 1.1; }
+.app-main .context-home-streak-card p,
+.app-main .context-home-review-card p,
+.app-main .context-home-alert-card p { margin: 3px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.context-home-review-card { border-left: 3px solid #6b8c74 !important; }
+.context-home-alert-card { border-left: 3px solid #d39441 !important; }
+.context-home-review-card > h3,
+.context-home-alert-card > h3 { margin-top: 7px !important; }
 
 .app-context-rail .context-primary-card {
   overflow: hidden;

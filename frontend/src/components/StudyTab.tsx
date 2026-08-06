@@ -9,7 +9,6 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { studySections as fallbackStudySections } from "../data/studyData";
 import { catalogApi, SharedStudySubject, studyPlansApi } from "../services/api";
 import { ActiveStudyContext, findContextCard, normalizeStudyText } from "../studyContext";
 import { StudyCard, StudySection } from "../types";
@@ -19,18 +18,15 @@ interface StudyTabProps {
   onCurrentActivityComplete?: () => void;
 }
 
-const initialSections = (): StudySection[] => {
-  try {
-    const saved = localStorage.getItem("custom_study_sections");
-    if (saved) return JSON.parse(saved) as StudySection[];
-  } catch (error) {
-    console.warn("Não foi possível abrir o caderno salvo.", error);
-  }
-  return fallbackStudySections;
-};
-
 const settingsObject = (value: unknown): Record<string, unknown> => {
-  if (value && typeof value === "object") return value as Record<string, unknown>;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (typeof record.value === "string") return settingsObject(record.value);
+    if (record.value && typeof record.value === "object") {
+      return settingsObject(record.value);
+    }
+    return record;
+  }
   if (typeof value === "string") {
     try {
       return JSON.parse(value) as Record<string, unknown>;
@@ -38,42 +34,6 @@ const settingsObject = (value: unknown): Record<string, unknown> => {
   }
   return {};
 };
-
-const mergeCurrentPlanContent = (
-  current: StudySection[],
-  remote: StudySection[],
-): StudySection[] =>
-  current.map((section) => {
-    const remoteSection = remote.find(
-      (item) =>
-        item.id === section.id ||
-        normalizeStudyText(item.title) === normalizeStudyText(section.title),
-    );
-    if (!remoteSection) return section;
-    return {
-      ...section,
-      cards: section.cards.map((card) => {
-        const remoteCard = remoteSection.cards.find(
-          (item) =>
-            item.id === card.id ||
-            normalizeStudyText(item.title) === normalizeStudyText(card.title),
-        );
-        return remoteCard
-          ? {
-              ...card,
-              content:
-                typeof remoteCard.content === "string"
-                  ? remoteCard.content
-                  : card.content,
-              keyTakeaways: Array.isArray(remoteCard.keyTakeaways)
-                ? remoteCard.keyTakeaways
-                : card.keyTakeaways,
-              contentBlocks: remoteCard.contentBlocks || card.contentBlocks || [],
-            }
-          : card;
-      }),
-    };
-  });
 
 const mergeSharedStudyLibrary = (
   current: StudySection[],
@@ -100,7 +60,8 @@ export default function StudyTab({
   studyContext,
   onCurrentActivityComplete,
 }: StudyTabProps) {
-  const [sections, setSections] = useState<StudySection[]>(initialSections);
+  const [sections, setSections] = useState<StudySection[]>([]);
+  const [contentError, setContentError] = useState("");
   const [activeSectionId, setActiveSectionId] = useState("");
   const [activeCardId, setActiveCardId] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
@@ -120,23 +81,21 @@ export default function StudyTab({
     Promise.allSettled([studyPlansApi.getActive(), catalogApi.studyLibrary()])
       .then(([planResult, libraryResult]) => {
         if (!active) return;
-        setSections((current) => {
-          const remote =
-            planResult.status === "fulfilled"
-              ? settingsObject(planResult.value.settings).studySections
-              : null;
-          const fromPlan = Array.isArray(remote)
-            ? mergeCurrentPlanContent(current, remote as StudySection[])
-            : current;
-          const merged =
-            libraryResult.status === "fulfilled"
-              ? mergeSharedStudyLibrary(fromPlan, libraryResult.value)
-              : fromPlan;
-          localStorage.setItem("custom_study_sections", JSON.stringify(merged));
-          return merged;
-        });
+        const remote = planResult.status === "fulfilled"
+          ? settingsObject(planResult.value.settings).studySections
+          : null;
+        if (!Array.isArray(remote)) {
+          setContentError("O plano ativo não possui material cadastrado no PostgreSQL.");
+          setSections([]);
+          return;
+        }
+        const merged = libraryResult.status === "fulfilled"
+          ? mergeSharedStudyLibrary(remote as StudySection[], libraryResult.value)
+          : remote as StudySection[];
+        setSections(merged);
+        setContentError("");
       })
-      .catch(() => {});
+      .catch(() => setContentError("Não foi possível carregar o material do PostgreSQL."));
     return () => {
       active = false;
     };
@@ -203,7 +162,7 @@ export default function StudyTab({
   if (!activeSection || !activeCard) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white py-12 text-center">
-        <p className="text-sm text-slate-500">Nenhum material disponível no plano atual.</p>
+        <p className="text-sm text-slate-500">{contentError || "Nenhum material disponível no plano atual."}</p>
       </div>
     );
   }

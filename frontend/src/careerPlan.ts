@@ -1,8 +1,14 @@
-import { COURSES_CONFIG, CoursePlanConfig, CourseTopic, DISCURSIVE_TOPIC_ID, generateCustomPlan } from './data/generator';
-import { API_BASE_URL, questionsApi, scheduleApi, studyPlansApi } from './services/api';
-import { Question, StudySection } from './types';
+import { scheduleApi, studyPlansApi } from './services/api';
+import { StudySection } from './types';
 
 export type CareerContestId = string;
+
+export interface CourseTopic {
+  id: string;
+  title: string;
+  category: string;
+  subtopics: string[];
+}
 
 export interface StudyPreferences {
   selectedWeekdays: number[];
@@ -12,6 +18,7 @@ export interface StudyPreferences {
 }
 
 export interface CareerRole {
+  databaseId?: string;
   id: string;
   label: string;
   courseId: string;
@@ -26,6 +33,7 @@ export interface CareerRole {
 }
 
 export interface CareerContest {
+  databaseId?: string;
   id: CareerContestId;
   label: string;
   acronym: string;
@@ -42,71 +50,12 @@ export interface CareerContest {
   location: string;
   stages: string;
   noticeReference: string;
+  noticePdfAvailable?: boolean;
+  noticePdfName?: string;
+  noticePdfSize?: number;
+  noticePdfUpdatedAt?: string;
   roles: CareerRole[];
 }
-
-export const CAREER_CONTESTS: CareerContest[] = [
-  {
-    id: 'policia_civil',
-    label: 'Polícia Civil de Alagoas',
-    acronym: 'PC-AL',
-    organization: 'Polícia Civil do Estado de Alagoas',
-    description: 'Carreiras policiais do Estado de Alagoas.',
-    board: 'CEBRASPE', examDate: '2026-12-06', status: 'Inscrições abertas', state: 'Alagoas',
-    area: 'Segurança Pública', education: 'Nível superior', vacancies: 'Conforme edital',
-    remuneration: 'Conforme o cargo e o edital', location: 'Estado de Alagoas',
-    stages: 'Prova objetiva e demais etapas previstas para a carreira policial.',
-    noticeReference: 'Edital da Polícia Civil de Alagoas cadastrado no sistema.',
-    roles: [
-      { id: 'pc-agente', label: 'Agente de Polícia Civil', courseId: 'policial_civil', board: 'CEBRASPE' },
-      { id: 'pc-escrivao', label: 'Escrivão de Polícia Civil', courseId: 'policial_civil', board: 'CEBRASPE' },
-    ],
-  },
-  {
-    id: 'fapeal',
-    label: 'FAPEAL',
-    acronym: 'FAPEAL',
-    organization: 'Fundação de Amparo à Pesquisa do Estado de Alagoas',
-    description: 'Fundação de Amparo à Pesquisa do Estado de Alagoas.',
-    board: 'CEBRASPE', examDate: '2026-08-16', status: 'Prova próxima', state: 'Alagoas',
-    area: 'Ciência, Tecnologia e Gestão', education: 'Nível superior específico', vacancies: 'Conforme edital',
-    remuneration: 'Conforme o cargo e o edital', location: 'Alagoas',
-    stages: 'Prova objetiva e etapas previstas no edital da fundação.',
-    noticeReference: 'Edital FAPEAL 2026 cadastrado no sistema.',
-    roles: [
-      { id: 'fapeal-jornalismo', label: 'Gestor Especializado em Ciência e Tecnologia — Jornalismo', courseId: 'jornalismo', board: 'CEBRASPE', includeDiscursive: true },
-      { id: 'fapeal-ti', label: 'Gestor Especializado em Ciência e Tecnologia — Tecnologia da Informação', courseId: 'seplag_informatica', board: 'CEBRASPE', includeDiscursive: true },
-    ],
-  },
-  {
-    id: 'sesau_al',
-    label: 'SESAU AL',
-    acronym: 'SESAU-AL',
-    organization: 'Secretaria de Estado da Saúde de Alagoas',
-    description: 'Secretaria de Estado da Saúde de Alagoas.',
-    board: 'CEBRASPE', examDate: '2026-11-01', status: 'Prova agendada', state: 'Alagoas', area: 'Saúde',
-    education: 'Nível técnico', vacancies: 'Conforme edital', remuneration: 'Conforme o cargo e o edital',
-    location: 'Estado de Alagoas', stages: 'Prova objetiva e demais etapas previstas no edital.',
-    noticeReference: 'Conteúdo programático da SESAU AL cadastrado no sistema.',
-    roles: [
-      { id: 'sesau-tecnico', label: 'Técnico em Enfermagem', courseId: 'tecnico_enfermagem', board: 'CEBRASPE', includeDiscursive: true },
-    ],
-  },
-  {
-    id: 'seplag',
-    label: 'SEPLAG',
-    acronym: 'SEPLAG-AL',
-    organization: 'Secretaria de Estado do Planejamento, Gestão e Patrimônio',
-    description: 'Secretaria de Estado do Planejamento, Gestão e Patrimônio.',
-    board: 'CEBRASPE', examDate: '2026-07-26', status: 'Prova realizada', state: 'Alagoas', area: 'Gestão e Tecnologia',
-    education: 'Nível superior específico', vacancies: 'Conforme edital', remuneration: 'Conforme o cargo e o edital',
-    location: 'Estado de Alagoas', stages: 'Prova objetiva e demais etapas previstas no edital.',
-    noticeReference: 'Conteúdo programático da SEPLAG cadastrado no sistema.',
-    roles: [
-      { id: 'seplag-especialista-ti', label: 'Especialista em Gestão Pública — Tecnologia da Informação', courseId: 'seplag_informatica', board: 'CEBRASPE', includeDiscursive: true },
-    ],
-  },
-];
 
 export const localTodayIso = () => {
   const now = new Date();
@@ -140,32 +89,23 @@ export const saveStudyPreferences = (preferences: StudyPreferences, userId?: str
   localStorage.setItem(preferencesStorageKey(userId), JSON.stringify({ ...preferences, blockMinutes: 60 }));
 };
 
-const shouldUseRemoteApi = () => {
-  const isLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-  return !(isLocalhost && /^https?:\/\//.test(API_BASE_URL));
-};
-
 const calculateStudyDays = (examDate: string, weekdays: number[]) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const exam = new Date(`${examDate}T00:00:00`);
   let count = 0;
   for (const date = new Date(today); date <= exam; date.setDate(date.getDate() + 1)) {
-    if (weekdays.includes(date.getDay())) count++;
+    if (weekdays.includes(date.getDay())) count += 1;
   }
   return count;
 };
 
-export const topicIdsForCareer = (contestId: CareerContestId, role: CareerRole) => {
-  const topics = topicsForCareerRole(role);
-  return topics
-    .filter(topic => topic.id !== 'legislacao_especifica_fapeal' || contestId === 'fapeal')
-    .filter(topic => topic.id !== DISCURSIVE_TOPIC_ID || role.includeDiscursive)
-    .map(topic => topic.id);
-};
+export const topicsForCareerRole = (role: CareerRole) => role.curriculum?.topics || [];
 
-export const topicsForCareerRole = (role:CareerRole) =>
-  role.curriculum?.topics?.length ? role.curriculum.topics : (COURSES_CONFIG[role.courseId]?.topics || []);
+export const topicIdsForCareer = (_contestId: CareerContestId, role: CareerRole) =>
+  topicsForCareerRole(role)
+    .filter(topic => topic.id !== 'atualidades_discursiva' || role.includeDiscursive)
+    .map(topic => topic.id);
 
 const weekdayName: Record<number, string> = {
   0: 'domingo', 1: 'segunda', 2: 'terca', 3: 'quarta', 4: 'quinta', 5: 'sexta', 6: 'sabado',
@@ -176,90 +116,76 @@ export async function createAutomaticCareerPlan(
   role: CareerRole,
   preferences: StudyPreferences,
 ) {
-  const blockMinutes = 60;
   if (!isContestAvailable(contest)) throw new Error('A prova deste concurso já foi realizada e a preparação não está mais disponível.');
-  const examDate = contest.examDate;
-  const roleTopics=topicsForCareerRole(role);
+  const topics = topicsForCareerRole(role);
+  const allSections = role.curriculum?.studySections || [];
+  if (topics.length === 0 || allSections.length === 0) {
+    throw new Error('O conteúdo programático deste cargo ainda não foi cadastrado no PostgreSQL.');
+  }
+
   const selectedTopicIds = topicIdsForCareer(contest.id, role);
-  const selectedSubtopicIds = roleTopics
+  const selectedSubtopicIds = topics
     .filter(topic => selectedTopicIds.includes(topic.id))
     .flatMap(topic => topic.subtopics.map(subtopic => `${topic.id}::${subtopic}`));
-  const totalDays = calculateStudyDays(examDate, preferences.selectedWeekdays);
-  let configOverride:CoursePlanConfig|undefined;
-  if(role.curriculum?.topics?.length&&role.curriculum.studySections?.length){
-    let questions:Question[]=[];
-    try{questions=await questionsApi.forCourse(role.courseId);}catch(error){console.warn('Questões remotas indisponíveis durante a criação do plano.',error);}
-    configOverride={name:role.label,description:`Edital cadastrado para ${contest.label}.`,topics:role.curriculum.topics,
-      studySections:role.curriculum.studySections,quizQuestions:questions};
-  }
-  const generated = generateCustomPlan(
-    role.courseId,
-    examDate,
-    totalDays,
-    preferences.hoursPerDay,
-    selectedTopicIds,
-    preferences.selectedWeekdays,
-    selectedSubtopicIds,
-    [],
-    configOverride,
+  const selectedSections = allSections.filter(section =>
+    selectedTopicIds.includes(section.id) ||
+    topics.some(topic => selectedTopicIds.includes(topic.id) && topic.title === section.title),
   );
-  if (!generated.success || generated.sections.length === 0) throw new Error('Não foi possível montar o conteúdo deste cargo.');
+  const studySections = selectedSections.length > 0 ? selectedSections : allSections;
+  const examDate = contest.examDate;
+  const totalDays = calculateStudyDays(examDate, preferences.selectedWeekdays);
+  const blockMinutes = 60;
 
-  let scheduleWeeks = generated.weeks;
-  let studyPlanId: string | null = null;
-  if (shouldUseRemoteApi()) {
-    const schedule = await scheduleApi.generate({
-      courseId: role.courseId,
-      examDate,
-      studyDays: preferences.selectedWeekdays.map(day => ({
-        day: weekdayName[day],
-        hours: preferences.hoursByWeekday[day] || preferences.hoursPerDay,
-      })),
-      studySections: generated.sections,
-      blockMinutes,
-    });
-    scheduleWeeks = schedule.scheduleWeeks;
+  const schedule = await scheduleApi.generate({
+    courseId: role.courseId,
+    examDate,
+    studyDays: preferences.selectedWeekdays.map(day => ({
+      day: weekdayName[day],
+      hours: preferences.hoursByWeekday[day] || preferences.hoursPerDay,
+    })),
+    studySections,
+    blockMinutes,
+  });
+  const scheduleWeeks = schedule.scheduleWeeks;
+  const payload = {
+    courseId: role.courseId,
+    title: role.label,
+    examDate,
+    hoursPerDay: preferences.hoursPerDay,
+    daysPerWeek: preferences.selectedWeekdays.length,
+    totalWeeks: scheduleWeeks.length,
+    blockMinutes,
+    breakMinutes: 10,
+    studySections,
+    scheduleWeeks,
+    settings: {
+      contest: contest.id,
+      catalogRoleId: role.databaseId,
+      examBoard: role.board,
+      targetRole: role.label,
+      selectedWeekdays: preferences.selectedWeekdays,
+      hoursByWeekday: preferences.hoursByWeekday,
+      hasDiscursiveExam: Boolean(role.includeDiscursive),
+      automaticCurriculum: true,
+    },
+  };
 
-    const payload = {
-      courseId: role.courseId,
-      title: role.label,
-      examDate,
-      hoursPerDay: preferences.hoursPerDay,
-      daysPerWeek: preferences.selectedWeekdays.length,
-      totalWeeks: scheduleWeeks.length,
-      blockMinutes,
-      breakMinutes: 10,
-      studySections: generated.sections,
-      scheduleWeeks,
-      settings: {
-        contest: contest.id,
-        examBoard: role.board,
-        targetRole: role.label,
-        selectedWeekdays: preferences.selectedWeekdays,
-        hoursByWeekday: preferences.hoursByWeekday,
-        hasDiscursiveExam: Boolean(role.includeDiscursive),
-        automaticCurriculum: true,
-      },
-    };
-    let existingPlanId: string | null = null;
-    try {
-      const existing = JSON.parse(localStorage.getItem(`${role.courseId}_study_config`) || '{}');
-      if (existing.examDate >= localTodayIso() && existing.contest === contest.id) existingPlanId = existing.studyPlanId || null;
-    } catch {}
-    if (!existingPlanId) {
-      const reusable = (await studyPlansApi.getAll(false)).find(plan =>
-        (plan.course_id || plan.courseId) === role.courseId &&
-        (plan.exam_date || plan.examDate) === examDate &&
-        plan.title === role.label
-      );
-      existingPlanId = reusable?.id || null;
-    }
-    const plan = existingPlanId && !String(existingPlanId).startsWith('local-')
-      ? await studyPlansApi.update(existingPlanId, payload)
-      : await studyPlansApi.create(payload);
-    await studyPlansApi.activate(plan.id);
-    studyPlanId = plan.id;
+  let existingPlanId: string | null = null;
+  try {
+    const existing = JSON.parse(localStorage.getItem(`${role.courseId}_study_config`) || '{}');
+    if (existing.examDate >= localTodayIso() && existing.contest === contest.id) existingPlanId = existing.studyPlanId || null;
+  } catch {}
+  if (!existingPlanId) {
+    const reusable = (await studyPlansApi.getAll(false)).find(plan =>
+      (plan.course_id || plan.courseId) === role.courseId &&
+      (plan.exam_date || plan.examDate) === examDate && plan.title === role.label,
+    );
+    existingPlanId = reusable?.id || null;
   }
+  const plan = existingPlanId && !String(existingPlanId).startsWith('local-')
+    ? await studyPlansApi.update(existingPlanId, payload)
+    : await studyPlansApi.create(payload);
+  await studyPlansApi.activate(plan.id);
 
   const config = {
     examDate,
@@ -276,21 +202,21 @@ export async function createAutomaticCareerPlan(
     selectedTopics: selectedTopicIds,
     selectedSubtopics: selectedSubtopicIds,
     automaticCurriculum: true,
-    studyPlanId,
+    studyPlanId: plan.id,
   };
 
   localStorage.removeItem('study_plan_deleted');
-  localStorage.setItem(`${role.courseId}_study_sections`, JSON.stringify(generated.sections));
-  localStorage.setItem(`${role.courseId}_quiz_questions`, JSON.stringify(generated.questions));
-  localStorage.setItem(`${role.courseId}_schedule_weeks`, JSON.stringify(scheduleWeeks));
   localStorage.setItem(`${role.courseId}_study_config`, JSON.stringify(config));
+  localStorage.removeItem(`${role.courseId}_study_sections`);
+  localStorage.removeItem(`${role.courseId}_schedule_weeks`);
+  localStorage.removeItem(`${role.courseId}_quiz_questions`);
   localStorage.removeItem(`${role.courseId}_study_schedule_progress`);
   localStorage.removeItem(`${role.courseId}_quiz_answers`);
   localStorage.setItem('active_course', role.courseId);
-  localStorage.setItem('custom_study_sections', JSON.stringify(generated.sections));
-  localStorage.setItem('custom_quiz_questions', JSON.stringify(generated.questions));
-  localStorage.setItem('custom_schedule_weeks', JSON.stringify(scheduleWeeks));
   localStorage.setItem('study_config', JSON.stringify(config));
+  localStorage.removeItem('custom_study_sections');
+  localStorage.removeItem('custom_schedule_weeks');
+  localStorage.removeItem('custom_quiz_questions');
   localStorage.removeItem('study_schedule_progress');
   localStorage.removeItem('quiz_answers');
   localStorage.removeItem('quiz_answer_history');

@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import java.sql.Types;
 import java.util.*;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -33,29 +34,47 @@ public class QuestionController {
         p.title passage_title,p.content passage_content,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('label',qo.label,'text',qo.content) ORDER BY qo.position)
           FROM question_options qo WHERE qo.question_id=q.id),'[]'::jsonb)::text options
-        FROM questions q LEFT JOIN subjects s ON s.id=q.subject_id LEFT JOIN passages p ON p.id=q.passage_id
-        WHERE q.metadata->>'courseId'=:course AND q.status IN('ACTIVE','ANNULLED') ORDER BY q.created_at,q.id
+        FROM questions q JOIN question_courses qc ON qc.question_id=q.id
+        LEFT JOIN subjects s ON s.id=q.subject_id LEFT JOIN passages p ON p.id=q.passage_id
+        WHERE qc.course_id=:course AND q.status IN('ACTIVE','ANNULLED') ORDER BY q.created_at,q.id
         """).param("course",courseId).query().listOfRows();
     }
-    @PostMapping("/import/legacy") public Map<String,Object> importLegacy(@RequestParam String courseId,@RequestBody List<LegacyQuestion> questions){
+    @PostMapping("/import/legacy") @Transactional public Map<String,Object> importLegacy(@RequestParam String courseId,@RequestBody List<LegacyQuestion> questions){
       currentUser.requireAdmin();
-      int imported=0,updated=0;
+      int imported=0,updated=0,linked=0;
       for(var q:questions){
         String legacyId=String.valueOf(q.id());
-        var existing=jdbc.sql("SELECT id FROM questions WHERE metadata->>'courseId'=:course AND metadata->>'legacyId'=:legacy LIMIT 1")
+        var existing=jdbc.sql("SELECT question_id FROM question_course_legacy_ids WHERE course_id=:course AND legacy_id=:legacy LIMIT 1")
           .param("course",courseId).param("legacy",legacyId).query(UUID.class).list();
         String answer;try{answer=json.writeValueAsString(q.correct());}catch(Exception e){throw new IllegalArgumentException("Gabarito inválido");}
-        String metadata;try{metadata=json.writeValueAsString(Map.of("courseId",courseId,"legacyId",legacyId,"category",q.category(),"topic",q.topic()==null||q.topic().isBlank()?q.category():q.topic(),"reference",q.reference()==null?"":q.reference(),"passageId",q.passageId()==null?"":q.passageId()));}catch(Exception e){throw new IllegalArgumentException("Metadados inválidos");}
+        String metadata;try{metadata=json.writeValueAsString(Map.of("category",q.category(),"topic",q.topic()==null||q.topic().isBlank()?q.category():q.topic(),"reference",q.reference()==null?"":q.reference(),"passageId",q.passageId()==null?"":q.passageId()));}catch(Exception e){throw new IllegalArgumentException("Metadados inválidos");}
         String status="Anulada".equalsIgnoreCase(q.correct())?"ANNULLED":"ACTIVE";
         if(existing.isEmpty()){
-          jdbc.sql("INSERT INTO questions(id,board,type,statement,explanation,status,correct_answer,metadata) VALUES(gen_random_uuid(),'CEBRASPE','TRUE_FALSE',:text,:explanation,:status,CAST(:answer AS jsonb),CAST(:metadata AS jsonb))")
-            .param("text",q.text()).param("explanation",q.explanation()).param("status",status).param("answer",answer).param("metadata",metadata).update();imported++;
+          var sameStatement=jdbc.sql("""
+            SELECT id FROM questions WHERE md5(regexp_replace(lower(statement),'[^[:alnum:]]','','g'))
+              =md5(regexp_replace(lower(:statement),'[^[:alnum:]]','','g')) LIMIT 1
+            """).param("statement",q.text()).query(UUID.class).list();
+          UUID questionId;
+          if(sameStatement.isEmpty()){
+            questionId=jdbc.sql("INSERT INTO questions(id,board,type,statement,explanation,status,correct_answer,metadata) VALUES(gen_random_uuid(),'CEBRASPE','TRUE_FALSE',:text,:explanation,:status,CAST(:answer AS jsonb),CAST(:metadata AS jsonb)) RETURNING id")
+              .param("text",q.text()).param("explanation",q.explanation()).param("status",status).param("answer",answer).param("metadata",metadata).query(UUID.class).single();imported++;
+          }else{questionId=sameStatement.getFirst();linked++;}
+          attachCourse(questionId,courseId,legacyId);
         }else{
           jdbc.sql("UPDATE questions SET statement=:text,explanation=:explanation,status=:status,correct_answer=CAST(:answer AS jsonb),metadata=CAST(:metadata AS jsonb),updated_at=now() WHERE id=:id")
             .param("text",q.text()).param("explanation",q.explanation()).param("status",status).param("answer",answer).param("metadata",metadata).param("id",existing.getFirst()).update();updated++;
         }
       }
-      return Map.of("imported",imported,"updated",updated,"total",questions.size());
+      return Map.of("imported",imported,"linked",linked,"updated",updated,"total",questions.size());
+    }
+
+    private void attachCourse(UUID questionId,String courseId,String legacyId){
+      jdbc.sql("INSERT INTO question_courses(question_id,course_id) VALUES(:question,:course) ON CONFLICT DO NOTHING")
+        .param("question",questionId).param("course",courseId.trim()).update();
+      jdbc.sql("""
+        INSERT INTO question_course_legacy_ids(question_id,course_id,legacy_id) VALUES(:question,:course,:legacy)
+        ON CONFLICT(course_id,legacy_id) DO UPDATE SET question_id=EXCLUDED.question_id
+        """).param("question",questionId).param("course",courseId.trim()).param("legacy",legacyId).update();
     }
 
     @PostMapping("/reports")

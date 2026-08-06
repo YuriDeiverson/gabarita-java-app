@@ -15,7 +15,8 @@ public class AnalyticsController {
   private static final String ATTEMPTS = """
     WITH attempts AS (
       SELECT qp.answered_at,qp.is_correct correct,
-        COALESCE(event_topic.title,NULLIF(qp.topic_title,''),q.metadata->>'topic',q.metadata->>'category','Geral') topic,'QUESTIONS' source,0 time_seconds
+        COALESCE(event_topic.title,NULLIF(qp.topic_title,''),q.metadata->>'topic',q.metadata->>'category','Geral') topic,
+        COALESCE(event_topic.subject_name,q.metadata->>'category','Geral') area,'QUESTIONS' source,0 time_seconds
       FROM quiz_answer_events qp
       JOIN study_plans sp ON sp.id=qp.study_plan_id
       LEFT JOIN roadmap_topics event_topic ON event_topic.id=qp.roadmap_topic_id
@@ -25,13 +26,27 @@ public class AnalyticsController {
         AND qp.roadmap_topic_id IS NULL AND qp.answered_at>=CURRENT_DATE-:days
       UNION ALL
       SELECT a.answered_at,COALESCE(a.correct,false),
-        COALESCE(q.metadata->>'topic',q.metadata->>'category','Geral'),'SIMULATION',a.time_spent_seconds
+        COALESCE(q.metadata->>'topic',q.metadata->>'category','Geral'),
+        COALESCE(q.metadata->>'category','Geral'),'SIMULATION',a.time_spent_seconds
       FROM answers a JOIN simulations s ON s.id=a.simulation_id LEFT JOIN questions q ON q.id=a.question_id
       WHERE a.user_id=:user AND (CAST(:planId AS uuid) IS NULL OR s.plan_id=CAST(:planId AS uuid))
         AND a.answered_at>=CURRENT_DATE-:days
+      UNION ALL
+      SELECT session_answer.answered_at,session_answer.correct,
+        COALESCE(session_topic.title,q.metadata->>'topic',q.metadata->>'category','Geral'),
+        COALESCE(session_topic.subject_name,q.metadata->>'category','Geral'),'QUESTIONS',0
+      FROM question_session_answers session_answer
+      JOIN study_sessions question_session ON question_session.id=session_answer.session_id
+      LEFT JOIN roadmap_topics session_topic ON session_topic.id=question_session.roadmap_topic_id
+      LEFT JOIN questions q ON q.id=CASE WHEN session_answer.question_id ~*
+        '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN session_answer.question_id::uuid ELSE NULL END
+      WHERE question_session.user_id=:user AND question_session.status='COMPLETED'
+        AND (CAST(:planId AS uuid) IS NULL OR question_session.plan_id=CAST(:planId AS uuid))
+        AND session_answer.answered_at>=CURRENT_DATE-:days
     ), session_attempts AS (
       SELECT ss.ended_at answered_at,ss.questions_answered answered,ss.correct_answers correct,
-        GREATEST(0,ss.questions_answered-ss.correct_answers) wrong,rt.title topic,ss.effective_seconds time_seconds
+        GREATEST(0,ss.questions_answered-ss.correct_answers) wrong,rt.title topic,rt.subject_name area,
+        ss.effective_seconds time_seconds
       FROM study_sessions ss JOIN roadmap_topics rt ON rt.id=ss.roadmap_topic_id
       WHERE ss.user_id=:user AND ss.session_kind='STUDY' AND ss.status='COMPLETED'
         AND (CAST(:planId AS uuid) IS NULL OR ss.plan_id=CAST(:planId AS uuid))
@@ -80,14 +95,14 @@ public class AnalyticsController {
 
     var evolution=jdbc.sql(ATTEMPTS+"""
       , daily AS (
-        SELECT answered_at::date day,COUNT(*) answered,COUNT(*) FILTER(WHERE correct) correct,
+        SELECT CAST(answered_at AS date) activity_day,COUNT(*) answered,COUNT(*) FILTER(WHERE correct) correct,
           COUNT(*) FILTER(WHERE NOT correct) wrong FROM attempts GROUP BY 1
         UNION ALL
-        SELECT answered_at::date,SUM(answered),SUM(correct),SUM(wrong) FROM session_attempts GROUP BY 1
+        SELECT CAST(answered_at AS date),SUM(answered),SUM(correct),SUM(wrong) FROM session_attempts GROUP BY 1
       )
-      SELECT day,SUM(answered) answered,SUM(correct) correct,SUM(wrong) wrong,
+      SELECT activity_day AS day,SUM(answered) answered,SUM(correct) correct,SUM(wrong) wrong,
         CASE WHEN SUM(answered)=0 THEN 0 ELSE ROUND(100.0*SUM(correct)/SUM(answered),1) END accuracy
-      FROM daily GROUP BY day ORDER BY day
+      FROM daily GROUP BY activity_day ORDER BY activity_day
       """).params(params).query().listOfRows();
 
     var byTopic=jdbc.sql(ATTEMPTS+"""
@@ -102,13 +117,31 @@ public class AnalyticsController {
       FROM topic_totals GROUP BY topic ORDER BY accuracy DESC,answered DESC,studied_seconds DESC
       """).params(params).query().listOfRows();
 
+    var byArea=jdbc.sql(ATTEMPTS+"""
+      , area_totals AS (
+        SELECT area,COUNT(*) answered,COUNT(*) FILTER(WHERE correct) correct,
+          COUNT(*) FILTER(WHERE NOT correct) wrong,0::bigint studied_seconds FROM attempts GROUP BY area
+        UNION ALL
+        SELECT area,SUM(answered),SUM(correct),SUM(wrong),SUM(time_seconds) FROM session_attempts GROUP BY area
+      )
+      SELECT area,SUM(answered) answered,SUM(correct) correct,SUM(wrong) wrong,SUM(studied_seconds) studied_seconds,
+        CASE WHEN SUM(answered)=0 THEN 0 ELSE ROUND(100.0*SUM(correct)/SUM(answered),1) END accuracy
+      FROM area_totals GROUP BY area ORDER BY correct DESC,accuracy DESC,answered DESC
+      """).params(params).query().listOfRows();
+
     var strong=byTopic.stream().filter(row->number(row,"answered")>=1&&number(row,"accuracy")>=70).limit(5).toList();
-    var weak=byTopic.stream().filter(row->number(row,"answered")>=1&&number(row,"accuracy")<70)
-      .sorted(Comparator.comparingDouble(row->number(row,"accuracy"))).limit(5).toList();
+    var weak=byTopic.stream().filter(row->number(row,"wrong")>=1)
+      .sorted(Comparator.<Map<String,Object>>comparingDouble(row->number(row,"wrong")).reversed()
+        .thenComparingDouble(row->number(row,"accuracy"))).limit(5).toList();
+    var strongAreas=byArea.stream().filter(row->number(row,"answered")>=1).limit(5).toList();
+    var weakAreas=byArea.stream().filter(row->number(row,"wrong")>=1)
+      .sorted(Comparator.<Map<String,Object>>comparingDouble(row->number(row,"wrong")).reversed()
+        .thenComparingDouble(row->number(row,"accuracy"))).limit(5).toList();
     Object recommendation=weak.isEmpty()?null:weak.getFirst();
 
     var result=new LinkedHashMap<String,Object>();
     result.put("periodDays",range);result.put("summary",summary);result.put("evolution",evolution);result.put("byTopic",byTopic);
+    result.put("byArea",byArea);result.put("strongAreas",strongAreas);result.put("weakAreas",weakAreas);
     result.put("strongTopics",strong);result.put("weakTopics",weak);result.put("recommendation",recommendation);
     return result;
   }

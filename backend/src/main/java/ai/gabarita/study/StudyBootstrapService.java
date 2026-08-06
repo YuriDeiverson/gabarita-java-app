@@ -195,6 +195,8 @@ public class StudyBootstrapService {
         contentNode.put("learningTrack", section.path("learningTrack").asText(""));
         contentNode.put("learningOrder", section.path("learningOrder").asInt(Integer.MAX_VALUE));
         String content = contentNode.toString();
+        String objective=card.path("studyObjective").asText("").trim();
+        if(objective.isBlank())objective="Dominar os conceitos essenciais e aplicá-los com segurança em questões de prova.";
         return jdbc.sql("""
             INSERT INTO roadmap_topics(id,plan_id,module_id,source_key,subject_name,title,description,objective,
               content,position,prerequisite_id,planned_minutes,recommended_questions,minimum_accuracy,difficulty,priority,active)
@@ -208,7 +210,7 @@ public class StudyBootstrapService {
                 .param("subject", section.path("title").asText("Disciplina"))
                 .param("title", card.path("title").asText("Assunto"))
                 .param("description", section.path("paretoJustification").asText(null))
-                .param("objective", "Dominar os conceitos essenciais e aplicá-los com segurança em questões de prova.")
+                .param("objective", objective)
                 .param("content", content).param("position", position).param("prerequisite", prerequisite)
                 .param("minutes", blockMinutes).param("difficulty", difficulty(section.path("difficulty").asText()))
                 .param("priority", weight(section.path("weight").asText())).query(UUID.class).single();

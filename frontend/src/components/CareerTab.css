@@ -454,7 +454,30 @@
 
 .career-detail-grid dt { color: #94a3b8; }
 .career-detail-grid dd { color: #f8fafc; font-size: 13px; font-weight: 650; }
+.career-detail-grid a { color: #bfdbfe; text-decoration: underline; text-underline-offset: 3px; }
 .career-detail-wide { grid-column: span 2; }
+
+.career-notice-actions {
+  display: flex;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgb(148 163 184 / .22);
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.career-notice-actions > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.career-notice-actions > div > svg { width: 22px; flex: 0 0 22px; color: #93c5fd; }
+.career-notice-actions span { display: grid; min-width: 0; gap: 2px; }
+.career-notice-actions strong { color: #f8fafc; font-size: 13px; }
+.career-notice-actions small { overflow: hidden; color: #94a3b8; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 
 .career-role-card > h4 {
   margin-top: 16px !important;
@@ -627,12 +650,57 @@
 
 .career-modal-body .career-error { margin-top: 18px; }
 
+.career-creation-status {
+  display: flex;
+  min-height: 260px;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 32px;
+  text-align: left;
+  animation: career-creation-in .2s ease-out;
+}
+
+.career-creation-spinner {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+.career-creation-spinner svg {
+  width: 26px;
+  height: 26px;
+  animation: career-spin .8s linear infinite;
+}
+
+.career-creation-status strong {
+  display: block;
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.career-creation-status p {
+  margin-top: 4px !important;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .career-spinner {
   animation: career-spin .8s linear infinite;
 }
 
 @keyframes career-spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes career-creation-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
 }
 
 @media (max-width: 1080px) {
@@ -673,6 +741,8 @@
   .career-detail-head { flex-direction: column; }
   .career-detail-head .career-pill { max-width: 100%; }
   .app-content .career-detail-hero { padding: 22px 19px; border-radius: 14px !important; }
+  .career-notice-actions { align-items: stretch; flex-direction: column; }
+  .career-notice-actions .career-button { width: 100%; }
 
   .career-modal-backdrop {
     padding: 12px 10px max(10px, env(safe-area-inset-bottom));

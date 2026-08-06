@@ -1,12 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { quizQuestions } from '../data/quizData';
 import { QuestionAnswer, QuestionCategory, Question } from '../types';
-import { passages } from '../data/passagesData';
 import { QuestionNote, questionsApi, quizProgressApi } from '../services/api';
 import { CheckCircle2, XCircle, Filter, Sparkles, AlertCircle, Info, Bookmark, Flag, Target, ChevronDown, LoaderCircle, NotebookPen, Save, Trash2 } from 'lucide-react';
-import { ActiveStudyContext, findContextCard, normalizeStudyText, questionRelevance } from '../studyContext';
-import { studySections } from '../data/studyData';
+import { ActiveStudyContext, normalizeStudyText, questionRelevance } from '../studyContext';
 import { filterQuestionsByBoards, questionBoardsFromConfig, questionExamBoard } from '../questionBanks';
 
 interface QuizTabProps {
@@ -18,81 +15,6 @@ interface QuizTabProps {
 }
 
 export interface GuidedReviewResult { topicTitle:string; subjectName:string; answered:number; correct:number; wrong:number; accuracy:number; }
-
-const normalizeQuestionText = (value: string) => value
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
-  .replace(/\s+/g, ' ')
-  .trim()
-  .toLowerCase();
-
-const preservePassages = (remoteQuestions: Question[], localQuestions: Question[]) => {
-  const localByText = new Map(
-    [...quizQuestions, ...localQuestions].map(question => [normalizeQuestionText(question.text), question])
-  );
-
-  return remoteQuestions.map(question => {
-    const localQuestion = localByText.get(normalizeQuestionText(question.text));
-    const passageId = question.passageId || localQuestion?.passageId;
-    const catalogPassage = passageId ? passages[passageId] : undefined;
-
-    return {
-      ...question,
-      topic: question.topic && question.topic !== question.category ? question.topic : (localQuestion?.topic || question.topic),
-      passageId,
-      passageTitle: question.passageTitle || localQuestion?.passageTitle || catalogPassage?.title,
-      passageContent: question.passageContent || localQuestion?.passageContent || catalogPassage?.content,
-      options: question.options?.length ? question.options : localQuestion?.options,
-    };
-  });
-};
-
-const mergeQuestionBanks=(primary:Question[],secondary:Question[])=>{
-  const seen=new Set<string>();
-  return [...primary,...secondary].filter(question=>{const key=normalizeQuestionText(question.text);if(seen.has(key))return false;seen.add(key);return true;});
-};
-
-const readPlanQuestionBank=()=>{
-  const course=localStorage.getItem('active_course')||'seplag_informatica';
-  for(const key of [`${course}_quiz_questions`,'custom_quiz_questions']){
-    const saved=localStorage.getItem(key);
-    if(saved===null)continue;
-    try{
-      const parsed=JSON.parse(saved);
-      if(Array.isArray(parsed))return {configured:true,questions:parsed as Question[]};
-    }catch(error){console.warn(`Banco de questões inválido em ${key}.`,error);}
-  }
-  return {configured:false,questions:[] as Question[]};
-};
-
-const topicGeneratedQuestions=(context:ActiveStudyContext):Question[]=>{
-  let sections=studySections;
-  try{const saved=localStorage.getItem('custom_study_sections');if(saved)sections=JSON.parse(saved);}catch{}
-  const match=findContextCard(sections,context);
-  if(!match)return [];
-  const plain=String(match.card.content||'').replace(/<[^>]+>/g,' ').replace(/&[a-z]+;/gi,' ')
-    .replace(/\s+/g,' ').trim();
-  const contentFacts=plain.split(/(?<=[.!?;:])\s+/).map(value=>value.trim()).filter(value=>value.length>=35&&value.length<=360);
-  const facts=[...(match.card.keyTakeaways||[]),...contentFacts].map(String).filter(Boolean);
-  if(facts.length===0)return [];
-  const key=String(context.roadmapTopicId||normalizeStudyText(context.topicTitle)).replace(/[^a-zA-Z0-9-]/g,'-');
-  return Array.from({length:200},(_,index)=>{
-    const fact=facts[index%facts.length];
-    const correct=index%2===0;
-    const round=Math.floor(index/facts.length)+1;
-    return {
-      id:`guided-${key}-${index+1}`,category:context.subjectName,topic:context.topicTitle,
-      text:correct
-        ? `[${context.topicTitle}] Julgue o item ${round}: ${fact}`
-        : `[${context.topicTitle}] Julgue o item ${round}: o enunciado “${fact}” não integra os fundamentos deste assunto e deve ser desconsiderado.`,
-      correct:correct?'Certo':'Errado',
-      explanation:correct
-        ? `Certo. Esse ponto faz parte do conteúdo estudado em ${context.topicTitle}.`
-        : `Errado. O enunciado citado integra diretamente os fundamentos de ${context.topicTitle}.`,
-      reference:`Revisão guiada — ${context.topicTitle}`
-    } as Question;
-  });
-};
 
 const belongsToExactTopic=(question:Question,context:ActiveStudyContext)=>{
   const searchable=normalizeStudyText([question.topic,question.reference,question.text].filter(Boolean).join(' '));
@@ -162,11 +84,8 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     }
     return [];
   },[]);
-  const [questions, setQuestions] = useState<Question[]>(() => {
-    const planBank=readPlanQuestionBank();
-    const available=planBank.configured?planBank.questions:quizQuestions;
-    return filterQuestionsByBoards(available,selectedQuestionBoards);
-  });
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [questionsError, setQuestionsError] = useState('');
 
   const [answers, setAnswers] = useState<{ [key: string]: QuestionAnswer }>(() => {
     const saved = localStorage.getItem('quiz_answers');
@@ -225,26 +144,17 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
 
   useEffect(() => {
     const courseId = localStorage.getItem('active_course');
-    if (!courseId) return;
+    if (!courseId) {
+      setQuestionsError('Nenhum curso ativo foi selecionado.');
+      return;
+    }
     questionsApi.forCourse(courseId).then(remoteQuestions => {
-      if (remoteQuestions.length > 0) {
-        setQuestions(localQuestions => {
-          const planBank=readPlanQuestionBank();
-          const allowedIds=new Set(planBank.questions.map(question=>String(question.id)));
-          const allowedTexts=new Set(planBank.questions.map(question=>normalizeQuestionText(question.text)));
-          const scopedRemoteQuestions=planBank.configured
-            ? remoteQuestions.filter(question=>allowedIds.has(String(question.id))||allowedTexts.has(normalizeQuestionText(question.text)))
-            : remoteQuestions;
-          const reconciledQuestions = preservePassages(scopedRemoteQuestions, localQuestions);
-          const available=filterQuestionsByBoards(
-            mergeQuestionBanks(reconciledQuestions,localQuestions),
-            selectedQuestionBoards
-          );
-          localStorage.setItem('active_quiz_questions_cache', JSON.stringify(available));
-          return available;
-        });
-      }
-    }).catch(error => console.warn('Banco de questões indisponível; usando conteúdo offline.', error));
+      setQuestions(filterQuestionsByBoards(remoteQuestions, selectedQuestionBoards));
+      setQuestionsError(remoteQuestions.length ? '' : 'Ainda não há questões cadastradas para este curso.');
+    }).catch(cause => {
+      setQuestions([]);
+      setQuestionsError(cause instanceof Error ? cause.message : 'Não foi possível carregar as questões do PostgreSQL.');
+    });
   }, [selectedQuestionBoards]);
 
   useEffect(()=>{
@@ -343,11 +253,7 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
   };
 
   const handleAnswer = async (questionId: number | string, option: QuestionAnswer) => {
-    const question = questions.find(q => String(q.id) === String(questionId))
-      || (mode==='session'&&studyContext
-        ? filterQuestionsByBoards(topicGeneratedQuestions(studyContext),selectedQuestionBoards)
-            .find(q=>String(q.id)===String(questionId))
-        : undefined);
+    const question = questions.find(q => String(q.id) === String(questionId));
     if (!question) return;
     if (question.correct === 'Anulada') return;
 
@@ -369,11 +275,6 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
       const savedHistory = JSON.parse(localStorage.getItem('quiz_answer_history') || '{}');
       savedHistory[String(questionId)] = { answer: option, answeredAt: new Date().toISOString() };
       localStorage.setItem('quiz_answer_history', JSON.stringify(savedHistory));
-      const events = JSON.parse(localStorage.getItem('quiz_answer_events') || '[]');
-      let planId = null;
-      try { planId = JSON.parse(localStorage.getItem('study_config') || '{}').studyPlanId || null; } catch {}
-      events.push({ questionId: String(questionId), answer: option, answeredAt: new Date().toISOString(), planId, courseId: localStorage.getItem('active_course') });
-      localStorage.setItem('quiz_answer_events', JSON.stringify(events.slice(-5000)));
     } catch (error) {
       console.warn('Não foi possível atualizar o histórico local da resposta.', error);
     }
@@ -404,12 +305,10 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     const precise=questions.filter(question=>question.correct!=='Anulada'&&belongsToExactTopic(question,studyContext))
       .map(question=>({question,score:questionRelevance(question,studyContext)}))
       .sort((a,b)=>b.score-a.score).map(item=>item.question);
-    const generated=filterQuestionsByBoards(topicGeneratedQuestions(studyContext),selectedQuestionBoards);
-    const available=mergeQuestionBanks(precise,generated);
-    const byId=new Map(available.map(question=>[String(question.id),question]));
+    const byId=new Map(precise.map(question=>[String(question.id),question]));
     const restored=draftQuestionIds.map(id=>byId.get(id)).filter((question):question is Question=>Boolean(question));
     const restoredIds=new Set(restored.map(question=>String(question.id)));
-    const fresh=available.filter(question=>!restoredIds.has(String(question.id))&&!usedBeforeCycle.has(String(question.id)));
+    const fresh=precise.filter(question=>!restoredIds.has(String(question.id))&&!usedBeforeCycle.has(String(question.id)));
     return [...restored,...fresh].slice(0,20);
   },[mode,questions,studyContext,usedBeforeCycle,draftQuestionIds,selectedQuestionBoards]);
 
@@ -613,7 +512,7 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
       <div className="questions-list space-y-4">
         {filteredQuestions.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-xl border border-slate-100">
-            <p className="text-slate-500 text-sm">Nenhuma questão encontrada para os filtros selecionados.</p>
+            <p className="text-slate-500 text-sm">{questionsError || 'Nenhuma questão encontrada para os filtros selecionados.'}</p>
           </div>
         ) : (
           filteredQuestions.slice(0, visibleQuestions).map((q, index) => {
@@ -671,14 +570,14 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
                 </div>
 
                 {/* The passage is part of the question and must remain visible while answering. */}
-                {q.passageId && (q.passageContent || passages[q.passageId]) && (
+                {q.passageId && q.passageContent && (
                   <div className="question-passage px-5 py-4 border-b border-slate-100 text-xs leading-relaxed text-slate-600">
                     <div className="question-passage-title font-bold flex items-center gap-1 mb-1.5">
                       <Info className="w-3.5 h-3.5" />
-                      <span>{q.passageTitle || passages[q.passageId]?.title || 'Texto de apoio'}</span>
+                      <span>{q.passageTitle || 'Texto de apoio'}</span>
                     </div>
                     <div className="question-passage-content whitespace-pre-wrap">
-                      {q.passageContent || passages[q.passageId]?.content}
+                      {q.passageContent}
                     </div>
                   </div>
                 )}
@@ -827,5 +726,3 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     </div>
   );
 }
-
-export { quizQuestions };

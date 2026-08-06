@@ -2,9 +2,14 @@ package ai.gabarita.admin;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.*;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -16,15 +21,29 @@ public class CatalogController {
     @GetMapping("/contests")
     public List<Map<String,Object>> contests(){return catalog(false);}
 
+    @GetMapping("/contests/{id}/notice-pdf")
+    public ResponseEntity<byte[]> noticePdf(@PathVariable UUID id){
+        var rows=jdbc.sql("SELECT notice_pdf,notice_pdf_name FROM catalog_contests WHERE id=:id AND notice_pdf IS NOT NULL")
+          .param("id",id).query().listOfRows();
+        if(rows.isEmpty())throw new NoSuchElementException("Edital em PDF não encontrado");
+        var row=rows.getFirst();
+        byte[] content=(byte[])row.get("notice_pdf");String filename=String.valueOf(row.get("notice_pdf_name"));
+        var disposition=ContentDisposition.inline().filename(filename,StandardCharsets.UTF_8).build();
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF).contentLength(content.length)
+          .header(HttpHeaders.CONTENT_DISPOSITION,disposition.toString()).body(content);
+    }
+
     @GetMapping("/study-library")
     public List<Map<String,Object>> studyLibrary(){
         var rows=jdbc.sql("""
-          SELECT id::text id,canonical_key,title,discipline,base_content,key_takeaways::text key_takeaways_json,
-            content_blocks::text content_blocks_json,updated_at FROM shared_study_subjects ORDER BY discipline,title
+          SELECT id::text id,canonical_key,title,discipline,study_group,study_objective,review_summary::text review_summary_json,
+            base_content,key_takeaways::text key_takeaways_json,content_blocks::text content_blocks_json,updated_at
+          FROM shared_study_subjects ORDER BY study_group,discipline,title
           """).query().listOfRows();var result=new ArrayList<Map<String,Object>>();
         for(var row:rows){var item=new LinkedHashMap<String,Object>();item.put("id",row.get("id"));item.put("canonicalKey",row.get("canonical_key"));
-            item.put("title",row.get("title"));item.put("discipline",row.get("discipline"));item.put("content",row.get("base_content"));
+            item.put("title",row.get("title"));item.put("discipline",row.get("discipline"));item.put("studyGroup",row.get("study_group"));item.put("studyObjective",row.get("study_objective"));item.put("content",row.get("base_content"));
             try{item.put("keyTakeaways",json.readTree(String.valueOf(row.get("key_takeaways_json"))));}catch(Exception ignored){item.put("keyTakeaways",List.of());}
+            try{item.put("reviewSummary",json.readTree(String.valueOf(row.get("review_summary_json"))));}catch(Exception ignored){item.put("reviewSummary",List.of());}
             try{item.put("contentBlocks",json.readTree(String.valueOf(row.get("content_blocks_json"))));}catch(Exception ignored){item.put("contentBlocks",List.of());}
             item.put("updatedAt",row.get("updated_at"));result.add(item);}return result;
     }
@@ -32,7 +51,8 @@ public class CatalogController {
     List<Map<String,Object>> catalog(boolean includeInactive){
         var contests=jdbc.sql("""
           SELECT id,code,label,acronym,organization,description,board,exam_date,status,state,area,education,
-            vacancies,remuneration,location,stages,notice_reference,active
+            vacancies,remuneration,location,stages,notice_reference,active,
+            notice_pdf IS NOT NULL notice_pdf_available,notice_pdf_name,notice_pdf_size,notice_pdf_updated_at
           FROM catalog_contests
           WHERE (:all OR active AND exam_date>=(now() AT TIME ZONE 'America/Maceio')::date)
           ORDER BY exam_date,label
@@ -60,7 +80,9 @@ public class CatalogController {
         item.put("board",row.get("board"));item.put("examDate",date(row.get("exam_date")).toString());item.put("status",row.get("status"));
         item.put("state",row.get("state"));item.put("area",row.get("area"));item.put("education",row.get("education"));
         item.put("vacancies",row.get("vacancies"));item.put("remuneration",row.get("remuneration"));item.put("location",row.get("location"));
-        item.put("stages",row.get("stages"));item.put("noticeReference",row.get("notice_reference"));item.put("active",row.get("active"));return item;
+        item.put("stages",row.get("stages"));item.put("noticeReference",row.get("notice_reference"));item.put("active",row.get("active"));
+        item.put("noticePdfAvailable",row.get("notice_pdf_available"));item.put("noticePdfName",row.get("notice_pdf_name"));
+        item.put("noticePdfSize",row.get("notice_pdf_size"));item.put("noticePdfUpdatedAt",row.get("notice_pdf_updated_at"));return item;
     }
     Map<String,Object> role(Map<String,Object> row,UUID contestId){
         var item=new LinkedHashMap<String,Object>();item.put("databaseId",String.valueOf(row.get("id")));item.put("contestDatabaseId",contestId.toString());

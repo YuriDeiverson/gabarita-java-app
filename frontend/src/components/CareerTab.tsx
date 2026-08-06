@@ -2,13 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ArrowLeft, BookOpenCheck, BriefcaseBusiness, ChevronRight, Clock3,
-  GraduationCap, ListChecks, LoaderCircle, Search, ShieldCheck, SlidersHorizontal, Trash2, X,
+  FileText, GraduationCap, ListChecks, LoaderCircle, Search, ShieldCheck, SlidersHorizontal, Trash2, X,
 } from 'lucide-react';
 import {
-  CAREER_CONTESTS, CareerContest, CareerRole, StudyPreferences, createAutomaticCareerPlan,
+  CareerContest, CareerRole, StudyPreferences, createAutomaticCareerPlan,
   isContestAvailable, localTodayIso, topicIdsForCareer, topicsForCareerRole,
 } from '../careerPlan';
-import { COURSES_CONFIG } from '../data/generator';
 import { CatalogContest, StudyPlan, catalogApi, studyPlansApi } from '../services/api';
 import './CareerTab.css';
 
@@ -33,43 +32,39 @@ interface Preparation {
   studyPlanId?: string;
 }
 
-const baseCourseIds = ['seplag_informatica', 'policial_civil', 'tecnico_enfermagem', 'jornalismo'];
 const weekdayLabels: Record<number, string> = { 0: 'domingo', 1: 'segunda', 2: 'terça', 3: 'quarta', 4: 'quinta', 5: 'sexta', 6: 'sábado' };
 const formatDate = (value?: string) => value ? value.split('-').reverse().join('/') : 'A definir';
 const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const remainingDays = (examDate: string) => Math.max(0, Math.ceil((new Date(`${examDate}T00:00:00`).getTime() - Date.now()) / 86_400_000));
 
-const loadPreparations = (contests: CareerContest[], courseIds: string[], remotePlans: StudyPlan[] = []): Preparation[] => courseIds.flatMap(courseId => {
+const planSettings = (plan: StudyPlan) => {
   try {
-    const config = JSON.parse(localStorage.getItem(`${courseId}_study_config`) || 'null');
-    const weeks = JSON.parse(localStorage.getItem(`${courseId}_schedule_weeks`) || '[]');
-    if (!config || !config.examDate || config.examDate < localTodayIso()) return [];
-    const contest = contests.find(item => item.id === config.contest)
-      || contests.find(item => item.roles.some(role => role.courseId === courseId));
-    if (!contest) return [];
-    const blocks = weeks.flatMap((week: { blocks?: Record<string, unknown>[] }) => week.blocks || []);
-    const progress = JSON.parse(localStorage.getItem(`${courseId}_study_schedule_progress`) || '{}');
-    const completed = blocks.filter((block: Record<string, unknown>) => Boolean(progress[String(block.id)] || block.done)).length;
-    const next = blocks.find((block: Record<string, unknown>) => !progress[String(block.id)] && !block.done);
-    const remotePlan = remotePlans.find(plan => String(plan.id) === String(config.studyPlanId));
-    const remoteTotal = Number(remotePlan?.total_topics || 0);
-    const calculatedProgress = remoteTotal > 0
-      ? Math.round(Math.min(remoteTotal, Number(remotePlan?.completed_topics || 0)) / remoteTotal * 100)
-      : blocks.length ? Math.round(completed / blocks.length * 100) : 0;
-    return [{
-      courseId,
-      title: config.targetRole || COURSES_CONFIG[courseId]?.name || contest.label,
-      contest,
-      examDate: config.examDate,
-      board: config.examBoard || contest.board,
-      progress: calculatedProgress,
-      nextStudy: String(next?.title || 'Plano concluído ou aguardando atualização'),
-      remainingDays: remainingDays(config.examDate),
-      studyPlanId: config.studyPlanId || undefined,
-    }];
-  } catch {
-    return [];
-  }
+    const root = typeof plan.settings === 'string' ? JSON.parse(plan.settings) : plan.settings || {};
+    return typeof root.preferences === 'object' && root.preferences ? root.preferences as Record<string, unknown> : root;
+  } catch { return {} as Record<string, unknown>; }
+};
+
+const loadPreparations = (contests: CareerContest[], remotePlans: StudyPlan[] = []): Preparation[] => remotePlans.flatMap(plan => {
+  const courseId = String(plan.course_id || plan.courseId || '');
+  const examDate = String(plan.exam_date || plan.examDate || '');
+  if (!courseId || !examDate || examDate < localTodayIso()) return [];
+  const settings = planSettings(plan);
+  const contest = contests.find(item => item.id === settings.contest)
+    || contests.find(item => item.roles.some(role => role.courseId === courseId));
+  if (!contest) return [];
+  const total = Number(plan.total_topics || 0);
+  const completed = Math.min(total, Math.max(0, Number(plan.completed_topics || 0)));
+  return [{
+    courseId,
+    title: String(settings.targetRole || plan.title || contest.roles.find(role => role.courseId === courseId)?.label || contest.label),
+    contest,
+    examDate,
+    board: String(settings.examBoard || contest.board),
+    progress: total > 0 ? Math.round(completed / total * 100) : 0,
+    nextStudy: completed >= total && total > 0 ? 'Plano concluído' : 'Continuar preparação',
+    remainingDays: remainingDays(examDate),
+    studyPlanId: plan.id,
+  }];
 });
 
 export default function CareerTab({
@@ -91,17 +86,19 @@ export default function CareerTab({
   const [boardFilter, setBoardFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [openingNoticePdf, setOpeningNoticePdf] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      studyPlansApi.getAll(false).catch(() => []),
-      catalogApi.contests().catch(() => [] as CatalogContest[]),
-    ]).then(([plans, catalog]) => {
-      if (cancelled) return;
-      setRemotePlans(plans);
-      setRemoteContests(catalog as CareerContest[]);
-    });
+    Promise.all([studyPlansApi.getAll(false), catalogApi.contests()])
+      .then(([plans, catalog]) => {
+        if (cancelled) return;
+        setRemotePlans(plans);
+        setRemoteContests(catalog as CareerContest[]);
+      })
+      .catch(cause => {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : 'Não foi possível carregar o catálogo do PostgreSQL.');
+      });
     return () => { cancelled = true; };
   }, [preparationVersion]);
 
@@ -119,13 +116,9 @@ export default function CareerTab({
     };
   },[filtersOpen]);
 
-  const allContests = useMemo(() => {
-    const merged = new Map<string, CareerContest>(CAREER_CONTESTS.map(item => [item.id, item]));
-    remoteContests.forEach(item => merged.set(item.id, item));
-    return [...merged.values()];
-  }, [remoteContests]);
-  const courseIds = useMemo(() => [...new Set([...baseCourseIds, ...allContests.flatMap(item => item.roles.map(role => role.courseId))])], [allContests]);
-  const preparations = useMemo(() => loadPreparations(allContests, courseIds, remotePlans), [allContests, courseIds, preparationVersion, remotePlans]);
+  const allContests = remoteContests;
+  const courseIds = useMemo(() => [...new Set(allContests.flatMap(item => item.roles.map(role => role.courseId)))], [allContests]);
+  const preparations = useMemo(() => loadPreparations(allContests, remotePlans), [allContests, preparationVersion, remotePlans]);
   const availableContests = useMemo(() => allContests.filter(item => isContestAvailable(item)), [allContests]);
   const filteredContests = useMemo(() => availableContests.filter(item => {
     const searchable = normalize([item.label, item.acronym, item.organization, ...item.roles.map(role => role.label)].join(' '));
@@ -167,13 +160,15 @@ export default function CareerTab({
       if (preparation.studyPlanId && !String(preparation.studyPlanId).startsWith('local-')) {
         await studyPlansApi.activate(preparation.studyPlanId);
       }
-      ['study_sections', 'quiz_questions', 'schedule_weeks', 'study_config', 'study_schedule_progress', 'quiz_answers'].forEach(key => {
-        const value = localStorage.getItem(`${preparation.courseId}_${key}`);
-        const activeKey = key === 'study_sections' ? 'custom_study_sections'
-          : key === 'quiz_questions' ? 'custom_quiz_questions'
-          : key === 'schedule_weeks' ? 'custom_schedule_weeks' : key;
-        if (value) localStorage.setItem(activeKey, value); else localStorage.removeItem(activeKey);
-      });
+      const activeConfig = {
+        studyPlanId: preparation.studyPlanId,
+        examDate: preparation.examDate,
+        examBoard: preparation.board,
+        contest: preparation.contest.id,
+        targetRole: preparation.title,
+      };
+      localStorage.setItem('study_config', JSON.stringify(activeConfig));
+      localStorage.setItem(`${preparation.courseId}_study_config`, JSON.stringify(activeConfig));
       localStorage.setItem('active_course', preparation.courseId);
       localStorage.removeItem('study_plan_deleted');
       onPlanGenerated(preparation.courseId);
@@ -191,7 +186,7 @@ export default function CareerTab({
     setError('');
     try {
       if (preparation.studyPlanId && !String(preparation.studyPlanId).startsWith('local-')) await studyPlansApi.delete(preparation.studyPlanId);
-      ['study_sections', 'quiz_questions', 'schedule_weeks', 'study_config', 'study_schedule_progress', 'quiz_answers']
+      ['study_sections', 'schedule_weeks', 'study_config', 'study_schedule_progress', 'quiz_answers']
         .forEach(key => localStorage.removeItem(`${preparation.courseId}_${key}`));
       if (localStorage.getItem('active_course') === preparation.courseId) {
         ['active_course', 'custom_study_sections', 'custom_quiz_questions', 'custom_schedule_weeks', 'study_config',
@@ -213,6 +208,26 @@ export default function CareerTab({
       setError(cause instanceof Error ? cause.message : 'Não foi possível remover esta preparação.');
     } finally {
       setBusyPreparation('');
+    }
+  };
+
+  const openContestNoticePdf = async () => {
+    if (!contest?.databaseId || openingNoticePdf) return;
+    setOpeningNoticePdf(true);
+    setError('');
+    try {
+      const blob = await catalogApi.contestNoticePdf(contest.databaseId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível abrir o edital em PDF.');
+    } finally {
+      setOpeningNoticePdf(false);
     }
   };
 
@@ -369,8 +384,37 @@ export default function CareerTab({
               <div><dt>Remuneração</dt><dd>{contest.remuneration}</dd></div>
               <div><dt>Local</dt><dd>{contest.location}</dd></div>
               <div className="career-detail-wide"><dt>Etapas</dt><dd>{contest.stages}</dd></div>
-              <div><dt>Referência</dt><dd>{contest.noticeReference}</dd></div>
+              {contest.noticeReference && (
+                <div>
+                  <dt>Referência</dt>
+                  <dd>
+                    {/^https?:\/\//i.test(contest.noticeReference) ? (
+                      <a href={contest.noticeReference} target="_blank" rel="noreferrer">Acessar referência externa</a>
+                    ) : contest.noticeReference}
+                  </dd>
+                </div>
+              )}
             </dl>
+            {contest.noticePdfAvailable && contest.databaseId && (
+              <div className="career-notice-actions">
+                <div>
+                  <FileText aria-hidden="true" />
+                  <span>
+                    <strong>Edital disponível</strong>
+                    <small>{contest.noticePdfName || 'edital.pdf'}</small>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="career-button career-button-secondary"
+                  disabled={openingNoticePdf}
+                  onClick={() => void openContestNoticePdf()}
+                >
+                  {openingNoticePdf ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <FileText aria-hidden="true" />}
+                  {openingNoticePdf ? 'Abrindo edital…' : 'Abrir edital em PDF'}
+                </button>
+              </div>
+            )}
           </article>
 
           <div className="career-section-heading">
@@ -392,7 +436,7 @@ export default function CareerTab({
                     <div className="career-meta-wide"><dt>Requisito</dt><dd>{role.requirement || contest.education}</dd></div>
                     <div><dt>Remuneração</dt><dd>{role.remuneration || contest.remuneration}</dd></div>
                     <div><dt>Vagas</dt><dd>{role.vacancies || contest.vacancies}</dd></div>
-                    <div className="career-meta-wide"><dt>Disciplinas básicas</dt><dd>{basic.map(topic => topic.title.replace('Conhecimentos Específicos: ', '')).join(', ') || 'Conforme edital'}</dd></div>
+                    <div className="career-meta-wide"><dt>Disciplinas gerais</dt><dd>{basic.map(topic => topic.title.replace('Conhecimentos Específicos: ', '')).join(', ') || 'Conforme edital'}</dd></div>
                     <div className="career-meta-wide"><dt>Disciplinas específicas</dt><dd>{specific.map(topic => topic.title.replace('Conhecimentos Específicos: ', '')).join(', ') || 'Conforme edital'}</dd></div>
                     <div><dt>Assuntos estimados</dt><dd>{topicCount}</dd></div>
                     <div><dt>Carga estimada</dt><dd>{estimatedHours} horas</dd></div>
@@ -420,6 +464,18 @@ export default function CareerTab({
               </button>
             </div>
 
+            {creatingRole ? (
+              <div className="career-creation-status" role="status" aria-live="polite">
+                <span className="career-creation-spinner" aria-hidden="true">
+                  <LoaderCircle />
+                </span>
+                <div>
+                  <strong>Criando preparação…</strong>
+                  <p>Aguente só um momento.</p>
+                </div>
+              </div>
+            ) : (
+              <>
             <div className="career-modal-body">
               <dl className="career-modal-summary">
                 <div><dt>Prova em</dt><dd>{formatDate(contest.examDate)}</dd></div>
@@ -455,6 +511,8 @@ export default function CareerTab({
                 {creatingRole ? 'Criando preparação…' : 'Criar preparação'}
               </button>
             </div>
+              </>
+            )}
           </section>
         </div>,
         document.body,

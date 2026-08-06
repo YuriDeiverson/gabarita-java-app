@@ -507,7 +507,8 @@ public class ScheduleEngine {
     private record TopicChoice(Section section,JsonNode card,double score){private String title(){return card==null?section.title():card.path("title").asText(section.title());}}
     private record PoliceAllocation(String group,int minutes){}
     private static final class ScaledAllocation{private final String group;private int units;private final double remainder;private final int position;private ScaledAllocation(String group,int units,double remainder,int position){this.group=group;this.units=units;this.remainder=remainder;this.position=position;}private String group(){return group;}private double remainder(){return remainder;}private int position(){return position;}}
-    private List<String> reviewPoints(Object content){try{return textItems(json.readTree(String.valueOf(content)).path("keyTakeaways"));}catch(Exception ignored){return List.of();}}
+    private List<String> reviewPoints(Object content){try{JsonNode root=json.readTree(String.valueOf(content));var summary=textItems(root.path("reviewSummary"));
+        return summary.isEmpty()?textItems(root.path("keyTakeaways")):summary;}catch(Exception ignored){return List.of();}}
     private String activityTitle(String activity,boolean optional,String fallback){return switch(activity){
         case "QUESTIONS"->optional?"Questões extras do dia":"Questões comentadas";
         case "SIMULATION"->"Simulado cronometrado";

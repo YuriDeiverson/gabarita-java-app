@@ -27,17 +27,20 @@ public class StudyPlanService {
                 WHERE sp.user_id=:u AND (:a OR sp.status<>'ARCHIVED')
                 ORDER BY sp.is_primary DESC,sp.updated_at DESC
                 """)
-                .param("u", user).param("a", archived).query().listOfRows();
+                .param("u", user).param("a", archived).query().listOfRows().stream()
+                .map(this::serializeSettings).toList();
     }
     Map<String,Object> one(UUID id, UUID user) {
         return jdbc.sql("SELECT *, is_primary AS is_active FROM study_plans WHERE id=:id AND user_id=:u")
                 .param("id",id).param("u",user).query().listOfRows().stream().findFirst()
+                .map(this::serializeSettings)
                 .orElseThrow(() -> new NoSuchElementException("Plano não encontrado"));
     }
     Map<String,Object> active(UUID user) {
         archiveExpired(user);
         return jdbc.sql("SELECT *, is_primary AS is_active FROM study_plans WHERE user_id=:u AND is_primary AND status='ACTIVE'")
-                .param("u",user).query().listOfRows().stream().findFirst().orElseThrow(() -> new NoSuchElementException("Nenhum plano principal ativo"));
+                .param("u",user).query().listOfRows().stream().findFirst().map(this::serializeSettings)
+                .orElseThrow(() -> new NoSuchElementException("Nenhum plano principal ativo"));
     }
 
     @Transactional Map<String,Object> create(UUID user, PlanRequest r) {
@@ -124,5 +127,10 @@ public class StudyPlanService {
     private java.time.LocalDate today(){return java.time.LocalDate.now(java.time.ZoneId.of("America/Maceio"));}
     private void validate(PlanRequest r) { if(!r.examDate().isAfter(today())) throw new IllegalArgumentException("A data da prova deve ser futura"); if(r.availability()!=null) r.availability().forEach(a->{if(!a.endTime().isAfter(a.startTime())) throw new IllegalArgumentException("O fim da disponibilidade deve ser posterior ao início");}); }
     private int or(Integer value,int fallback){return value==null?fallback:value;}
+    private Map<String,Object> serializeSettings(Map<String,Object> plan) {
+        var result = new LinkedHashMap<String,Object>(plan);
+        if (result.get("settings") != null) result.put("settings", String.valueOf(result.get("settings")));
+        return result;
+    }
     private String settings(PlanRequest r) { try { var root=json.createObjectNode(); if(r.settings()!=null) root.set("preferences",r.settings()); if(r.studySections()!=null) root.set("studySections",r.studySections()); if(r.scheduleWeeks()!=null) root.set("legacyScheduleWeeks",r.scheduleWeeks()); if(r.hoursPerDay()!=null) root.put("hoursPerDay",r.hoursPerDay()); if(r.daysPerWeek()!=null) root.put("daysPerWeek",r.daysPerWeek()); return json.writeValueAsString(root); } catch(JsonProcessingException e){throw new IllegalArgumentException("Configuração inválida");} }
 }

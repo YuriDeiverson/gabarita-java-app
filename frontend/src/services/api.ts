@@ -482,6 +482,32 @@ const jsonRequest = async <T>(path: string, options?: RequestInit): Promise<T> =
   }
 };
 
+const fileRequest = async <T extends Blob | Record<string, unknown> | void>(
+  path: string,
+  options?: RequestInit,
+  responseType: 'blob' | 'json' | 'none' = 'json',
+): Promise<T> => {
+  const controller = new AbortController();
+  let timeout = 0;
+  try {
+    const response = await Promise.race([
+      fetch(`${API_BASE_URL}${path}`, { ...options, signal: options?.signal || controller.signal }),
+      new Promise<Response>((_, reject) => {
+        timeout = window.setTimeout(() => {
+          controller.abort();
+          reject(new Error('A API demorou mais de 20 segundos para responder. Verifique o backend e tente novamente.'));
+        }, 20_000);
+      }),
+    ]);
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'A operação não foi concluída'));
+    if (responseType === 'none' || response.status === 204) return undefined as T;
+    if (responseType === 'blob') return response.blob() as Promise<T>;
+    return response.json();
+  } finally {
+    window.clearTimeout(timeout);
+  }
+};
+
 export interface CatalogRole {
   databaseId?: string;
   contestDatabaseId?: string;
@@ -516,6 +542,10 @@ export interface CatalogContest {
   location: string;
   stages: string;
   noticeReference: string;
+  noticePdfAvailable?: boolean;
+  noticePdfName?: string;
+  noticePdfSize?: number;
+  noticePdfUpdatedAt?: string;
   active?: boolean;
   roles: CatalogRole[];
 }
@@ -525,6 +555,9 @@ export interface SharedStudySubject {
   canonicalKey: string;
   title: string;
   discipline: string;
+  studyGroup: string;
+  studyObjective: string;
+  reviewSummary: string[];
   content: string;
   keyTakeaways: string[];
   contentBlocks: Array<{id:string;title:string;content:string;keyTakeaways?:string[];createdAt?:string}>;
@@ -553,14 +586,20 @@ export interface AdminQuestionReport {
 
 export const catalogApi = {
   contests: () => jsonRequest<CatalogContest[]>('/catalog/contests'),
+  contestNoticePdf: (id:string) => fileRequest<Blob>(`/catalog/contests/${id}/notice-pdf`, undefined, 'blob'),
   studyLibrary: () => jsonRequest<SharedStudySubject[]>('/catalog/study-library'),
 };
 
 export const adminApi = {
   catalog: () => jsonRequest<CatalogContest[]>('/admin/catalog'),
-  createContest: (data: Record<string,unknown>) => jsonRequest('/admin/catalog/contests', { method:'POST',body:JSON.stringify(data) }),
-  updateContest: (id:string,data:Record<string,unknown>) => jsonRequest(`/admin/catalog/contests/${id}`, { method:'PUT',body:JSON.stringify(data) }),
+  createContest: (data: Record<string,unknown>) => jsonRequest<{id:string}>('/admin/catalog/contests', { method:'POST',body:JSON.stringify(data) }),
+  updateContest: (id:string,data:Record<string,unknown>) => jsonRequest<{id:string}>(`/admin/catalog/contests/${id}`, { method:'PUT',body:JSON.stringify(data) }),
   deleteContest: (id:string) => jsonRequest<void>(`/admin/catalog/contests/${id}`, { method:'DELETE' }),
+  uploadContestNoticePdf: (id:string,file:File) => {
+    const data=new FormData();data.append('file',file);
+    return fileRequest<{noticePdfAvailable:boolean;noticePdfName:string;noticePdfSize:number}>(`/admin/catalog/contests/${id}/notice-pdf`, {method:'PUT',body:data});
+  },
+  deleteContestNoticePdf: (id:string) => fileRequest<void>(`/admin/catalog/contests/${id}/notice-pdf`, {method:'DELETE'}, 'none'),
   createRole: (data:Record<string,unknown>) => jsonRequest('/admin/catalog/roles', { method:'POST',body:JSON.stringify(data) }),
   updateRole: (id:string,data:Record<string,unknown>) => jsonRequest(`/admin/catalog/roles/${id}`, { method:'PUT',body:JSON.stringify(data) }),
   deleteRole: (id:string) => jsonRequest<void>(`/admin/catalog/roles/${id}`, { method:'DELETE' }),
@@ -576,6 +615,11 @@ export const adminApi = {
   deleteBaseStudyMaterial: (roleId:string,sectionId:string,cardId:string) => {
     const params=new URLSearchParams({sectionId,cardId});return jsonRequest<void>(`/admin/catalog/roles/${roleId}/materials/base?${params}`, {method:'DELETE'});
   },
+  createSharedSubject: (data:{title:string;discipline:string;studyGroup:string;studyObjective:string;reviewSummary:string[]}) =>
+    jsonRequest<{id:string;title:string;discipline:string;studyGroup:string}>('/admin/catalog/subjects', {method:'POST',body:JSON.stringify(data)}),
+  updateSharedSubject: (id:string,data:{discipline:string;studyGroup:string;studyObjective:string;reviewSummary:string[]}) =>
+    jsonRequest<{id:string;title:string;synchronizedPlans:number}>(`/admin/catalog/subjects/${id}`, {method:'PUT',body:JSON.stringify(data)}),
+  deleteSharedSubject: (id:string) => jsonRequest<void>(`/admin/catalog/subjects/${id}`, {method:'DELETE'}),
   createStudyDiscipline: (roleId:string,title:string) =>
     jsonRequest<{id:string;title:string}>(`/admin/catalog/roles/${roleId}/disciplines`, {method:'POST',body:JSON.stringify({title})}),
   createStudySubject: (roleId:string,sectionId:string,title:string) =>

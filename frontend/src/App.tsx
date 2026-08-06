@@ -89,10 +89,7 @@ const hasActiveStudyPlan = () =>
       return Boolean(
         courseId &&
         examDate >= today &&
-        localStorage.getItem(`${courseId}_study_config`) &&
-        localStorage.getItem(`${courseId}_study_sections`) &&
-        localStorage.getItem(`${courseId}_quiz_questions`) &&
-        localStorage.getItem(`${courseId}_schedule_weeks`),
+        localStorage.getItem(`${courseId}_study_config`),
       );
     })(),
   );
@@ -835,6 +832,7 @@ export default function App() {
     { id: "roles", label: "Editais e cargos", icon: UsersRound },
     { id: "passages", label: "Textos de apoio", icon: BookOpenText },
     { id: "questions", label: "Questões", icon: FileQuestion },
+    { id: "subjects", label: "Biblioteca de assuntos", icon: BookOpenText },
     { id: "materials", label: "Materiais de estudo", icon: LibraryBig },
   ];
   const userFirstName = String(
@@ -1520,13 +1518,42 @@ export default function App() {
     if (!Number.isFinite(target)) return null;
     return Math.ceil((target - Date.now()) / 86_400_000);
   })();
-  const contextualNextTask =
+  const contextualCurrentTask = activeHeaderSession?.daily_task_id
+    ? headerStudyData?.tasks?.find(
+        (task) => task.id === activeHeaderSession.daily_task_id,
+      )
+    : undefined;
+  const contextualScheduledCurrentTask =
+    contextualCurrentTask ||
     headerStudyData?.tasks?.find((task) =>
       ["AVAILABLE", "IN_PROGRESS"].includes(task.status),
     ) ||
     headerStudyData?.tasks?.find(
       (task) => !["COMPLETED", "SKIPPED"].includes(task.status),
     );
+  const contextualNextTask = contextualScheduledCurrentTask;
+  const contextualCurrentTaskIndex = contextualScheduledCurrentTask
+    ? (headerStudyData?.tasks?.findIndex(
+        (task) => task.id === contextualScheduledCurrentTask.id,
+      ) ?? -1)
+    : -1;
+  const contextualHomeNextTask = headerStudyData?.tasks?.find(
+    (task, index) =>
+      index > contextualCurrentTaskIndex &&
+      !["COMPLETED", "SKIPPED"].includes(task.status),
+  );
+  const contextualAlert = headerStudyData?.notifications?.find(
+    (notification) =>
+      notification.priority === "HIGH" && !notification.read_at,
+  );
+  const contextualStreak = Math.max(
+    0,
+    Number(headerStudyData?.streak?.current_streak || 0),
+  );
+  const contextualStudiedDays = Math.max(
+    0,
+    Number(headerStudyData?.streak?.studied_days_month || 0),
+  );
   const contextualProgress = Math.max(
     0,
     Math.min(
@@ -1552,8 +1579,38 @@ export default function App() {
 
       {hasPlan ? (
         <>
+          {activeTab === "home" && (
+            <>
+              <section className="context-next-card context-home-card" aria-label="Próxima atividade">
+                <div className="context-card-heading">
+                  <div>
+                    <span>Próxima atividade</span>
+                    <strong>Após a sessão atual</strong>
+                  </div>
+                  <BookOpen aria-hidden="true" />
+                </div>
+                <h3>{String(contextualHomeNextTask?.topic_title || "Nenhuma atividade depois desta")}</h3>
+                <p>{String(contextualHomeNextTask?.subject_name || "Conclua a sessão atual para atualizar a próxima atividade.")}</p>
+              </section>
+
+              <section className="context-home-streak-card" aria-label="Sequência de estudos">
+                <Flame aria-hidden="true" />
+                <div>
+                  <span>Sequência de estudos</span>
+                  <strong>{contextualStreak} {contextualStreak === 1 ? "dia" : "dias"}</strong>
+                  <p>{contextualStudiedDays} {contextualStudiedDays === 1 ? "dia estudado" : "dias estudados"} neste mês</p>
+                </div>
+              </section>
+
+              <section className="context-home-alert-card" aria-label="Alertas do edital">
+                <span className="context-card-label">Alertas do edital</span>
+                <h3>{String(contextualAlert?.title || (contextualExamDays === null ? "Data da prova a definir" : contextualExamDays <= 0 ? "A prova é hoje" : `Faltam ${contextualExamDays} dias`))}</h3>
+                <p>{String(contextualAlert?.message || (contextualExamDate ? `Prova em ${contextualExamDate.split("-").reverse().join("/")}.` : "Defina a data da prova para receber alertas de prazo."))}</p>
+              </section>
+            </>
+          )}
           <section
-            className="context-primary-card"
+            className="context-primary-card context-default-card"
             aria-label="Preparação ativa"
           >
             <span className="context-card-label">Preparação ativa</span>
@@ -1581,7 +1638,7 @@ export default function App() {
           </section>
 
           <section
-            className="context-progress-card"
+            className="context-progress-card context-default-card"
             aria-label="Progresso de hoje"
           >
             <div className="context-card-heading">
@@ -1606,7 +1663,7 @@ export default function App() {
             </div>
           </section>
 
-          <section className="context-next-card" aria-label="Próxima atividade">
+          <section className="context-next-card context-default-card" aria-label="Próxima atividade">
             <div className="context-card-heading">
               <div>
                 <span>Próxima atividade</span>
@@ -1655,7 +1712,7 @@ export default function App() {
 
           {activeHeaderSession && (
             <section
-              className="context-session-card"
+              className="context-session-card context-default-card"
               aria-label="Sessão em andamento"
             >
               <span>
@@ -1677,7 +1734,7 @@ export default function App() {
             </section>
           )}
 
-          <nav className="context-shortcuts" aria-label="Atalhos">
+          <nav className="context-shortcuts context-default-card" aria-label="Atalhos">
             <span>Atalhos</span>
             <div>
               <button type="button" onClick={() => setActiveTab("schedule")}>
@@ -1747,7 +1804,7 @@ export default function App() {
 
   return (
     <div
-      className={`app-shell min-h-screen bg-slate-50 text-slate-800 flex flex-col ${hasPlan ? "has-plan" : "no-plan"} ${hasPlan || studyPreferences || isAdmin ? "has-desktop-navigation" : ""} ${showContextRail ? "has-context-rail" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${activeHeaderSession && activeTab !== "home" ? "has-active-timer" : ""}`}
+      className={`app-shell min-h-screen bg-slate-50 text-slate-800 flex flex-col ${hasPlan ? "has-plan" : "no-plan"} ${hasPlan || studyPreferences || isAdmin ? "has-desktop-navigation" : ""} ${showContextRail ? "has-context-rail" : ""} ${activeTab === "home" ? "is-home-tab" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${activeHeaderSession && activeTab !== "home" ? "has-active-timer" : ""}`}
     >
       <a className="skip-link" href="#main-content">
         Pular para o conteúdo principal

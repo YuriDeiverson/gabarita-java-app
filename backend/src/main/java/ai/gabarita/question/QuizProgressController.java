@@ -54,6 +54,10 @@ public class QuizProgressController {
         jdbc.sql("""
           INSERT INTO quiz_answer_events(id,study_plan_id,question_id,answer,is_correct,answered_at,roadmap_topic_id,topic_title)
           VALUES(gen_random_uuid(),:p,:q,:answer,:correct,now(),:topic,:title)
+          ON CONFLICT(study_plan_id,question_id) DO UPDATE
+          SET answer=EXCLUDED.answer,is_correct=EXCLUDED.is_correct,
+            roadmap_topic_id=COALESCE(EXCLUDED.roadmap_topic_id,quiz_answer_events.roadmap_topic_id),
+            topic_title=COALESCE(EXCLUDED.topic_title,quiz_answer_events.topic_title)
           """).param("p",r.studyPlanId()).param("q",String.valueOf(r.questionId())).param("answer",r.answer())
                 .param("correct",r.isCorrect()).param("topic",r.roadmapTopicId()).param("title",r.topicTitle()).update();
         return saved;

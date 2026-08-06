@@ -418,9 +418,12 @@ export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions
 
   if (loading && !dashboard)
     return (
-      <div className="daily-dashboard-loading">
-        <span />
-        <p>Montando sua agenda de estudos…</p>
+      <div className="daily-dashboard-loading schedule-initial-loading" role="status" aria-live="polite">
+        <span className="loading-mark" aria-hidden="true" />
+        <div>
+          <p>Carregando cronograma…</p>
+          <small>Aguarde um momento.</small>
+        </div>
       </div>
     );
   if (!dashboard)

@@ -7,18 +7,23 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import ReactCalendar from "react-calendar";
+import "react-calendar/dist/Calendar.css";
 import Select from "react-select";
 import CreatableSelect from "react-select/creatable";
 import {
   BookOpenText,
   Braces,
   Building2,
+  CalendarDays,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleHelp,
   Eye,
+  FileText,
   FileQuestion,
+  Filter,
   Flag,
   LibraryBig,
   LoaderCircle,
@@ -27,6 +32,7 @@ import {
   Save,
   Search,
   Trash2,
+  Upload,
   UsersRound,
   X,
 } from "lucide-react";
@@ -40,8 +46,6 @@ import {
   adminApi,
   catalogApi,
 } from "../services/api";
-import { CAREER_CONTESTS } from "../careerPlan";
-import { COURSES_CONFIG } from "../data/generator";
 import { normalizeStudyText } from "../studyContext";
 
 export type AdminSection =
@@ -49,6 +53,7 @@ export type AdminSection =
   | "roles"
   | "passages"
   | "questions"
+  | "subjects"
   | "materials";
 type Difficulty = "Fácil" | "Médio" | "Difícil";
 interface CurriculumDiscipline {
@@ -60,14 +65,14 @@ interface CurriculumDiscipline {
   highPriority: boolean;
   justification: string;
   subjectsText: string;
-  summary: string;
-  keyPointsText: string;
   existingMaterials: Record<
     string,
     {
       content: string;
       keyTakeaways: string[];
       contentBlocks?: unknown[];
+      studyObjective?: string;
+      reviewSummary?: string[];
       id?: string;
     }
   >;
@@ -85,6 +90,64 @@ const CREATE_SUBJECT_OPTION: SelectOption = {
   label: "+ Criar novo assunto",
 };
 
+const dateFromIso = (value: string) =>
+  value ? new Date(`${value}T12:00:00`) : null;
+const dateToIso = (value: Date) =>
+  `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+const dateToBrazilian = (value: string) =>
+  value ? value.split("-").reverse().join("/") : "";
+
+function ExamDatePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`date-input-with-picker ${open ? "is-open" : ""}`}>
+      <input
+        id="exam-date"
+        required
+        readOnly
+        className={inputClass}
+        value={dateToBrazilian(value)}
+        placeholder="dd/mm/aaaa"
+        aria-label="Data da prova no formato dia, mês e ano"
+        onClick={() => setOpen(true)}
+      />
+      <button
+        type="button"
+        className="date-picker-trigger"
+        aria-label="Abrir calendário da data da prova"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <CalendarDays aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="date-calendar-popover">
+          <ReactCalendar
+            locale="pt-BR"
+            value={dateFromIso(value)}
+            minDetail="month"
+            maxDetail="month"
+            onChange={(nextValue) => {
+              const selected = Array.isArray(nextValue)
+                ? nextValue[0]
+                : nextValue;
+              if (!selected) return;
+              onChange(dateToIso(selected));
+              setOpen(false);
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 const slugify = (value: string) =>
   value
     .normalize("NFD")
@@ -99,17 +162,29 @@ const subjectLines = (value: string) =>
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
+const normalizeStudyGroup = (value: string) =>
+  ["Conhecimentos Básicos", "Legislação"].includes(value.trim())
+    ? "Conhecimentos Gerais"
+    : value.trim() || "Conhecimentos Específicos";
+const weightNumber = (value: string) => {
+  const normalized = value.trim().replace("%", "").replace(",", ".");
+  if (!/^\d+(?:\.\d+)?$/.test(normalized)) return null;
+  const weight = Number(normalized);
+  return Number.isFinite(weight) ? weight : null;
+};
+const formattedWeight = (weight: number) =>
+  new Intl.NumberFormat("pt-BR", {
+    maximumFractionDigits: 2,
+  }).format(weight);
 const newDiscipline = (index = 0): CurriculumDiscipline => ({
   key: `new-${Date.now()}-${index}`,
   title: "",
   category: "Conhecimentos Específicos",
-  weight: "10%",
+  weight: "",
   difficulty: "Médio",
   highPriority: false,
   justification: "",
   subjectsText: "",
-  summary: "",
-  keyPointsText: "",
   existingMaterials: {},
 });
 const curriculumFromDisciplines = (disciplines: CurriculumDiscipline[]) => {
@@ -120,6 +195,16 @@ const curriculumFromDisciplines = (disciplines: CurriculumDiscipline[]) => {
     if (!subjectLines(item.subjectsText).length)
       throw new Error(`Adicione ao menos um assunto em “${item.title}”.`);
   });
+  const weights = valid.map((item) => weightNumber(item.weight));
+  if (weights.some((weight) => weight === null || weight <= 0))
+    throw new Error(
+      "Informe um peso maior que zero para cada disciplina do edital.",
+    );
+  const totalWeight = weights.reduce((total, weight) => total + (weight || 0), 0);
+  if (Math.abs(totalWeight - 100) > 0.01)
+    throw new Error(
+      `A distribuição dos pesos deve somar 100%. Total atual: ${formattedWeight(totalWeight)}%.`,
+    );
   const ids = new Set<string>();
   const prepared = valid.map((item, index) => {
     let id = slugify(item.title) || `disciplina_${index + 1}`;
@@ -131,7 +216,7 @@ const curriculumFromDisciplines = (disciplines: CurriculumDiscipline[]) => {
     topics: prepared.map(({ item, id, subjects }) => ({
       id,
       title: item.title.trim(),
-      category: item.category.trim() || "Conhecimentos Específicos",
+      category: normalizeStudyGroup(item.category),
       subtopics: subjects,
     })),
     studySections: prepared.map(({ item, id, subjects }) => ({
@@ -140,7 +225,7 @@ const curriculumFromDisciplines = (disciplines: CurriculumDiscipline[]) => {
       icon: "BookOpen",
       color: "blue",
       difficulty: item.difficulty,
-      weight: item.weight.trim() || "10%",
+      weight: `${formattedWeight(weightNumber(item.weight) || 0)}%`,
       paretoJustification:
         item.justification.trim() ||
         (item.highPriority
@@ -149,7 +234,6 @@ const curriculumFromDisciplines = (disciplines: CurriculumDiscipline[]) => {
       cards: subjects.map((title, index) => {
         const existing =
           item.existingMaterials[title.toLocaleLowerCase("pt-BR")];
-        const keyPoints = subjectLines(item.keyPointsText);
         return {
           id: existing?.id || `${id}_${slugify(title) || index + 1}`,
           title,
@@ -159,14 +243,13 @@ const curriculumFromDisciplines = (disciplines: CurriculumDiscipline[]) => {
           isQuente: item.highPriority,
           content: existing
             ? existing.content
-            : item.summary.trim() ||
-              `Estude os conceitos, regras e aplicações mais cobrados de ${title}.`,
+            : "",
           keyTakeaways: existing
             ? existing.keyTakeaways
-            : keyPoints.length
-              ? keyPoints
-              : [`Dominar os pontos principais de ${title}.`],
+            : [],
           contentBlocks: existing?.contentBlocks || [],
+          studyObjective: existing?.studyObjective || "",
+          reviewSummary: existing?.reviewSummary || [],
         };
       }),
     })),
@@ -200,17 +283,22 @@ const disciplinesFromCurriculum = (
           contentBlocks: Array.isArray(card.contentBlocks)
             ? card.contentBlocks
             : [],
+          studyObjective: String(card.studyObjective || ""),
+          reviewSummary: Array.isArray(card.reviewSummary)
+            ? card.reviewSummary.map(String)
+            : [],
         };
     });
     const subtopics = Array.isArray(topic.subtopics)
       ? topic.subtopics.map(String)
       : [];
-    const firstCard = cards[0];
     return {
       key: id || `existing-${index}`,
       title: String(topic.title || section.title || ""),
-      category: String(topic.category || "Conhecimentos Específicos"),
-      weight: String(section.weight || "10%"),
+      category: normalizeStudyGroup(
+        String(topic.category || "Conhecimentos Específicos"),
+      ),
+      weight: String(section.weight || ""),
       difficulty: (["Fácil", "Médio", "Difícil"].includes(
         String(section.difficulty),
       )
@@ -219,10 +307,6 @@ const disciplinesFromCurriculum = (
       highPriority: cards.some((card) => Boolean(card.isQuente)),
       justification: String(section.paretoJustification || ""),
       subjectsText: subtopics.join("\n"),
-      summary: String(firstCard?.content || ""),
-      keyPointsText: Array.isArray(firstCard?.keyTakeaways)
-        ? (firstCard.keyTakeaways as unknown[]).map(String).join("\n")
-        : "",
       existingMaterials: materials,
     };
   });
@@ -262,6 +346,13 @@ const emptyRole = {
   active: true,
 };
 const emptyPassage = { title: "", source: "", content: "" };
+const emptySharedSubjectForm = {
+  title: "",
+  discipline: "",
+  studyGroup: "Conhecimentos Gerais",
+  studyObjective: "",
+  reviewSummary: "",
+};
 const emptyQuestion = {
   courseId: "",
   category: "",
@@ -378,13 +469,15 @@ function Field({
   label,
   children,
   wide = false,
+  className = "",
 }: {
   label: string;
   children: ReactNode;
   wide?: boolean;
+  className?: string;
 }) {
   return (
-    <label className={wide ? "sm:col-span-2" : ""}>
+    <label className={[wide ? "sm:col-span-2" : "", className].join(" ")}>
       <span className="mb-1.5 block text-xs font-extrabold text-slate-700">
         {label}
       </span>
@@ -399,6 +492,22 @@ const buttonPrimary =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-extrabold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60";
 const buttonSecondary =
   "inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50";
+const MAX_NOTICE_PDF_BYTES = 15 * 1024 * 1024;
+const formatFileSize = (bytes?: number) => {
+  if (!bytes) return "";
+  return bytes >= 1024 * 1024
+    ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
+    : `${Math.ceil(bytes / 1024)} KB`;
+};
+const openPdfBlob = (blob: Blob) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+};
 
 export default function AdminPanel({
   activeSection,
@@ -414,6 +523,21 @@ export default function AdminPanel({
   const [sharedStudyLibrary, setSharedStudyLibrary] = useState<
     SharedStudySubject[]
   >([]);
+  const [sharedSubjectForm, setSharedSubjectForm] = useState(
+    emptySharedSubjectForm,
+  );
+  const [editingSharedSubject, setEditingSharedSubject] = useState("");
+  const [sharedSubjectFilter, setSharedSubjectFilter] = useState("");
+  const [sharedSubjectGroupFilter, setSharedSubjectGroupFilter] = useState<
+    "ALL" | "Conhecimentos Gerais" | "Conhecimentos Específicos"
+  >("ALL");
+  const [sharedSubjectSort, setSharedSubjectSort] = useState<
+    "alphabetical" | "numeric"
+  >("alphabetical");
+  const [sharedSubjectSortMenuOpen, setSharedSubjectSortMenuOpen] =
+    useState(false);
+  const [expandedSharedSubjectGroups, setExpandedSharedSubjectGroups] =
+    useState<Set<string>>(() => new Set());
   const [passages, setPassages] = useState<AdminPassage[]>([]);
   const [questions, setQuestions] = useState<AdminQuestion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -433,10 +557,15 @@ export default function AdminPanel({
   const [roleForm, setRoleForm] = useState(emptyRole);
   const [curriculumDisciplines, setCurriculumDisciplines] = useState<
     CurriculumDiscipline[]
-  >([newDiscipline()]);
+  >(() => [newDiscipline()]);
+  const [expandedCurriculumDisciplineKeys, setExpandedCurriculumDisciplineKeys] =
+    useState<string>(() => curriculumDisciplines[0]?.key || "");
   const [passageForm, setPassageForm] = useState(emptyPassage);
   const [questionForm, setQuestionForm] = useState(emptyQuestion);
   const [editingContest, setEditingContest] = useState("");
+  const [contestNoticePdf, setContestNoticePdf] = useState<File | null>(null);
+  const [contestNoticeInputKey, setContestNoticeInputKey] = useState(0);
+  const [openingNoticePdf, setOpeningNoticePdf] = useState("");
   const [editingRole, setEditingRole] = useState("");
   const [editingPassage, setEditingPassage] = useState("");
   const [editingQuestion, setEditingQuestion] = useState("");
@@ -468,6 +597,14 @@ export default function AdminPanel({
   const [questionBatchJson, setQuestionBatchJson] = useState("");
   const [questionBatchImporterOpen, setQuestionBatchImporterOpen] =
     useState(false);
+  const weightedCurriculumDisciplines = curriculumDisciplines.filter((item) =>
+    item.title.trim(),
+  );
+  const curriculumWeightTotal = weightedCurriculumDisciplines.reduce(
+    (total, item) => total + (weightNumber(item.weight) || 0),
+    0,
+  );
+  const curriculumWeightRemaining = 100 - curriculumWeightTotal;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -539,37 +676,118 @@ export default function AdminPanel({
       ),
     [contests],
   );
-  const materialRoles = useMemo(() => {
-    const result = [...roles];
-    CAREER_CONTESTS.forEach((legacyContest) => {
-      const databaseContest = contests.find(
-        (contest) => contest.id === legacyContest.id,
-      );
-      legacyContest.roles.forEach((legacyRole) => {
-        const alreadyLoaded = roles.some(
-          (role) =>
-            role.id === legacyRole.id && role.contest.id === legacyContest.id,
-        );
-        const config = COURSES_CONFIG[legacyRole.courseId];
-        if (alreadyLoaded || !config) return;
-        result.push({
-          ...legacyRole,
-          databaseId: `legacy:${legacyContest.id}:${legacyRole.id}`,
-          estimatedHours: legacyRole.estimatedHours || 120,
-          curriculum: {
-            topics: config.topics,
-            studySections: config.studySections,
-          },
-          contest: {
-            ...legacyContest,
-            databaseId: databaseContest?.databaseId,
-            roles: [],
-          } as CatalogContest,
-        });
+  const inferredStudyGroupByDiscipline = useMemo(() => {
+    const groups = new Map<string, Set<string>>();
+    roles.forEach((role) => {
+      const topics = Array.isArray(role.curriculum?.topics)
+        ? (role.curriculum.topics as Array<Record<string, unknown>>)
+        : [];
+      topics.forEach((topic) => {
+        const title = String(topic.title || "").trim();
+        if (!title) return;
+        const key = normalizeStudyText(title);
+        const group = normalizeStudyGroup(String(topic.category || ""));
+        const known = groups.get(key) || new Set<string>();
+        known.add(group);
+        groups.set(key, known);
       });
     });
-    return result;
-  }, [contests, roles]);
+    return new Map(
+      [...groups.entries()].map(([discipline, groupsForDiscipline]) => [
+        discipline,
+        groupsForDiscipline.has("Conhecimentos Gerais")
+          ? "Conhecimentos Gerais"
+          : groupsForDiscipline.has("Conhecimentos Específicos")
+            ? "Conhecimentos Específicos"
+            : "Conhecimentos Gerais",
+      ]),
+    );
+  }, [roles]);
+  const sharedSubjectStudyGroup = (subject: SharedStudySubject) =>
+    inferredStudyGroupByDiscipline.get(normalizeStudyText(subject.discipline)) ||
+    normalizeStudyGroup(subject.studyGroup || "");
+  const filteredSharedSubjects = useMemo(() => {
+    const query = normalizeStudyText(sharedSubjectFilter);
+    return sharedStudyLibrary.filter((subject) => {
+      const group = sharedSubjectStudyGroup(subject);
+      const matchesGroup =
+        sharedSubjectGroupFilter === "ALL" || group === sharedSubjectGroupFilter;
+      const matchesQuery =
+        !query ||
+        [subject.title, subject.discipline, group].some((value) =>
+          normalizeStudyText(value).includes(query),
+        );
+      return matchesGroup && matchesQuery;
+    });
+  }, [
+    inferredStudyGroupByDiscipline,
+    sharedStudyLibrary,
+    sharedSubjectFilter,
+    sharedSubjectGroupFilter,
+  ]);
+  const groupedSharedSubjects = useMemo(() => {
+    const collator = new Intl.Collator("pt-BR", {
+      numeric: sharedSubjectSort === "numeric",
+      sensitivity: "base",
+    });
+    const groups = new Map<
+      string,
+      {
+        studyGroup: string;
+        discipline: string;
+        subjects: SharedStudySubject[];
+      }
+    >();
+    filteredSharedSubjects.forEach((subject) => {
+      const studyGroup = sharedSubjectStudyGroup(subject);
+      const discipline = subject.discipline || "Sem disciplina";
+      const key = `${studyGroup}::${normalizeStudyText(discipline)}`;
+      const current = groups.get(key) || {
+        studyGroup,
+        discipline,
+        subjects: [],
+      };
+      current.subjects.push(subject);
+      groups.set(key, current);
+    });
+    return [...groups.values()]
+      .map((group) => ({
+        ...group,
+        subjects: [...group.subjects].sort((first, second) =>
+          collator.compare(first.title, second.title),
+        ),
+      }))
+      .sort(
+        (first, second) =>
+          collator.compare(first.studyGroup, second.studyGroup) ||
+          collator.compare(first.discipline, second.discipline),
+      );
+  }, [
+    filteredSharedSubjects,
+    inferredStudyGroupByDiscipline,
+    sharedSubjectSort,
+  ]);
+  const sharedSubjectGroupKey = (group: {
+    studyGroup: string;
+    discipline: string;
+  }) => `${group.studyGroup}::${normalizeStudyText(group.discipline)}`;
+  const toggleSharedSubjectGroup = (group: {
+    studyGroup: string;
+    discipline: string;
+  }) => {
+    const key = sharedSubjectGroupKey(group);
+    setExpandedSharedSubjectGroups((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+  const editingContestRecord = useMemo(
+    () => contests.find((item) => item.databaseId === editingContest),
+    [contests, editingContest],
+  );
+  const materialRoles = roles;
   const materialRole = useMemo(
     () => materialRoles.find((item) => item.databaseId === materialRoleId),
     [materialRoleId, materialRoles],
@@ -578,13 +796,40 @@ export default function AdminPanel({
     () =>
       materialRoles.map((role) => ({
         value: String(role.databaseId || ""),
-        label: `${role.contest.acronym} — ${role.label}${
-          String(role.databaseId).startsWith("legacy:")
-            ? " (catálogo legado)"
-            : ""
-        }`,
+        label: `${role.contest.acronym} — ${role.label}`,
       })),
     [materialRoles],
+  );
+  const sharedDisciplineOptionsByGroup = useMemo<
+    Map<string, SelectOption[]>
+  >(
+    () => {
+      const groups = new Map<string, Map<string, number>>();
+      sharedStudyLibrary.forEach((subject) => {
+        const group = sharedSubjectStudyGroup(subject);
+        const discipline = subject.discipline.trim();
+        if (discipline) {
+          const subjectCount = groups.get(group) || new Map<string, number>();
+          subjectCount.set(
+            discipline,
+            (subjectCount.get(discipline) || 0) + 1,
+          );
+          groups.set(group, subjectCount);
+        }
+      });
+      return new Map(
+        [...groups.entries()].map(([group, subjectCount]) => [
+          group,
+          [...subjectCount.entries()]
+            .sort(([first], [second]) => first.localeCompare(second, "pt-BR"))
+            .map(([discipline, count]) => ({
+              value: discipline,
+              label: `${discipline} (${count} assunto${count === 1 ? "" : "s"})`,
+            })),
+        ]),
+      );
+    },
+    [sharedStudyLibrary, inferredStudyGroupByDiscipline],
   );
   const materialSections = useMemo(
     () =>
@@ -792,20 +1037,53 @@ export default function AdminPanel({
     }
   };
 
-  const submitContest = (event: FormEvent) => {
+  const resetContestEditor = () => {
+    setContestForm(emptyContest);
+    setEditingContest("");
+    setContestNoticePdf(null);
+    setContestNoticeInputKey((value) => value + 1);
+  };
+  const submitContest = async (event: FormEvent) => {
     event.preventDefault();
     const payload = { ...contestForm, code: contestForm.id };
-    void run(
-      () =>
-        editingContest
-          ? adminApi.updateContest(editingContest, payload)
-          : adminApi.createContest(payload),
-      editingContest ? "Concurso atualizado." : "Concurso cadastrado.",
-      () => {
-        setContestForm(emptyContest);
-        setEditingContest("");
-      },
-    );
+    const wasEditing = Boolean(editingContest);
+    let persistedContestId = editingContest;
+    let contestWasPersisted = false;
+    setSaving(true);
+    setError("");
+    try {
+      const result = editingContest
+        ? await adminApi.updateContest(editingContest, payload)
+        : await adminApi.createContest(payload);
+      persistedContestId = editingContest || result.id;
+      contestWasPersisted = true;
+      if (contestNoticePdf)
+        await adminApi.uploadContestNoticePdf(
+          persistedContestId,
+          contestNoticePdf,
+        );
+      resetContestEditor();
+      await load();
+      notify(
+        `${wasEditing ? "Concurso atualizado" : "Concurso cadastrado"}${contestNoticePdf ? " com o edital em PDF" : ""}.`,
+      );
+    } catch (cause) {
+      if (contestWasPersisted && persistedContestId) {
+        setEditingContest(persistedContestId);
+        await load().catch(() => undefined);
+      }
+      const detail =
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível concluir o envio.";
+      setError(
+        contestWasPersisted && contestNoticePdf
+          ? `O concurso foi salvo, mas o PDF não foi enviado: ${detail} Tente salvar novamente para reenviar o arquivo.`
+          : detail,
+      );
+    } finally {
+      setSaving(false);
+    }
   };
   const editContest = (item: CatalogContest) => {
     setContestForm({
@@ -828,7 +1106,56 @@ export default function AdminPanel({
       active: item.active !== false,
     });
     setEditingContest(item.databaseId || "");
+    setContestNoticePdf(null);
+    setContestNoticeInputKey((value) => value + 1);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const selectContestNoticePdf = (file?: File) => {
+    setError("");
+    if (!file) {
+      setContestNoticePdf(null);
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      setError("Selecione o edital em formato PDF.");
+      setContestNoticePdf(null);
+      setContestNoticeInputKey((value) => value + 1);
+      return;
+    }
+    if (file.size > MAX_NOTICE_PDF_BYTES) {
+      setError("O edital deve ter no máximo 15 MB.");
+      setContestNoticePdf(null);
+      setContestNoticeInputKey((value) => value + 1);
+      return;
+    }
+    setContestNoticePdf(file);
+  };
+  const viewContestNoticePdf = async (item: CatalogContest) => {
+    if (!item.databaseId) return;
+    setOpeningNoticePdf(item.databaseId);
+    setError("");
+    try {
+      openPdfBlob(await catalogApi.contestNoticePdf(item.databaseId));
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível abrir o edital.",
+      );
+    } finally {
+      setOpeningNoticePdf("");
+    }
+  };
+  const removeContestNoticePdf = (item: CatalogContest) => {
+    if (!item.databaseId || !window.confirm("Remover o edital em PDF deste concurso?")) return;
+    void run(
+      () => adminApi.deleteContestNoticePdf(item.databaseId!),
+      "Edital em PDF removido.",
+      () => {
+        setContestNoticePdf(null);
+        setContestNoticeInputKey((value) => value + 1);
+      },
+    );
   };
 
   const automaticCourseId = (contestId: string, label: string) => {
@@ -845,6 +1172,161 @@ export default function AdminPanel({
         itemIndex === index ? { ...item, ...patch } : item,
       ),
     );
+  const applySharedDiscipline = (
+    disciplineIndex: number,
+    title: string,
+    group: string,
+  ) => {
+    const sharedSubjects = sharedStudyLibrary.filter(
+      (subject) =>
+        normalizeStudyText(subject.discipline) === normalizeStudyText(title) &&
+        sharedSubjectStudyGroup(subject) === normalizeStudyGroup(group),
+    );
+    setCurriculumDisciplines((current) =>
+      current.map((discipline, index) => {
+        if (index !== disciplineIndex) return discipline;
+        const subjectsByName = new Map<string, string>();
+        sharedSubjects.forEach((subject) =>
+          subjectsByName.set(normalizeStudyText(subject.title), subject.title),
+        );
+        subjectLines(discipline.subjectsText).forEach((subject) => {
+          const key = normalizeStudyText(subject);
+          if (!subjectsByName.has(key)) subjectsByName.set(key, subject);
+        });
+        const libraryMaterials = sharedSubjects.reduce<
+          CurriculumDiscipline["existingMaterials"]
+        >((materials, subject) => {
+          materials[subject.title.toLocaleLowerCase("pt-BR")] = {
+            content: subject.content,
+            keyTakeaways: subject.keyTakeaways,
+            contentBlocks: subject.contentBlocks,
+            studyObjective: subject.studyObjective,
+            reviewSummary: subject.reviewSummary,
+          };
+          return materials;
+        }, {});
+        return {
+          ...discipline,
+          title,
+          subjectsText: [...subjectsByName.values()].join("\n"),
+          existingMaterials: {
+            ...discipline.existingMaterials,
+            ...libraryMaterials,
+          },
+        };
+      }),
+    );
+    if (sharedSubjects.length)
+      notify(
+        `${sharedSubjects.length} assunto${sharedSubjects.length === 1 ? "" : "s"} da disciplina “${title}” foram incluídos com os materiais prontos.`,
+      );
+  };
+  const selectSubjectsForDiscipline = (
+    disciplineIndex: number,
+    selectedTitles: string[],
+  ) => {
+    const selectedKeys = new Set(selectedTitles.map(normalizeStudyText));
+    const selectedSubjects = sharedStudyLibrary.filter((subject) =>
+      selectedKeys.has(normalizeStudyText(subject.title)),
+    );
+    const materials = selectedSubjects.reduce<
+      CurriculumDiscipline["existingMaterials"]
+    >((current, subject) => {
+      current[subject.title.toLocaleLowerCase("pt-BR")] = {
+        content: subject.content,
+        keyTakeaways: subject.keyTakeaways,
+        contentBlocks: subject.contentBlocks,
+        studyObjective: subject.studyObjective,
+        reviewSummary: subject.reviewSummary,
+      };
+      return current;
+    }, {});
+    setCurriculumDisciplines((current) =>
+      current.map((discipline, index) =>
+        index === disciplineIndex
+          ? {
+              ...discipline,
+              subjectsText: selectedTitles.join("\n"),
+              existingMaterials: { ...discipline.existingMaterials, ...materials },
+            }
+          : discipline,
+      ),
+    );
+  };
+  const resetSharedSubjectEditor = () => {
+    setSharedSubjectForm(emptySharedSubjectForm);
+    setEditingSharedSubject("");
+  };
+  const submitSharedSubject = (event: FormEvent) => {
+    event.preventDefault();
+    const payload = {
+      discipline: sharedSubjectForm.discipline.trim(),
+      studyGroup: sharedSubjectForm.studyGroup,
+      studyObjective: sharedSubjectForm.studyObjective,
+      reviewSummary: subjectLines(sharedSubjectForm.reviewSummary),
+    };
+    if (!editingSharedSubject && !sharedSubjectForm.title.trim()) {
+      setError("Informe o nome do assunto.");
+      return;
+    }
+    void run(
+      () =>
+        editingSharedSubject
+          ? adminApi.updateSharedSubject(editingSharedSubject, payload)
+          : adminApi.createSharedSubject({
+              ...payload,
+              title: sharedSubjectForm.title.trim(),
+            }),
+      editingSharedSubject
+        ? "Assunto e material atualizados na biblioteca."
+        : "Assunto cadastrado na biblioteca compartilhada.",
+      resetSharedSubjectEditor,
+    );
+  };
+  const editSharedSubject = (subject: SharedStudySubject) => {
+    setSharedSubjectForm({
+      title: subject.title,
+      discipline: subject.discipline,
+      studyGroup: sharedSubjectStudyGroup(subject),
+      studyObjective: subject.studyObjective,
+      reviewSummary: subject.reviewSummary.join("\n"),
+    });
+    setEditingSharedSubject(subject.id);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const deleteSharedSubject = (subject: SharedStudySubject) => {
+    if (
+      !window.confirm(
+        `Excluir “${subject.title}” da biblioteca? Os cargos que já o utilizam manterão a cópia atual do material.`,
+      )
+    )
+      return;
+    void run(
+      () => adminApi.deleteSharedSubject(subject.id),
+      "Assunto removido da biblioteca.",
+      () => {
+        if (editingSharedSubject === subject.id) resetSharedSubjectEditor();
+      },
+    );
+  };
+  const toggleCurriculumDiscipline = (key: string) =>
+    setExpandedCurriculumDisciplineKeys((current) =>
+      current === key ? "" : key,
+    );
+  const expandAllCurriculumDisciplines = () =>
+    setExpandedCurriculumDisciplineKeys("all");
+  const collapseAllCurriculumDisciplines = () =>
+    setExpandedCurriculumDisciplineKeys("");
+  const addCurriculumDiscipline = () => {
+    const next = newDiscipline(curriculumDisciplines.length);
+    setCurriculumDisciplines((current) => [...current, next]);
+    setExpandedCurriculumDisciplineKeys(next.key);
+  };
+  const resetCurriculumDisciplines = () => {
+    const first = newDiscipline();
+    setCurriculumDisciplines([first]);
+    setExpandedCurriculumDisciplineKeys(first.key);
+  };
 
   const submitRole = (event: FormEvent) => {
     event.preventDefault();
@@ -875,7 +1357,7 @@ export default function AdminPanel({
         : "Cargo e edital cadastrados.",
       () => {
         setRoleForm(emptyRole);
-        setCurriculumDisciplines([newDiscipline()]);
+        resetCurriculumDisciplines();
         setEditingRole("");
       },
     );
@@ -894,7 +1376,9 @@ export default function AdminPanel({
       estimatedHours: item.estimatedHours || 120,
       active: item.active !== false,
     });
-    setCurriculumDisciplines(disciplinesFromCurriculum(item.curriculum));
+    const disciplines = disciplinesFromCurriculum(item.curriculum);
+    setCurriculumDisciplines(disciplines);
+    setExpandedCurriculumDisciplineKeys(disciplines[0]?.key || "");
     setEditingRole(item.databaseId || "");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -1495,6 +1979,12 @@ export default function AdminPanel({
       count: questionReports.length,
     },
     {
+      id: "subjects",
+      label: "Biblioteca de assuntos",
+      icon: BookOpenText,
+      count: sharedStudyLibrary.length,
+    },
+    {
       id: "materials",
       label: "Materiais de estudo",
       icon: LibraryBig,
@@ -1635,13 +2125,10 @@ export default function AdminPanel({
                 />
               </Field>
               <Field label="Data da prova">
-                <input
-                  required
-                  type="date"
-                  className={inputClass}
+                <ExamDatePicker
                   value={contestForm.examDate}
-                  onChange={(e) =>
-                    setContestForm((v) => ({ ...v, examDate: e.target.value }))
+                  onChange={(examDate) =>
+                    setContestForm((v) => ({ ...v, examDate }))
                   }
                 />
               </Field>
@@ -1779,6 +2266,70 @@ export default function AdminPanel({
                   </Field>
                 </div>
               </details>
+              <div className="sm:col-span-2 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 rounded-xl bg-white p-2 text-indigo-600 shadow-sm">
+                    <FileText className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-extrabold text-slate-800">
+                      Edital em PDF
+                    </p>
+                    <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                      O aluno poderá abrir o documento diretamente na área de Concursos. PDF de até 15 MB.
+                    </p>
+                  </div>
+                </div>
+                <label className="mt-3 block">
+                  <span className="sr-only">Selecionar edital em PDF</span>
+                  <input
+                    key={contestNoticeInputKey}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    className={`${inputClass} file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-600 file:px-3 file:py-2 file:text-xs file:font-extrabold file:text-white`}
+                    onChange={(event) =>
+                      selectContestNoticePdf(event.target.files?.[0])
+                    }
+                  />
+                </label>
+                {contestNoticePdf && (
+                  <p className="mt-2 flex items-center gap-2 text-xs font-bold text-indigo-700">
+                    <Upload className="h-4 w-4" />
+                    Novo arquivo: {contestNoticePdf.name} ({formatFileSize(contestNoticePdf.size)})
+                  </p>
+                )}
+                {editingContestRecord?.noticePdfAvailable && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-indigo-100 bg-white p-3">
+                    <p className="mr-auto min-w-0 text-xs font-bold text-slate-600">
+                      Atual: {editingContestRecord.noticePdfName || "edital.pdf"}
+                      {editingContestRecord.noticePdfSize
+                        ? ` · ${formatFileSize(editingContestRecord.noticePdfSize)}`
+                        : ""}
+                    </p>
+                    <button
+                      type="button"
+                      className={buttonSecondary}
+                      disabled={openingNoticePdf === editingContestRecord.databaseId}
+                      onClick={() => void viewContestNoticePdf(editingContestRecord)}
+                    >
+                      {openingNoticePdf === editingContestRecord.databaseId ? (
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                      Visualizar
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 text-sm font-bold text-rose-600 hover:bg-rose-50"
+                      disabled={saving}
+                      onClick={() => removeContestNoticePdf(editingContestRecord)}
+                    >
+                      <Trash2 className="h-4 w-4" /> Remover PDF
+                    </button>
+                  </div>
+                )}
+              </div>
               <Check
                 label="Concurso ativo e visível"
                 checked={contestForm.active}
@@ -1786,13 +2337,15 @@ export default function AdminPanel({
                   setContestForm((v) => ({ ...v, active: checked }))
                 }
               />
+              <p className="sm:col-span-2 -mt-1 text-xs leading-5 text-slate-500">
+                Após salvar o concurso, cadastre cada função na seção
+                <strong className="font-extrabold text-slate-700"> Editais e cargos</strong>.
+                A quantidade de vagas é o total de postos previsto no edital.
+              </p>
               <FormActions
                 saving={saving}
                 editing={Boolean(editingContest)}
-                cancel={() => {
-                  setContestForm(emptyContest);
-                  setEditingContest("");
-                }}
+                cancel={resetContestEditor}
               />
             </form>
           </AdminCard>
@@ -1806,7 +2359,7 @@ export default function AdminPanel({
                   key={item.databaseId || item.id}
                   title={item.label}
                   eyebrow={`${item.acronym} · ${item.board}`}
-                  details={`${item.examDate.split("-").reverse().join("/")} · ${item.roles.length} cargo(s) · ${item.active === false ? "Inativo" : item.status}`}
+                  details={`${item.examDate.split("-").reverse().join("/")} · Vagas: ${item.vacancies || "Conforme edital"} · ${item.roles.length === 0 ? "Sem cargos cadastrados" : `${item.roles.length} ${item.roles.length === 1 ? "cargo cadastrado" : "cargos cadastrados"}`} · ${item.active === false ? "Inativo" : item.status}${item.noticePdfAvailable ? " · Edital em PDF" : ""}`}
                   onEdit={() => editContest(item)}
                   onDelete={() =>
                     item.databaseId &&
@@ -2008,66 +2561,212 @@ export default function AdminPanel({
                     </h4>
                     <p className="mt-1 text-xs leading-5 text-slate-600">
                       Informe os assuntos exatamente como aparecem no edital, um
-                      por linha. O sistema monta a estrutura do cronograma
-                      automaticamente.
+                      por linha e distribua os 100% de peso entre as
+                      disciplinas. O sistema usa essa divisão para montar o
+                      cronograma automaticamente.
                     </p>
                   </div>
-                  <div className="rounded-xl bg-white px-3 py-2 text-center shadow-sm">
-                    <strong className="block text-lg text-indigo-700">
-                      {curriculumDisciplines.length}
-                    </strong>
-                    <span className="text-[10px] font-bold text-slate-500">
-                      disciplinas
-                    </span>
+                  <div className="flex gap-2">
+                    <div className="rounded-xl bg-white px-3 py-2 text-center shadow-sm">
+                      <strong className="block text-lg text-indigo-700">
+                        {curriculumDisciplines.length}
+                      </strong>
+                      <span className="text-[10px] font-bold text-slate-500">
+                        disciplinas
+                      </span>
+                    </div>
+                    <div
+                      className={`rounded-xl px-3 py-2 text-center shadow-sm ${
+                        Math.abs(curriculumWeightRemaining) <= 0.01
+                          ? "bg-emerald-100"
+                          : curriculumWeightRemaining < 0
+                            ? "bg-rose-100"
+                            : "bg-white"
+                      }`}
+                    >
+                      <strong
+                        className={`block text-lg ${
+                          Math.abs(curriculumWeightRemaining) <= 0.01
+                            ? "text-emerald-700"
+                            : curriculumWeightRemaining < 0
+                              ? "text-rose-700"
+                              : "text-indigo-700"
+                        }`}
+                      >
+                        {formattedWeight(curriculumWeightTotal)}%
+                      </strong>
+                      <span className="block text-[10px] font-bold text-slate-500">
+                        distribuído
+                      </span>
+                      <span className="block text-[10px] font-semibold text-slate-500">
+                        {Math.abs(curriculumWeightRemaining) <= 0.01
+                          ? "100% concluído"
+                          : curriculumWeightRemaining > 0
+                            ? `${formattedWeight(curriculumWeightRemaining)}% disponível`
+                            : `${formattedWeight(Math.abs(curriculumWeightRemaining))}% acima`}
+                      </span>
+                    </div>
                   </div>
                 </div>
+                <div className="mb-3 flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 text-xs font-bold text-indigo-700 hover:bg-indigo-50"
+                    onClick={expandAllCurriculumDisciplines}
+                  >
+                    <ChevronDown className="h-3.5 w-3.5" />
+                    Expandir todas
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                    onClick={collapseAllCurriculumDisciplines}
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                    Recolher todas
+                  </button>
+                </div>
                 <div className="space-y-4">
-                  {curriculumDisciplines.map((discipline, index) => (
-                    <section
-                      key={discipline.key}
-                      className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5"
-                    >
-                      <div className="mb-4 flex items-center justify-between gap-3">
-                        <div>
-                          <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600">
-                            Disciplina {index + 1}
-                          </span>
-                          <h5 className="text-sm font-black text-slate-900">
-                            {discipline.title || "Nova disciplina"}
-                          </h5>
-                        </div>
-                        {curriculumDisciplines.length > 1 && (
+                  {curriculumDisciplines.map((discipline, index) => {
+                    const isDisciplineExpanded =
+                      expandedCurriculumDisciplineKeys === "all" ||
+                      expandedCurriculumDisciplineKeys === discipline.key;
+                    const groupLabel = normalizeStudyGroup(discipline.category);
+                    const applicableSharedDisciplineOptions =
+                      sharedDisciplineOptionsByGroup.get(groupLabel) || [];
+                    const applicableSharedSubjects = sharedStudyLibrary.filter(
+                      (subject) =>
+                        sharedSubjectStudyGroup(subject) === groupLabel &&
+                        normalizeStudyText(subject.discipline) ===
+                          normalizeStudyText(discipline.title),
+                    );
+                    const selectedSubjectTitles = subjectLines(
+                      discipline.subjectsText,
+                    );
+                    const subjectOptions = [
+                      ...applicableSharedSubjects.map((subject) => ({
+                        value: subject.title,
+                        label: subject.title,
+                      })),
+                      ...selectedSubjectTitles
+                        .filter(
+                          (title) =>
+                            !applicableSharedSubjects.some(
+                              (subject) =>
+                                normalizeStudyText(subject.title) ===
+                                normalizeStudyText(title),
+                            ),
+                        )
+                        .map((title) => ({
+                          value: title,
+                          label: `${title} — material não cadastrado`,
+                        })),
+                    ];
+                    return (
+                      <section
+                        key={discipline.key}
+                        className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5"
+                      >
+                        <div className="mb-4 flex items-center justify-between gap-3">
                           <button
                             type="button"
-                            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                            aria-expanded={isDisciplineExpanded}
+                            aria-controls={`discipline-content-${discipline.key}`}
                             onClick={() =>
-                              setCurriculumDisciplines((current) =>
-                                current.filter(
-                                  (_, itemIndex) => itemIndex !== index,
-                                ),
-                              )
+                              toggleCurriculumDiscipline(discipline.key)
                             }
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Remover
+                            <ChevronDown
+                              className={`h-4 w-4 shrink-0 text-indigo-600 transition-transform ${
+                                isDisciplineExpanded ? "" : "-rotate-90"
+                              }`}
+                            />
+                            <span>
+                              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600">
+                                Disciplina {index + 1}
+                              </span>
+                              <h5 className="text-sm font-black text-slate-900">
+                                {discipline.title || "Nova disciplina"}
+                              </h5>
+                            </span>
                           </button>
-                        )}
-                      </div>
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <Field label="Nome da disciplina">
-                          <input
+                          {curriculumDisciplines.length > 1 && (
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                              onClick={() =>
+                                setCurriculumDisciplines((current) =>
+                                  current.filter(
+                                    (_, itemIndex) => itemIndex !== index,
+                                  ),
+                                )
+                              }
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Remover
+                            </button>
+                          )}
+                        </div>
+                        {isDisciplineExpanded && (
+                          <div
+                            id={`discipline-content-${discipline.key}`}
+                            className="grid gap-4 sm:grid-cols-2"
+                          >
+                        <Field label="Nome da disciplina" className="-order-1">
+                          <CreatableSelect<SelectOption, false>
                             required
-                            className={inputClass}
-                            value={discipline.title}
-                            onChange={(event) =>
+                            inputId={`discipline-title-${discipline.key}`}
+                            classNamePrefix="admin-react-select"
+                            options={applicableSharedDisciplineOptions}
+                            value={
+                              discipline.title
+                                ? {
+                                    value: discipline.title,
+                                    label: discipline.title,
+                                  }
+                                : null
+                            }
+                            onChange={(option) => {
+                              if (!option) {
+                                updateDiscipline(index, { title: "" });
+                                return;
+                              }
+                              applySharedDiscipline(
+                                index,
+                                option.value,
+                                discipline.category,
+                              );
+                            }}
+                            onCreateOption={(title) =>
                               updateDiscipline(index, {
-                                title: event.target.value,
+                                title: title.trim(),
                               })
                             }
-                            placeholder="Ex.: Língua Portuguesa"
+                            formatCreateLabel={(title) =>
+                              `Criar nova disciplina “${title}”`
+                            }
+                            placeholder={`Selecione ou crie uma disciplina de ${groupLabel}`}
+                            noOptionsMessage={() =>
+                              "Digite para criar uma nova disciplina"
+                            }
+                            isClearable
+                            isSearchable
+                            maxMenuHeight={220}
+                            menuPosition="fixed"
+                            menuPortalTarget={document.body}
+                            styles={{
+                              menuPortal: (base) => ({ ...base, zIndex: 80 }),
+                            }}
                           />
+                          <span className="mt-1 block text-[11px] text-slate-500">
+                            Mostrando disciplinas de {groupLabel}. Ao escolher
+                            uma pronta, seus assuntos e materiais são
+                            incluídos. Para uma nova, digite o nome e pressione
+                            Enter.
+                          </span>
                         </Field>
-                        <Field label="Grupo">
+                        <Field label="Grupo" className="order-first">
                           <select
                             className={inputClass}
                             value={discipline.category}
@@ -2077,88 +2776,99 @@ export default function AdminPanel({
                               })
                             }
                           >
-                            <option>Conhecimentos Básicos</option>
                             <option>Conhecimentos Gerais</option>
                             <option>Conhecimentos Específicos</option>
-                            <option>Legislação</option>
                           </select>
                         </Field>
-                        <Field label="Peso aproximado">
+                        <Field label="Peso da disciplina no edital (%)">
                           <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            inputMode="decimal"
                             className={inputClass}
-                            value={discipline.weight}
+                            value={weightNumber(discipline.weight) ?? ""}
                             onChange={(event) =>
                               updateDiscipline(index, {
                                 weight: event.target.value,
                               })
                             }
-                            placeholder="Ex.: 20% ou peso 2"
+                            placeholder="Ex.: 20"
                           />
+                          <span className="mt-1 block text-[11px] text-slate-500">
+                            A soma de todas as disciplinas deve fechar em 100%.
+                          </span>
                         </Field>
-                        <Field label="Dificuldade">
-                          <select
-                            className={inputClass}
-                            value={discipline.difficulty}
-                            onChange={(event) =>
-                              updateDiscipline(index, {
-                                difficulty: event.target.value as Difficulty,
-                              })
-                            }
-                          >
-                            <option>Fácil</option>
-                            <option>Médio</option>
-                            <option>Difícil</option>
-                          </select>
-                        </Field>
-                        <Field label="Assuntos do edital — um por linha" wide>
-                          <textarea
+                        <Field label="Assuntos do edital" wide>
+                          <Select<SelectOption, true>
                             required
-                            rows={7}
-                            className={inputClass}
-                            value={discipline.subjectsText}
-                            onChange={(event) =>
-                              updateDiscipline(index, {
-                                subjectsText: event.target.value,
-                              })
+                            inputId={`discipline-subjects-${discipline.key}`}
+                            classNamePrefix="admin-react-select"
+                            options={subjectOptions}
+                            value={subjectOptions.filter((option) =>
+                              selectedSubjectTitles.some(
+                                (title) =>
+                                  normalizeStudyText(title) ===
+                                  normalizeStudyText(option.value),
+                              ),
+                            )}
+                            onChange={(options) =>
+                              selectSubjectsForDiscipline(
+                                index,
+                                options.map((option) => option.value),
+                              )
                             }
                             placeholder={
-                              "Interpretação de textos\nCrase\nConcordância verbal e nominal"
+                              discipline.title
+                                ? "Selecione os assuntos deste edital"
+                                : "Escolha primeiro a disciplina"
                             }
+                            noOptionsMessage={() =>
+                              discipline.title
+                                ? "Nenhum assunto cadastrado para esta disciplina e grupo"
+                                : "Escolha primeiro a disciplina"
+                            }
+                            isDisabled={!discipline.title}
+                            isMulti
+                            isSearchable
+                            closeMenuOnSelect={false}
+                            maxMenuHeight={240}
+                            menuPosition="fixed"
+                            menuPortalTarget={document.body}
+                            styles={{
+                              menuPortal: (base) => ({ ...base, zIndex: 80 }),
+                            }}
                           />
                           <span className="mt-1 block text-[11px] text-slate-500">
                             {subjectLines(discipline.subjectsText).length}{" "}
                             assunto(s) informado(s)
                           </span>
+                          <span className="mt-1 block text-[11px] text-slate-500">
+                            Para criar outro assunto, use a Biblioteca de
+                            assuntos. Os itens selecionados já incluem o
+                            material de estudo pronto.
+                          </span>
                         </Field>
                         <details className="sm:col-span-2 rounded-xl border border-slate-200 bg-white p-3">
                           <summary className="cursor-pointer text-xs font-extrabold text-indigo-700">
-                            Adicionar resumo e prioridade (opcional)
+                            Configurações avançadas do planejamento (opcional)
                           </summary>
                           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                            <Field label="Resumo ou material-base" wide>
-                              <textarea
-                                rows={5}
+                            <Field label="Dificuldade">
+                              <select
                                 className={inputClass}
-                                value={discipline.summary}
+                                value={discipline.difficulty}
                                 onChange={(event) =>
                                   updateDiscipline(index, {
-                                    summary: event.target.value,
+                                    difficulty: event.target.value as Difficulty,
                                   })
                                 }
-                                placeholder="Cole aqui um resumo que poderá ser usado nos materiais desta disciplina."
-                              />
-                            </Field>
-                            <Field label="Pontos-chave — um por linha">
-                              <textarea
-                                rows={4}
-                                className={inputClass}
-                                value={discipline.keyPointsText}
-                                onChange={(event) =>
-                                  updateDiscipline(index, {
-                                    keyPointsText: event.target.value,
-                                  })
-                                }
-                              />
+                              >
+                                <option>Fácil</option>
+                                <option>Médio</option>
+                                <option>Difícil</option>
+                              </select>
                             </Field>
                             <Field label="Justificativa da prioridade">
                               <textarea
@@ -2183,19 +2893,16 @@ export default function AdminPanel({
                             />
                           </div>
                         </details>
-                      </div>
+                        </div>
+                      )}
                     </section>
-                  ))}
+                    );
+                  })}
                 </div>
                 <button
                   type="button"
                   className={`${buttonSecondary} mt-4 w-full border-dashed border-indigo-300 text-indigo-700`}
-                  onClick={() =>
-                    setCurriculumDisciplines((current) => [
-                      ...current,
-                      newDiscipline(current.length),
-                    ])
-                  }
+                  onClick={addCurriculumDiscipline}
                 >
                   <Plus className="h-4 w-4" />
                   Adicionar outra disciplina
@@ -2206,7 +2913,7 @@ export default function AdminPanel({
                 editing={Boolean(editingRole)}
                 cancel={() => {
                   setRoleForm(emptyRole);
-                  setCurriculumDisciplines([newDiscipline()]);
+                  resetCurriculumDisciplines();
                   setEditingRole("");
                 }}
               />
@@ -2233,6 +2940,262 @@ export default function AdminPanel({
                 />
               ))}
               {!roles.length && <Empty />}
+            </div>
+          </AdminCard>
+        </div>
+      )}
+
+      {section === "subjects" && (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,.9fr)]">
+          <AdminCard
+            title={
+              editingSharedSubject
+                ? "Editar assunto da biblioteca"
+                : "Novo assunto da biblioteca"
+            }
+            description="Cadastre o assunto, seu objetivo e o resumo de revisão uma única vez. Depois, ele poderá ser selecionado em qualquer edital compatível."
+          >
+            <form
+              onSubmit={submitSharedSubject}
+              className="grid gap-4 sm:grid-cols-2"
+            >
+              <Field label="Grupo">
+                <select
+                  className={inputClass}
+                  value={sharedSubjectForm.studyGroup}
+                  onChange={(event) =>
+                    setSharedSubjectForm((current) => ({
+                      ...current,
+                      studyGroup: event.target.value,
+                    }))
+                  }
+                >
+                  <option>Conhecimentos Gerais</option>
+                  <option>Conhecimentos Específicos</option>
+                </select>
+              </Field>
+              <Field label="Disciplina">
+                <CreatableSelect<SelectOption, false>
+                  inputId="shared-subject-discipline"
+                  classNamePrefix="admin-react-select"
+                  options={
+                    sharedDisciplineOptionsByGroup.get(
+                      sharedSubjectForm.studyGroup,
+                    ) || []
+                  }
+                  value={
+                    sharedSubjectForm.discipline
+                      ? {
+                          value: sharedSubjectForm.discipline,
+                          label: sharedSubjectForm.discipline,
+                        }
+                      : null
+                  }
+                  onChange={(option) =>
+                    setSharedSubjectForm((current) => ({
+                      ...current,
+                      discipline: option?.value || "",
+                    }))
+                  }
+                  onCreateOption={(discipline) =>
+                    setSharedSubjectForm((current) => ({
+                      ...current,
+                      discipline: discipline.trim(),
+                    }))
+                  }
+                  formatCreateLabel={(discipline) =>
+                    `Criar disciplina “${discipline}”`
+                  }
+                  placeholder="Selecione ou crie a disciplina"
+                  noOptionsMessage={() =>
+                    "Digite para criar uma disciplina"
+                  }
+                  isClearable
+                  isSearchable
+                  maxMenuHeight={220}
+                  menuPosition="fixed"
+                  menuPortalTarget={document.body}
+                  styles={{
+                    menuPortal: (base) => ({ ...base, zIndex: 80 }),
+                  }}
+                />
+              </Field>
+              <Field label="Nome do assunto" wide>
+                <input
+                  required
+                  disabled={Boolean(editingSharedSubject)}
+                  className={inputClass}
+                  value={sharedSubjectForm.title}
+                  onChange={(event) =>
+                    setSharedSubjectForm((current) => ({
+                      ...current,
+                      title: event.target.value,
+                    }))
+                  }
+                  placeholder="Ex.: Interpretação de textos"
+                />
+                {editingSharedSubject && (
+                  <span className="mt-1 block text-[11px] text-slate-500">
+                    O nome do assunto não é alterado para preservar os vínculos
+                    já usados nos cargos.
+                  </span>
+                )}
+              </Field>
+              <Field label="Objetivo do estudo" wide>
+                <textarea
+                  required
+                  rows={5}
+                  className={inputClass}
+                  value={sharedSubjectForm.studyObjective}
+                  onChange={(event) =>
+                    setSharedSubjectForm((current) => ({
+                      ...current,
+                      studyObjective: event.target.value,
+                    }))
+                  }
+                  placeholder="Ex.: Compreender como identificar a ideia principal e as informações implícitas no texto."
+                />
+              </Field>
+              <Field label="Resumo para revisão — um item por linha" wide>
+                <textarea
+                  rows={5}
+                  className={inputClass}
+                  value={sharedSubjectForm.reviewSummary}
+                  onChange={(event) =>
+                    setSharedSubjectForm((current) => ({
+                      ...current,
+                      reviewSummary: event.target.value,
+                    }))
+                  }
+                  placeholder="Ex.: Ideia principal é o núcleo da mensagem\nInferência decorre de pistas do texto"
+                />
+              </Field>
+              <FormActions
+                saving={saving}
+                editing={Boolean(editingSharedSubject)}
+                cancel={resetSharedSubjectEditor}
+              />
+            </form>
+          </AdminCard>
+          <AdminCard
+            title="Assuntos cadastrados"
+            description="Filtre a biblioteca e atualize o objetivo e o resumo que aparecerão no cronograma."
+          >
+            <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+              <input
+                className={inputClass}
+                value={sharedSubjectFilter}
+                onChange={(event) => setSharedSubjectFilter(event.target.value)}
+                placeholder="Pesquisar assunto ou disciplina"
+              />
+              <select
+                className={inputClass}
+                value={sharedSubjectGroupFilter}
+                onChange={(event) =>
+                  setSharedSubjectGroupFilter(
+                    event.target.value as typeof sharedSubjectGroupFilter,
+                  )
+                }
+              >
+                <option value="ALL">Todos os grupos</option>
+                <option>Conhecimentos Gerais</option>
+                <option>Conhecimentos Específicos</option>
+              </select>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSharedSubjectSortMenuOpen((current) => !current)
+                  }
+                  className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2"
+                  aria-label="Escolher ordenação dos assuntos"
+                  aria-expanded={sharedSubjectSortMenuOpen}
+                  aria-haspopup="menu"
+                  title={`Ordenação: ${sharedSubjectSort === "alphabetical" ? "alfabética" : "numérica"}`}
+                >
+                  <Filter className="h-4 w-4" />
+                </button>
+                {sharedSubjectSortMenuOpen && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-xl"
+                  >
+                    {[
+                      ["alphabetical", "Ordem alfabética"],
+                      ["numeric", "Ordem numérica"],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={sharedSubjectSort === value}
+                        onClick={() => {
+                          setSharedSubjectSort(
+                            value as typeof sharedSubjectSort,
+                          );
+                          setSharedSubjectSortMenuOpen(false);
+                        }}
+                        className={`flex w-full items-center rounded-lg px-3 py-2 text-left text-xs font-bold transition ${
+                          sharedSubjectSort === value
+                            ? "bg-indigo-50 text-indigo-700"
+                            : "text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="max-h-[720px] space-y-3 overflow-y-auto pr-1">
+              {groupedSharedSubjects.map((group) => {
+                const groupKey = sharedSubjectGroupKey(group);
+                const isExpanded = expandedSharedSubjectGroups.has(groupKey);
+                return (
+                <section
+                  key={groupKey}
+                  className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/60"
+                >
+                  <header className="flex items-center justify-between gap-3 px-4 py-3">
+                    <h4 className="text-sm font-black text-slate-900">
+                      {group.discipline}
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => toggleSharedSubjectGroup(group)}
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2"
+                      aria-label={`${isExpanded ? "Recolher" : "Mostrar"} assuntos de ${group.discipline}`}
+                      aria-expanded={isExpanded}
+                      title={isExpanded ? "Recolher assuntos" : "Exibir assuntos"}
+                    >
+                      <ChevronDown
+                        className={`h-4 w-4 transition-transform ${
+                          isExpanded ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                  </header>
+                  {isExpanded && (
+                    <div className="space-y-2 border-t border-slate-200 bg-white/70 p-3">
+                      {group.subjects.map((subject) => (
+                        <RecordCard
+                          key={subject.id}
+                          title={subject.title}
+                          eyebrow={group.studyGroup}
+                          details={`${subject.reviewSummary.length} item(ns) de revisão · ${subject.studyObjective.trim() ? "objetivo cadastrado" : "objetivo pendente"}`}
+                          onEdit={() => editSharedSubject(subject)}
+                          onDelete={() => deleteSharedSubject(subject)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+                );
+              })}
+              {!groupedSharedSubjects.length && (
+                <Empty text="Nenhum assunto encontrado neste grupo." />
+              )}
             </div>
           </AdminCard>
         </div>

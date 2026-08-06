@@ -1,140 +1,468 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
-import { Activity, AlertTriangle, Award, BookOpenCheck, CheckCircle2, Clock3, RefreshCw, Target, TrendingUp } from 'lucide-react';
+import type { CSSProperties, ReactNode } from 'react';
+import {
+  Activity,
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  Award,
+  BarChart3,
+  BookOpenCheck,
+  CheckCircle2,
+  Clock3,
+  Layers3,
+  Lightbulb,
+  RefreshCw,
+  Target,
+  TrendingUp,
+} from 'lucide-react';
 import { analyticsApi } from '../services/api';
+import './PerformanceTab.css';
 
-interface TopicStat { topic: string; answered: number; correct: number; wrong: number; accuracy: number; studied_seconds?: number; }
-interface DayStat { day: string; answered: number; correct: number; wrong: number; accuracy: number; }
-interface Dashboard { periodDays: number; summary: { answered: number; correct: number; wrong: number; accuracy: number; total_time_seconds?: number; study_seconds?: number; question_practice_seconds?: number; simulation_seconds?: number; session_questions?: number; question_bank_answered?: number; simulation_answered?: number; study_sessions?: number; question_sessions?: number; simulation_sessions?: number }; evolution: DayStat[]; byTopic: TopicStat[]; strongTopics: TopicStat[]; weakTopics: TopicStat[]; recommendation?: TopicStat | null; }
+interface TopicStat {
+  topic: string;
+  answered: number;
+  correct: number;
+  wrong: number;
+  accuracy: number;
+  studied_seconds?: number;
+}
+
+interface AreaStat {
+  area: string;
+  answered: number;
+  correct: number;
+  wrong: number;
+  accuracy: number;
+  studied_seconds?: number;
+}
+
+interface DayStat {
+  day: string;
+  answered: number;
+  correct: number;
+  wrong: number;
+  accuracy: number;
+}
+
+interface EvolutionPoint extends DayStat {
+  label: string;
+  description: string;
+}
+
+interface Dashboard {
+  periodDays: number;
+  summary: {
+    answered: number;
+    correct: number;
+    wrong: number;
+    accuracy: number;
+    total_time_seconds?: number;
+    study_seconds?: number;
+    question_practice_seconds?: number;
+    simulation_seconds?: number;
+    session_questions?: number;
+    question_bank_answered?: number;
+    simulation_answered?: number;
+    study_sessions?: number;
+    question_sessions?: number;
+    simulation_sessions?: number;
+  };
+  evolution: DayStat[];
+  byArea?: AreaStat[];
+  strongAreas?: AreaStat[];
+  weakAreas?: AreaStat[];
+  byTopic: TopicStat[];
+  strongTopics: TopicStat[];
+  weakTopics: TopicStat[];
+  recommendation?: TopicStat | null;
+}
+
+type TopicOrder = 'errors' | 'accuracy' | 'volume';
 
 const number = (value: unknown) => Number(value || 0);
-const timeLabel=(seconds:unknown)=>{const minutes=Math.round(number(seconds)/60);return minutes>=60?`${Math.floor(minutes/60)}h ${minutes%60}min`:`${minutes} min`;};
-
-const localDashboard = (periodDays: number, activePlanId?: string | null): Dashboard => {
-  try {
-    const answers: Record<string,string> = JSON.parse(localStorage.getItem('quiz_answers') || '{}');
-    const history: Record<string,{answer:string;answeredAt:string}> = JSON.parse(localStorage.getItem('quiz_answer_history') || '{}');
-    const events: {questionId:string;answer:string;answeredAt:string;planId?:string|null;courseId?:string|null}[] = JSON.parse(localStorage.getItem('quiz_answer_events') || '[]');
-    const savedQuestions = localStorage.getItem('active_quiz_questions_cache') || localStorage.getItem('custom_quiz_questions');
-    const questions: any[] = savedQuestions ? JSON.parse(savedQuestions) : [];
-    const questionById = new Map(questions.map(question => [String(question.id), question]));
-    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - periodDays);
-    const topicMap = new Map<string,TopicStat>();
-    const dayMap = new Map<string,DayStat>();
-    let correct = 0, wrong = 0;
-
-    const activeCourse = localStorage.getItem('active_course');
-    const scopedEvents = events.filter(event => activePlanId
-      ? event.planId === activePlanId
-      : event.courseId === activeCourse);
-    // Uma alteração de resposta não cria uma nova tentativa no KPI: usamos
-    // somente o estado mais recente de cada questão no painel local.
-    const latestEvents = new Map<string, typeof scopedEvents[number]>();
-    scopedEvents.forEach(event => latestEvents.set(String(event.questionId), event));
-    const attempts = latestEvents.size > 0
-      ? Array.from(latestEvents.values()).map(event => [String(event.questionId), event.answer, event.answeredAt] as const)
-      : Object.entries(answers).map(([id,answer]) => [id,answer,history[id]?.answeredAt || new Date().toISOString()] as const);
-    attempts.forEach(([id, answer, timestamp]) => {
-      const question = questionById.get(id);
-      if (!question || question.correct === 'Anulada') return;
-      const answeredAt = new Date(timestamp);
-      if (answeredAt < cutoff) return;
-      const isCorrect = answer === question.correct;
-      if (isCorrect) correct++; else wrong++;
-      const topic = String(question.topic || question.category || 'Geral');
-      const topicStat = topicMap.get(topic) || { topic, answered: 0, correct: 0, wrong: 0, accuracy: 0 };
-      topicStat.answered++; if (isCorrect) topicStat.correct++; else topicStat.wrong++;
-      topicStat.accuracy = topicStat.answered ? (topicStat.correct / topicStat.answered) * 100 : 0;
-      topicMap.set(topic, topicStat);
-      const day = answeredAt.toISOString().slice(0,10);
-      const dayStat = dayMap.get(day) || { day, answered: 0, correct: 0, wrong: 0, accuracy: 0 };
-      dayStat.answered++; if (isCorrect) dayStat.correct++; else dayStat.wrong++;
-      dayStat.accuracy = dayStat.answered ? (dayStat.correct / dayStat.answered) * 100 : 0;
-      dayMap.set(day, dayStat);
-    });
-
-    const byTopic = Array.from(topicMap.values()).sort((a,b) => b.accuracy-a.accuracy);
-    const strongTopics = byTopic.filter(item => item.answered >= 1 && item.accuracy >= 70).slice(0,5);
-    const weakTopics = byTopic.filter(item => item.answered >= 1 && item.accuracy < 70).sort((a,b) => a.accuracy-b.accuracy).slice(0,5);
-    const answered = correct + wrong;
-    return { periodDays, summary: { answered, correct, wrong, accuracy: answered ? (correct/answered)*100 : 0 },
-      evolution: Array.from(dayMap.values()).sort((a,b) => a.day.localeCompare(b.day)), byTopic, strongTopics,
-      weakTopics, recommendation: weakTopics[0] || null };
-  } catch (error) {
-    console.warn('Não foi possível calcular o desempenho local.', error);
-    return { periodDays, summary: { answered: 0, correct: 0, wrong: 0, accuracy: 0 }, evolution: [], byTopic: [], strongTopics: [], weakTopics: [], recommendation: null };
-  }
+const percent = (value: unknown) => Math.max(0, Math.min(100, number(value)));
+const timeLabel = (seconds: unknown) => {
+  const minutes = Math.round(number(seconds) / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const remaining = minutes % 60;
+  return `${Math.floor(minutes / 60)}h${remaining ? ` ${remaining}min` : ''}`;
 };
+const dateLabel = (day: string) => new Date(`${day}T00:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+const periodOptions = [
+  { days: 7, label: '7 dias' },
+  { days: 30, label: '30 dias' },
+  { days: 90, label: '3 meses' },
+  { days: 180, label: '6 meses' },
+  { days: 365, label: '1 ano' },
+];
+
+function evolutionGranularity(period: number) {
+  if (period <= 30) return { unit: 'day', label: 'dia' } as const;
+  if (period <= 180) return { unit: 'week', label: 'semana' } as const;
+  return { unit: 'month', label: 'mês' } as const;
+}
+
+function aggregateEvolution(items: DayStat[], period: number): EvolutionPoint[] {
+  const granularity = evolutionGranularity(period);
+  if (granularity.unit === 'day') return items.map((item) => ({
+    ...item,
+    label: dateLabel(item.day),
+    description: new Date(`${item.day}T00:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' }),
+  }));
+
+  const groups = new Map<string, { day: string; answered: number; correct: number; wrong: number; label: string; description: string }>();
+  items.forEach((item) => {
+    const date = new Date(`${item.day}T00:00:00`);
+    let key: string;
+    let label: string;
+    let description: string;
+    if (granularity.unit === 'week') {
+      const mondayOffset = (date.getDay() + 6) % 7;
+      date.setDate(date.getDate() - mondayOffset);
+      key = date.toISOString().slice(0, 10);
+      label = date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+      description = `Semana iniciada em ${date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}`;
+    } else {
+      date.setDate(1);
+      key = date.toISOString().slice(0, 7);
+      label = date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+      description = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    }
+    const group = groups.get(key) || { day: key, answered: 0, correct: 0, wrong: 0, label, description };
+    group.answered += number(item.answered);
+    group.correct += number(item.correct);
+    group.wrong += number(item.wrong);
+    groups.set(key, group);
+  });
+
+  return Array.from(groups.values()).sort((a, b) => a.day.localeCompare(b.day)).map((group) => ({
+    ...group,
+    accuracy: group.answered ? (group.correct / group.answered) * 100 : 0,
+  }));
+}
 
 export default function PerformanceTab() {
   const [period, setPeriod] = useState(30);
   const [data, setData] = useState<Dashboard | null>(null);
+  const [topicOrder, setTopicOrder] = useState<TopicOrder>('errors');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const load = async () => {
-    setLoading(true); setError('');
+    setLoading(true);
+    setError('');
     try {
       let activePlanId: string | null = null;
-      try { activePlanId = JSON.parse(localStorage.getItem('study_config') || '{}').studyPlanId || null; } catch {}
-      const remote = await analyticsApi.dashboard(period, activePlanId);
-      const local = localDashboard(period, activePlanId);
-      setData(number(remote?.summary?.answered) > 0 || number(remote?.summary?.total_time_seconds) > 0 ? remote : local);
+      try {
+        activePlanId = JSON.parse(localStorage.getItem('study_config') || '{}').studyPlanId || null;
+      } catch {
+        // Um plano ausente apenas amplia a análise para todo o histórico do usuário.
+      }
+      setData(await analyticsApi.dashboard(period, activePlanId));
+    } catch (requestError) {
+      setData(null);
+      setError(requestError instanceof Error ? requestError.message : 'Não foi possível carregar o desempenho do PostgreSQL.');
+    } finally {
+      setLoading(false);
     }
-    catch (requestError) {
-      console.warn('Desempenho remoto indisponível; usando dados locais.', requestError);
-      let activePlanId: string | null = null;
-      try { activePlanId = JSON.parse(localStorage.getItem('study_config') || '{}').studyPlanId || null; } catch {}
-      setData(localDashboard(period, activePlanId));
-    }
-    finally { setLoading(false); }
   };
-  useEffect(() => { load(); }, [period]);
+
+  useEffect(() => {
+    load();
+  }, [period]);
 
   const summary = data?.summary;
-  const maxAnswered = useMemo(() => Math.max(1, ...(data?.evolution || []).map(day => number(day.answered))), [data]);
+  const trend = useMemo(() => {
+    const activeDays = (data?.evolution || []).filter((day) => number(day.answered) > 0);
+    if (activeDays.length < 2) return null;
+    return number(activeDays.at(-1)?.accuracy) - number(activeDays[0].accuracy);
+  }, [data]);
 
-  if (loading && !data) return <div className="performance-skeleton" role="status" aria-label="Calculando seu desempenho">
-    <span className="sr-only">Calculando seu desempenho...</span>
-    <div className="skeleton-line skeleton-title" />
-    <div className="skeleton-line skeleton-subtitle" />
-    <div className="skeleton-metrics">{Array.from({ length: 4 }, (_, index) => <div key={index} />)}</div>
-    <div className="skeleton-panel" />
-  </div>;
+  const orderedTopics = useMemo(() => {
+    const items = [...(data?.byTopic || [])];
+    if (topicOrder === 'errors') return items.sort((a, b) => number(b.wrong) - number(a.wrong) || number(a.accuracy) - number(b.accuracy));
+    if (topicOrder === 'volume') return items.sort((a, b) => number(b.answered) - number(a.answered));
+    return items.sort((a, b) => number(b.accuracy) - number(a.accuracy) || number(b.answered) - number(a.answered));
+  }, [data, topicOrder]);
 
-  return <div id="performance-tab-container" className="performance-layout space-y-6">
-    <div className="performance-header flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-      <div><h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2"><Activity className="w-6 h-6 text-indigo-600" /> Seu desempenho</h2><p className="text-sm text-slate-500 mt-1">Tempo de estudo, sessões, banco de questões e simulados reunidos em uma única análise.</p></div>
-      <div className="performance-periods flex gap-2 overflow-x-auto">{[7,30,90].map(days=><button key={days} onClick={()=>setPeriod(days)} className={`px-4 rounded-xl text-sm font-bold whitespace-nowrap ${period===days?'bg-slate-900 text-white':'bg-white border border-slate-200 text-slate-600'}`}>{days} dias</button>)}<button onClick={load} aria-label="Atualizar desempenho" className="w-11 h-11 min-h-11 shrink-0 rounded-xl bg-white border border-slate-200 flex items-center justify-center"><RefreshCw className={`w-4 h-4 ${loading?'animate-spin':''}`} /></button></div>
-    </div>
-    {error&&<div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-700">{error}</div>}
+  if (loading && !data) return <PerformanceSkeleton />;
 
-    {!summary || (number(summary.answered)===0&&number(summary.total_time_seconds)===0) ? <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-10 text-center"><Target className="w-10 h-10 text-slate-300 mx-auto mb-3" /><h3 className="font-bold text-slate-800">Seu painel começa com a primeira sessão</h3><p className="text-sm text-slate-500 mt-1">Inicie o timer ou responda questões para acompanhar tempo, acertos e evolução por assunto.</p></div> : <>
-      <div className="performance-metrics grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
-        <Metric label="Tempo total" value={timeLabel(summary.total_time_seconds)} icon={<Clock3 />} color="indigo" />
-        <Metric label="Respondidas" value={number(summary.answered)} icon={<BookOpenCheck />} color="indigo" />
-        <Metric label="Acertos" value={number(summary.correct)} icon={<CheckCircle2 />} color="emerald" />
-        <Metric label="Erros" value={number(summary.wrong)} icon={<AlertTriangle />} color="rose" />
-        <Metric label="Aproveitamento" value={`${number(summary.accuracy).toFixed(0)}%`} icon={<Target />} color="amber" />
+  const hasActivity = summary && (number(summary.answered) > 0 || number(summary.total_time_seconds) > 0);
+  const strongAreas = data?.strongAreas || data?.byArea || [];
+  const weakAreas = data?.weakAreas || [];
+
+  return <div id="performance-tab-container" className="performance-v2">
+    <header className="performance-v2-header">
+      <div>
+        <span className="performance-v2-eyebrow"><Activity size={14} /> Análise de desempenho</span>
+        <h2>Entenda onde você avança e onde precisa revisar</h2>
+        <p>Resultados de sessões, questões e simulados reunidos em uma leitura simples do seu progresso.</p>
+      </div>
+      <div className="performance-v2-periods" aria-label="Período analisado">
+        {periodOptions.map((option) => <button
+          type="button"
+          key={option.days}
+          aria-pressed={period === option.days}
+          onClick={() => setPeriod(option.days)}
+        >{option.label}</button>)}
+        <button type="button" className="performance-v2-refresh" onClick={load} aria-label="Atualizar desempenho">
+          <RefreshCw size={17} className={loading ? 'performance-v2-spinning' : ''} />
+        </button>
+      </div>
+    </header>
+
+    {error && <div role="alert" className="performance-v2-error">{error}</div>}
+
+    {!hasActivity ? <EmptyPerformance /> : <>
+      <div className="performance-v2-overview">
+        <div className="performance-v2-score-card">
+          <div className="performance-v2-score-copy">
+            <span>Aproveitamento geral</span>
+            <strong>{percent(summary.accuracy).toFixed(0)}%</strong>
+            <Trend value={trend} />
+          </div>
+          <AccuracyRing value={percent(summary.accuracy)} />
+        </div>
+
+        <div className="performance-v2-metrics">
+          <Metric label="Questões respondidas" value={number(summary.answered)} detail={`${number(summary.correct)} acertos no período`} icon={<BookOpenCheck />} tone="blue" />
+          <Metric label="Total de acertos" value={number(summary.correct)} detail={`${percent(summary.accuracy).toFixed(0)}% de aproveitamento`} icon={<CheckCircle2 />} tone="green" />
+          <Metric label="Pontos para revisar" value={number(summary.wrong)} detail="erros identificados" icon={<AlertTriangle />} tone="red" />
+          <Metric label="Tempo de preparação" value={timeLabel(summary.total_time_seconds)} detail={`${number(summary.study_sessions) + number(summary.question_sessions)} sessões concluídas`} icon={<Clock3 />} tone="amber" />
+        </div>
       </div>
 
-      <section className="grid md:grid-cols-3 gap-3" aria-label="Fontes do desempenho">
-        <SourceMetric title="Sessões de assunto" value={`${number(summary.study_sessions)} sessões`} detail={`${timeLabel(summary.study_seconds)} · ${number(summary.session_questions)} questões`} />
-        <SourceMetric title="Banco de questões" value={`${number(summary.question_bank_answered)} respostas`} detail={`${number(summary.question_sessions)} pomodoros · ${timeLabel(summary.question_practice_seconds)}`} />
+      {data?.recommendation && <div className="performance-v2-recommendation">
+        <div className="performance-v2-recommendation-icon"><Lightbulb size={22} /></div>
+        <div>
+          <span>Prioridade de revisão</span>
+          <h3>{data.recommendation.topic}</h3>
+          <p>{number(data.recommendation.wrong)} erros em {number(data.recommendation.answered)} respostas. Retome o conteúdo e faça uma nova sequência de questões.</p>
+        </div>
+        <div className="performance-v2-recommendation-rate">
+          <strong>{percent(data.recommendation.accuracy).toFixed(0)}%</strong>
+          <span>de acertos</span>
+        </div>
+      </div>}
+
+      <div className="performance-v2-main-grid">
+        <div className="performance-v2-panel performance-v2-evolution">
+          <PanelHeading icon={<TrendingUp />} title="Evolução do aproveitamento" subtitle={`Resultados agrupados por ${evolutionGranularity(period).label}`} />
+          <EvolutionChart items={data?.evolution || []} period={period} />
+        </div>
+        <div className="performance-v2-panel performance-v2-snapshot">
+          <PanelHeading icon={<BarChart3 />} title="Resumo do período" subtitle="Distribuição das suas respostas" />
+          <AnswerDistribution correct={number(summary.correct)} wrong={number(summary.wrong)} />
+          <div className="performance-v2-snapshot-numbers">
+            <div><span className="is-correct" /> <strong>{number(summary.correct)}</strong><small>acertos</small></div>
+            <div><span className="is-wrong" /> <strong>{number(summary.wrong)}</strong><small>erros</small></div>
+          </div>
+        </div>
+      </div>
+
+      <div className="performance-v2-area-grid">
+        <AreaRanking mode="strong" items={strongAreas} />
+        <AreaRanking mode="weak" items={weakAreas} />
+      </div>
+
+      <div className="performance-v2-topic-grid">
+        <TopicHighlights title="Assuntos dominados" subtitle="Melhor aproveitamento com volume registrado" items={data?.strongTopics || []} tone="strong" />
+        <TopicHighlights title="Assuntos que mais geram erros" subtitle="Ordenados pela quantidade de respostas incorretas" items={data?.weakTopics || []} tone="weak" />
+      </div>
+
+      <div className="performance-v2-panel performance-v2-topic-table">
+        <div className="performance-v2-table-header">
+          <PanelHeading icon={<Layers3 />} title="Todos os assuntos" subtitle="Compare volume, acertos e erros em cada conteúdo" />
+          <div className="performance-v2-sort" aria-label="Ordenar assuntos">
+            <button type="button" aria-pressed={topicOrder === 'errors'} onClick={() => setTopicOrder('errors')}>Mais erros</button>
+            <button type="button" aria-pressed={topicOrder === 'accuracy'} onClick={() => setTopicOrder('accuracy')}>Aproveitamento</button>
+            <button type="button" aria-pressed={topicOrder === 'volume'} onClick={() => setTopicOrder('volume')}>Volume</button>
+          </div>
+        </div>
+        <div className="performance-v2-topic-rows">
+          {orderedTopics.map((item) => <TopicRow key={item.topic} item={item} />)}
+        </div>
+      </div>
+
+      <div className="performance-v2-sources" aria-label="Origem dos resultados">
+        <SourceMetric title="Estudo por assunto" value={`${number(summary.study_sessions)} sessões`} detail={`${timeLabel(summary.study_seconds)} · ${number(summary.session_questions)} questões`} />
+        <SourceMetric title="Banco de questões" value={`${number(summary.question_bank_answered)} respostas`} detail={`${number(summary.question_sessions)} sessões · ${timeLabel(summary.question_practice_seconds)}`} />
         <SourceMetric title="Simulados" value={`${number(summary.simulation_answered)} respostas`} detail={`${number(summary.simulation_sessions)} simulados · ${timeLabel(summary.simulation_seconds)}`} />
-      </section>
-
-      {data?.recommendation&&<div className="bg-indigo-950 text-white rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4"><div className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center shrink-0"><TrendingUp className="w-5 h-5 text-amber-400" /></div><div className="grow"><span className="text-xs font-bold text-indigo-300 uppercase tracking-wide">Próximo assunto recomendado</span><h3 className="font-extrabold mt-1">{data.recommendation.topic}</h3><p className="text-sm text-indigo-200 mt-1">{number(data.recommendation.accuracy).toFixed(0)}% de acertos em {number(data.recommendation.answered)} respostas. Revise o resumo e tente novas questões.</p></div></div>}
-
-      <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6"><div className="mb-5"><h3 className="font-bold text-slate-900">Evolução diária</h3><p className="text-sm text-slate-500">Altura indica quantidade respondida; a cor mostra o aproveitamento.</p></div>{data?.evolution.length===0?<p className="text-sm text-slate-500">Ainda não há respostas neste período.</p>:<div className="daily-chart flex items-end gap-3 overflow-x-auto min-h-48 pb-2">{data?.evolution.map(day=><div key={day.day} className="flex flex-col items-center gap-2 min-w-12 grow"><span className="text-xs font-bold text-slate-600">{number(day.accuracy).toFixed(0)}%</span><div title={`${day.answered} respostas`} className={`w-full max-w-12 rounded-t-lg ${number(day.accuracy)>=70?'bg-emerald-500':number(day.accuracy)>=50?'bg-amber-400':'bg-rose-400'}`} style={{height:`${Math.max(24,(number(day.answered)/maxAnswered)*120)}px`}} /><span className="text-[10px] text-slate-500">{new Date(`${day.day}T00:00:00`).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}</span></div>)}</div>}</section>
-
-      <div className="performance-topic-lists grid grid-cols-1 gap-4"><TopicList title="Pontos fortes" subtitle="Assuntos com aproveitamento de 70% ou mais" items={data?.strongTopics||[]} tone="strong" /><TopicList title="Pontos para revisar" subtitle="Assuntos com maior incidência de erros" items={data?.weakTopics||[]} tone="weak" /></div>
-
-      <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6"><h3 className="font-bold text-slate-900 mb-4">Desempenho por assunto</h3><div className="space-y-4">{data?.byTopic.map(item=><div key={item.topic}><div className="flex justify-between gap-3 text-sm mb-1.5"><span className="font-semibold text-slate-700 truncate">{item.topic}</span><span className="font-bold text-slate-900 shrink-0">{number(item.accuracy).toFixed(0)}%</span></div><div className="h-2.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full rounded-full ${number(item.accuracy)>=70?'bg-emerald-500':number(item.accuracy)>=50?'bg-amber-400':'bg-rose-400'}`} style={{width:`${number(item.accuracy)}%`}} /></div><p className="text-xs text-slate-400 mt-1">{item.correct} acertos • {item.wrong} erros • {item.answered} respostas{number(item.studied_seconds)>0?` • ${timeLabel(item.studied_seconds)}`:''}</p></div>)}</div></section>
+      </div>
     </>}
   </div>;
 }
 
-function Metric({label,value,icon,color}:{label:string;value:string|number;icon:ReactNode;color:string}) { const tones:Record<string,string>={indigo:'bg-indigo-50 text-indigo-600',emerald:'bg-emerald-50 text-emerald-600',rose:'bg-rose-50 text-rose-600',amber:'bg-amber-50 text-amber-600'};return <div className="bg-white border border-slate-200 rounded-2xl p-4"><div className={`w-9 h-9 rounded-xl ${tones[color]} flex items-center justify-center [&_svg]:w-5 [&_svg]:h-5`}>{icon}</div><p className="text-xs font-semibold text-slate-500 mt-3">{label}</p><p className="text-2xl font-extrabold text-slate-900 mt-0.5">{value}</p></div>; }
-function SourceMetric({title,value,detail}:{title:string;value:string;detail:string}) { return <article className="bg-slate-900 text-white rounded-2xl p-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-wide">{title}</p><strong className="text-lg block mt-2">{value}</strong><span className="text-xs text-slate-300 block mt-1">{detail}</span></article>; }
-function TopicList({title,subtitle,items,tone}:{title:string;subtitle:string;items:TopicStat[];tone:'strong'|'weak'}) { return <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6"><div className="flex items-center gap-2"><Award className={`w-5 h-5 ${tone==='strong'?'text-emerald-500':'text-rose-500'}`} /><h3 className="font-bold text-slate-900">{title}</h3></div><p className="text-xs text-slate-500 mt-1 mb-4">{subtitle}</p>{items.length===0?<p className="text-sm text-slate-400 py-4">Responda mais questões para gerar esta análise.</p>:<div className="space-y-2">{items.map(item=><div key={item.topic} className={`p-3 rounded-xl ${tone==='strong'?'bg-emerald-50':'bg-rose-50'}`}><div className="flex justify-between gap-2"><span className="text-sm font-bold text-slate-800">{item.topic}</span><span className={`text-sm font-extrabold ${tone==='strong'?'text-emerald-700':'text-rose-700'}`}>{number(item.accuracy).toFixed(0)}%</span></div><p className="text-xs text-slate-500 mt-1">{item.answered} respostas</p></div>)}</div>}</section>; }
+function PerformanceSkeleton() {
+  return <div className="performance-v2-skeleton" role="status" aria-label="Calculando seu desempenho">
+    <span className="sr-only">Calculando seu desempenho...</span>
+    <div className="performance-v2-skeleton-line is-title" />
+    <div className="performance-v2-skeleton-line is-subtitle" />
+    <div className="performance-v2-skeleton-cards">{Array.from({ length: 4 }, (_, index) => <div key={index} />)}</div>
+    <div className="performance-v2-skeleton-panel" />
+  </div>;
+}
+
+function EmptyPerformance() {
+  return <div className="performance-v2-empty">
+    <div><Target size={28} /></div>
+    <h3>Seu painel começa com a primeira sessão</h3>
+    <p>Inicie o timer ou responda questões para acompanhar tempo, acertos e evolução por área e assunto.</p>
+  </div>;
+}
+
+function Metric({ label, value, detail, icon, tone }: { label: string; value: string | number; detail: string; icon: ReactNode; tone: string }) {
+  return <div className={`performance-v2-metric is-${tone}`}>
+    <div className="performance-v2-metric-icon">{icon}</div>
+    <div><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>
+  </div>;
+}
+
+function AccuracyRing({ value }: { value: number }) {
+  return <div className="performance-v2-ring" role="img" aria-label={`${value.toFixed(0)}% de aproveitamento`}>
+    <svg viewBox="0 0 120 120" aria-hidden="true">
+      <circle className="performance-v2-ring-track" cx="60" cy="60" r="49" pathLength="100" />
+      <circle className="performance-v2-ring-value" cx="60" cy="60" r="49" pathLength="100" strokeDasharray={`${value} ${100 - value}`} />
+    </svg>
+    <Target size={25} />
+  </div>;
+}
+
+function Trend({ value }: { value: number | null }) {
+  if (value === null) return <small>Continue respondendo para gerar uma tendência</small>;
+  const positive = value >= 0;
+  return <small className={positive ? 'is-positive' : 'is-negative'}>
+    {positive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+    {Math.abs(value).toFixed(0)} pontos desde o início do período
+  </small>;
+}
+
+function PanelHeading({ icon, title, subtitle }: { icon: ReactNode; title: string; subtitle: string }) {
+  return <div className="performance-v2-panel-heading">
+    <div>{icon}</div>
+    <span><h3>{title}</h3><p>{subtitle}</p></span>
+  </div>;
+}
+
+function EvolutionChart({ items, period }: { items: DayStat[]; period: number }) {
+  const pointsToRender = aggregateEvolution(items, period);
+  if (!pointsToRender.length) return <div className="performance-v2-no-data">Ainda não há respostas neste período.</div>;
+
+  const width = 760;
+  const height = 250;
+  const left = 42;
+  const right = 18;
+  const top = 18;
+  const bottom = 42;
+  const innerWidth = width - left - right;
+  const innerHeight = height - top - bottom;
+  const x = (index: number) => pointsToRender.length === 1 ? left + innerWidth / 2 : left + (index / (pointsToRender.length - 1)) * innerWidth;
+  const y = (accuracy: number) => top + ((100 - percent(accuracy)) / 100) * innerHeight;
+  const points = pointsToRender.map((item, index) => `${x(index)},${y(number(item.accuracy))}`).join(' ');
+  const area = `${x(0)},${top + innerHeight} ${points} ${x(pointsToRender.length - 1)},${top + innerHeight}`;
+  const labelEvery = Math.max(1, Math.ceil(pointsToRender.length / 7));
+
+  return <div className="performance-v2-chart-wrap">
+    <svg className="performance-v2-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-labelledby="evolution-chart-title evolution-chart-description">
+      <title id="evolution-chart-title">Evolução diária do aproveitamento</title>
+      <desc id="evolution-chart-description">Gráfico de linha responsivo com a porcentagem de acertos agrupada conforme o período selecionado.</desc>
+      <defs>
+        <linearGradient id="performance-area-gradient" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#2563eb" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="#2563eb" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {[100, 75, 50, 25, 0].map((tick) => {
+        const tickY = y(tick);
+        return <g key={tick}>
+          <line x1={left} x2={width - right} y1={tickY} y2={tickY} className="performance-v2-chart-grid" />
+          <text x={left - 8} y={tickY + 4} textAnchor="end" className="performance-v2-chart-axis">{tick}%</text>
+        </g>;
+      })}
+      <polygon points={area} fill="url(#performance-area-gradient)" />
+      <polyline points={points} className="performance-v2-chart-line" />
+      {pointsToRender.map((item, index) => <g key={item.day}>
+        <circle cx={x(index)} cy={y(number(item.accuracy))} r="4" className="performance-v2-chart-point">
+          <title>{item.description}: {number(item.accuracy).toFixed(0)}% em {number(item.answered)} respostas</title>
+        </circle>
+        {(index % labelEvery === 0 || index === pointsToRender.length - 1) && <text x={x(index)} y={height - 14} textAnchor="middle" className="performance-v2-chart-axis">{item.label}</text>}
+      </g>)}
+    </svg>
+  </div>;
+}
+
+function AnswerDistribution({ correct, wrong }: { correct: number; wrong: number }) {
+  const total = Math.max(1, correct + wrong);
+  const correctWidth = (correct / total) * 100;
+  const style = { '--correct-width': `${correctWidth}%` } as CSSProperties;
+  return <div className="performance-v2-distribution" style={style} role="img" aria-label={`${correct} acertos e ${wrong} erros`}>
+    <div className="performance-v2-distribution-correct" />
+    <div className="performance-v2-distribution-wrong" />
+  </div>;
+}
+
+function AreaRanking({ mode, items }: { mode: 'strong' | 'weak'; items: AreaStat[] }) {
+  const isStrong = mode === 'strong';
+  const maximum = Math.max(1, ...items.map((item) => number(isStrong ? item.correct : item.wrong)));
+  return <div className={`performance-v2-panel performance-v2-ranking is-${mode}`}>
+    <PanelHeading
+      icon={isStrong ? <Award /> : <AlertTriangle />}
+      title={isStrong ? 'Áreas com mais acertos' : 'Áreas com mais erros'}
+      subtitle={isStrong ? 'Onde você acumula mais respostas corretas' : 'Onde a revisão terá maior impacto'}
+    />
+    {!items.length ? <div className="performance-v2-no-data">Responda mais questões para gerar este ranking.</div> : <div className="performance-v2-ranking-list">
+      {items.slice(0, 5).map((item, index) => {
+        const metric = number(isStrong ? item.correct : item.wrong);
+        return <div className="performance-v2-ranking-row" key={item.area}>
+          <span className="performance-v2-rank">{index + 1}</span>
+          <div className="performance-v2-ranking-content">
+            <div className="performance-v2-ranking-label">
+              <strong>{item.area}</strong>
+              <span>{percent(item.accuracy).toFixed(0)}% de acertos</span>
+            </div>
+            <div className="performance-v2-ranking-track"><i style={{ width: `${Math.max(5, (metric / maximum) * 100)}%` }} /></div>
+            <small>{metric} {isStrong ? 'acertos' : 'erros'} em {number(item.answered)} respostas</small>
+          </div>
+        </div>;
+      })}
+    </div>}
+  </div>;
+}
+
+function TopicHighlights({ title, subtitle, items, tone }: { title: string; subtitle: string; items: TopicStat[]; tone: 'strong' | 'weak' }) {
+  return <div className={`performance-v2-panel performance-v2-highlights is-${tone}`}>
+    <PanelHeading icon={tone === 'strong' ? <Award /> : <AlertTriangle />} title={title} subtitle={subtitle} />
+    {!items.length ? <div className="performance-v2-no-data">Responda mais questões para gerar esta análise.</div> : <div className="performance-v2-highlight-list">
+      {items.slice(0, 5).map((item) => <div key={item.topic}>
+        <span className="performance-v2-highlight-icon">{tone === 'strong' ? <CheckCircle2 size={16} /> : <Target size={16} />}</span>
+        <span className="performance-v2-highlight-name"><strong>{item.topic}</strong><small>{number(item.correct)} acertos · {number(item.wrong)} erros</small></span>
+        <strong className="performance-v2-highlight-rate">{percent(item.accuracy).toFixed(0)}%</strong>
+      </div>)}
+    </div>}
+  </div>;
+}
+
+function TopicRow({ item }: { item: TopicStat }) {
+  const accuracy = percent(item.accuracy);
+  const tone = accuracy >= 70 ? 'good' : accuracy >= 50 ? 'medium' : 'weak';
+  return <div className="performance-v2-topic-row">
+    <div className="performance-v2-topic-name">
+      <strong>{item.topic}</strong>
+      <small>{number(item.answered)} respostas{number(item.studied_seconds) > 0 ? ` · ${timeLabel(item.studied_seconds)} de estudo` : ''}</small>
+    </div>
+    <div className="performance-v2-topic-results">
+      <span><i className="is-correct" /> {number(item.correct)} acertos</span>
+      <span><i className="is-wrong" /> {number(item.wrong)} erros</span>
+    </div>
+    <div className={`performance-v2-topic-accuracy is-${tone}`}>
+      <div><i style={{ width: `${accuracy}%` }} /></div><strong>{accuracy.toFixed(0)}%</strong>
+    </div>
+  </div>;
+}
+
+function SourceMetric({ title, value, detail }: { title: string; value: string; detail: string }) {
+  return <div className="performance-v2-source">
+    <span>{title}</span><strong>{value}</strong><small>{detail}</small>
+  </div>;
+}

@@ -50,11 +50,12 @@ public class AdminContentController {
         String sql="""
           SELECT q.id,q.board,q.type,q.statement,q.explanation,q.status,q.correct_answer #>> '{}' correct,
             q.passage_id,q.metadata::text metadata_json,p.title passage_title,
+            COALESCE(NULLIF(:course,''),(SELECT MIN(qc.course_id) FROM question_courses qc WHERE qc.question_id=q.id),'') course_id,
             COALESCE((SELECT jsonb_agg(jsonb_build_object('label',qo.label,'text',qo.content) ORDER BY qo.position)
               FROM question_options qo WHERE qo.question_id=q.id),'[]'::jsonb)::text options_json,
             (SELECT COUNT(*) FROM question_reports qr WHERE qr.question_id=q.id AND qr.status='PENDING') pending_reports
           FROM questions q LEFT JOIN passages p ON p.id=q.passage_id
-          WHERE (:course='' OR q.metadata->>'courseId'=:course)
+          WHERE (:course='' OR EXISTS(SELECT 1 FROM question_courses qc WHERE qc.question_id=q.id AND qc.course_id=:course))
             AND (:area='' OR q.metadata->>'category'=:area)
             AND (:search='' OR q.statement ILIKE :pattern OR q.id::text ILIKE :pattern OR q.board ILIKE :pattern
               OR q.metadata->>'category' ILIKE :pattern OR q.metadata->>'topic' ILIKE :pattern
@@ -67,7 +68,7 @@ public class AdminContentController {
         for(var row:rows)result.add(question(row));
         int total=jdbc.sql("""
           SELECT COUNT(*) FROM questions q
-          WHERE (:course='' OR q.metadata->>'courseId'=:course)
+          WHERE (:course='' OR EXISTS(SELECT 1 FROM question_courses qc WHERE qc.question_id=q.id AND qc.course_id=:course))
             AND (:area='' OR q.metadata->>'category'=:area)
             AND (:search='' OR q.statement ILIKE :pattern OR q.id::text ILIKE :pattern OR q.board ILIKE :pattern
               OR q.metadata->>'category' ILIKE :pattern OR q.metadata->>'topic' ILIKE :pattern
@@ -75,8 +76,8 @@ public class AdminContentController {
           """).param("course",course).param("area",normalizedArea).param("search",search).param("pattern","%"+search+"%")
           .query(Integer.class).single();
         var areaRows=jdbc.sql("""
-          SELECT DISTINCT BTRIM(metadata->>'category') area FROM questions
-          WHERE (:course='' OR metadata->>'courseId'=:course)
+          SELECT DISTINCT BTRIM(q.metadata->>'category') area FROM questions q
+          WHERE (:course='' OR EXISTS(SELECT 1 FROM question_courses qc WHERE qc.question_id=q.id AND qc.course_id=:course))
             AND COALESCE(BTRIM(metadata->>'category'),'')<>'' ORDER BY area
           """).param("course",course).query().listOfRows();
         var areas=areaRows.stream().map(row->String.valueOf(row.get("area"))).toList();
@@ -90,7 +91,7 @@ public class AdminContentController {
           SELECT r.id::text id,r.question_id::text question_id,r.question_key,r.reason,r.details,r.status,r.admin_note,
             r.created_at,r.updated_at,u.name reporter_name,u.email reporter_email,
             COALESCE(q.statement,r.question_snapshot->>'text','Questão indisponível') question_text,
-            COALESCE(q.metadata->>'courseId',r.question_snapshot->>'courseId','') course_id,
+            COALESCE(r.question_snapshot->>'courseId',(SELECT MIN(qc.course_id) FROM question_courses qc WHERE qc.question_id=q.id),'') course_id,
             COALESCE(q.metadata->>'category',r.question_snapshot->>'category','') category,
             COALESCE(q.metadata->>'reference',r.question_snapshot->>'reference','') reference
           FROM question_reports r JOIN users u ON u.id=r.reporter_user_id LEFT JOIN questions q ON q.id=r.question_id
@@ -112,14 +113,14 @@ public class AdminContentController {
 
     @PostMapping("/questions") @ResponseStatus(HttpStatus.CREATED) @Transactional
     public Map<String,Object> createQuestion(@Valid @RequestBody QuestionRequest r){currentUser.requireAdmin();UUID id=UUID.randomUUID();
-        saveQuestion(id,r,false);return questionById(id);}
+        return questionById(saveQuestion(id,r,false));}
 
     @PostMapping("/questions/batch") @ResponseStatus(HttpStatus.CREATED) @Transactional
     public Map<String,Object> createQuestions(@Valid @RequestBody QuestionBatchRequest request){currentUser.requireAdmin();
         var ids=new ArrayList<String>();int index=0;
         for(var question:request.questions()){
             UUID id=UUID.randomUUID();
-            try{saveQuestion(id,question,false);}
+            try{id=saveQuestion(id,question,false);}
             catch(RuntimeException error){throw new IllegalArgumentException("Questão "+(index+1)+": "+fallback(error.getMessage(),"dados inválidos"),error);}
             ids.add(id.toString());index++;
         }
@@ -133,13 +134,20 @@ public class AdminContentController {
     @DeleteMapping("/questions/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) @Transactional
     public void deleteQuestion(@PathVariable UUID id){currentUser.requireAdmin();jdbc.sql("DELETE FROM questions WHERE id=:id").param("id",id).update();}
 
-    private void saveQuestion(UUID id,QuestionRequest r,boolean update){
+    private UUID saveQuestion(UUID id,QuestionRequest r,boolean update){
         validateQuestion(r);
         String answer;String metadata;
         try{answer=json.writeValueAsString(r.correct().trim());metadata=json.writeValueAsString(Map.of(
-                "courseId",r.courseId().trim(),"category",r.category().trim(),"topic",fallback(r.topic(),r.category()),"reference",text(r.reference())));}
+                "category",r.category().trim(),"topic",fallback(r.topic(),r.category()),"reference",text(r.reference())));}
         catch(Exception error){throw new IllegalArgumentException("Questão inválida");}
         String status="Anulada".equalsIgnoreCase(r.correct())?"ANNULLED":fallback(r.status(),"ACTIVE").toUpperCase(Locale.ROOT);
+        if(!update){
+            var existing=jdbc.sql("""
+              SELECT id FROM questions WHERE md5(regexp_replace(lower(statement),'[^[:alnum:]]','','g'))
+                =md5(regexp_replace(lower(:statement),'[^[:alnum:]]','','g')) LIMIT 1
+              """).param("statement",r.text().trim()).query(UUID.class).list();
+            if(!existing.isEmpty()){attachCourse(existing.getFirst(),r.courseId());return existing.getFirst();}
+        }
         if(update){
             int changed=jdbc.sql("""
               UPDATE questions SET board=:board,type=:type,statement=:statement,explanation=:explanation,status=:status,
@@ -158,7 +166,12 @@ public class AdminContentController {
         int position=0;if(r.options()!=null)for(var option:r.options())jdbc.sql("""
           INSERT INTO question_options(id,question_id,label,content,position) VALUES(gen_random_uuid(),:question,:label,:content,:position)
           """).param("question",id).param("label",option.label().trim().toUpperCase(Locale.ROOT)).param("content",option.text().trim()).param("position",position++).update();
+        attachCourse(id,r.courseId());return id;
     }
+
+    private void attachCourse(UUID questionId,String courseId){jdbc.sql("""
+      INSERT INTO question_courses(question_id,course_id) VALUES(:question,:course) ON CONFLICT DO NOTHING
+      """).param("question",questionId).param("course",courseId.trim()).update();}
 
     private String questionType(QuestionRequest r){return r.options()!=null&&!r.options().isEmpty()?"MULTIPLE_CHOICE":r.type().trim().toUpperCase(Locale.ROOT);}
     private void validateQuestion(QuestionRequest r){String type=r.type().trim().toUpperCase(Locale.ROOT);String correct=r.correct().trim();
@@ -170,6 +183,7 @@ public class AdminContentController {
     private Map<String,Object> questionById(UUID id){var row=jdbc.sql("""
       SELECT q.id,q.board,q.type,q.statement,q.explanation,q.status,q.correct_answer #>> '{}' correct,
         q.passage_id,q.metadata::text metadata_json,p.title passage_title,
+        COALESCE((SELECT MIN(qc.course_id) FROM question_courses qc WHERE qc.question_id=q.id),'') course_id,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('label',qo.label,'text',qo.content) ORDER BY qo.position)
           FROM question_options qo WHERE qo.question_id=q.id),'[]'::jsonb)::text options_json
       FROM questions q LEFT JOIN passages p ON p.id=q.passage_id WHERE q.id=:id
@@ -178,7 +192,7 @@ public class AdminContentController {
         Map<String,Object> metadata=Map.of();try{metadata=json.readValue(String.valueOf(row.get("metadata_json")),Map.class);}catch(Exception ignored){}
         UUID id=(UUID)row.get("id");List<Map<String,Object>> options=List.of();
         try{options=json.readValue(String.valueOf(row.get("options_json")),List.class);}catch(Exception ignored){}
-        var item=new LinkedHashMap<String,Object>();item.put("id",id.toString());item.put("courseId",metadata.getOrDefault("courseId",""));
+        var item=new LinkedHashMap<String,Object>();item.put("id",id.toString());item.put("courseId",row.getOrDefault("course_id",""));
         item.put("category",metadata.getOrDefault("category","Geral"));item.put("topic",metadata.getOrDefault("topic",metadata.getOrDefault("category","Geral")));
         item.put("board",row.get("board"));item.put("type",row.get("type"));item.put("text",row.get("statement"));item.put("correct",row.get("correct"));
         item.put("explanation",row.get("explanation"));item.put("reference",metadata.getOrDefault("reference",""));item.put("status",row.get("status"));
