@@ -5,6 +5,8 @@ export interface StudyCard {
   isQuente: boolean;
   content: string; // Markdown or rich HTML-friendly text
   keyTakeaways: string[];
+  studyObjective?: string;
+  reviewSummary?: string[];
   contentBlocks?: Array<{
     id: string;
     title: string;

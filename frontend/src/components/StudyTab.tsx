@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   BookOpen,
+  Brain,
   Check,
   CheckCircle,
+  Lightbulb,
   ListFilter,
   Target,
   X,
@@ -50,11 +52,41 @@ const mergeSharedStudyLibrary = (
             ...card,
             content: shared.content,
             keyTakeaways: shared.keyTakeaways,
+            studyObjective: shared.studyObjective,
+            reviewSummary: shared.reviewSummary,
             contentBlocks: shared.contentBlocks,
           }
         : card;
     }),
   }));
+
+const distinctPoints = (values: string[]) => {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const text = value.trim();
+    const key = normalizeStudyText(text);
+    if (!text || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const applicationGuide = (discipline: string, subject: string) => {
+  const normalized = normalizeStudyText(`${discipline} ${subject}`);
+  if (/(raciocinio|matematica|estatistica|contabilidade|calculo)/.test(normalized)) {
+    return "Separe os dados do enunciado, escreva a regra que será usada e só então faça o cálculo. Ao final, confira se o resultado responde exatamente ao que foi perguntado.";
+  }
+  if (/(direito|legislacao|lei|norma|etica)/.test(normalized)) {
+    return "Identifique quem pratica a conduta, qual regra se aplica, em que condição ela vale e qual é a consequência. Isso evita decorar artigos de forma isolada.";
+  }
+  if (/(lingua|portugues|ingles|redacao|jornalismo)/.test(normalized)) {
+    return "Localize as palavras-chave do comando, volte ao trecho ou à regra pertinente e justifique a resposta com uma evidência do texto — não apenas pela impressão de leitura.";
+  }
+  if (/(tecnologia|informacao|sistema|seguranca|dados|informatica)/.test(normalized)) {
+    return "Comece pelo problema que o conceito resolve. Depois relacione seus componentes, benefícios, limitações e um caso de uso prático antes de escolher a alternativa.";
+  }
+  return "Comece identificando o conceito central, relacione-o a uma situação prática e confirme se a conclusão atende exatamente ao comando da questão.";
+};
 
 export default function StudyTab({
   studyContext,
@@ -169,6 +201,26 @@ export default function StudyTab({
 
   const isCompleted = Boolean(completedCards[activeCard.id]);
   const contentBlocks = activeCard.contentBlocks || [];
+  const objective = activeCard.studyObjective?.trim() ||
+    `Compreender ${activeCard.title} e aplicar os conceitos com segurança em questões de prova.`;
+  const reviewPoints = distinctPoints([
+    ...(activeCard.reviewSummary || []),
+    ...(activeCard.keyTakeaways || []),
+  ]).slice(0, 3);
+  const miniQuestions = [
+    {
+      prompt: `Sem consultar o texto, explique qual habilidade você precisa desenvolver em “${activeCard.title}”.`,
+      answer: objective,
+    },
+    {
+      prompt: `Qual é o conceito ou cuidado mais importante deste assunto?`,
+      answer: reviewPoints[0] || "Retome o conceito central, identifique seus elementos e relacione-os ao comando da questão.",
+    },
+    {
+      prompt: "Como você verificaria se uma alternativa está correta antes de marcá-la?",
+      answer: reviewPoints[1] || applicationGuide(activeSection.title, activeCard.title),
+    },
+  ];
 
   return (
     <div id="study-tab-container" className="study-layout">
@@ -239,10 +291,33 @@ export default function StudyTab({
         </header>
 
         <article className="study-reader-scroll" aria-label={activeCard.title}>
+          <section className="study-reader-learning-path" aria-label="Roteiro de estudo">
+            <div>
+              <span>Objetivo do estudo</span>
+              <h3>Ao final desta sessão, você deverá conseguir:</h3>
+              <p>{objective}</p>
+            </div>
+            <ol>
+              <li>Leia a explicação e destaque os termos que determinam a regra ou o conceito.</li>
+              <li>Use o exemplo guiado para transformar a teoria em um raciocínio de prova.</li>
+              <li>Responda às miniquestões antes de revelar a correção.</li>
+            </ol>
+          </section>
+
           <div
             className="study-reader-rich-content"
             dangerouslySetInnerHTML={{ __html: activeCard.content }}
           />
+
+          <section className="study-reader-example" aria-label="Exemplo guiado">
+            <strong><Lightbulb /> Exemplo guiado de aplicação</strong>
+            <p>
+              Imagine uma questão cobrando <b>{activeCard.title}</b>. Antes de olhar as alternativas,
+              explique com suas palavras qual conceito resolve o problema e procure no enunciado a evidência
+              que sustenta essa escolha.
+            </p>
+            <p>{applicationGuide(activeSection.title, activeCard.title)}</p>
+          </section>
 
           {contentBlocks.map((block, index) => (
             <section className="study-reader-chapter" key={block.id || index}>
@@ -262,16 +337,38 @@ export default function StudyTab({
             </section>
           ))}
 
-          {activeCard.keyTakeaways.length > 0 && (
+          {reviewPoints.length > 0 && (
             <aside className="study-reader-key-points">
-              <strong><Target /> Pontos-chave do assunto</strong>
+              <strong><Target /> Pontos-chave para revisar</strong>
               <ul>
-                {activeCard.keyTakeaways.map((point, index) => (
+                {reviewPoints.map((point, index) => (
                   <li key={index}>{point}</li>
                 ))}
               </ul>
             </aside>
           )}
+
+          <section className="study-reader-mini-questions" aria-label="Miniquestões de fixação">
+            <header>
+              <div>
+                <strong><Brain /> Miniquestões de fixação</strong>
+                <p>Tente responder primeiro. A correção comentada está disponível logo abaixo de cada questão.</p>
+              </div>
+              <span>3 questões</span>
+            </header>
+            <div>
+              {miniQuestions.map((question, index) => (
+                <article key={question.prompt}>
+                  <span>Questão {index + 1}</span>
+                  <p>{question.prompt}</p>
+                  <details>
+                    <summary>Conferir resposta comentada</summary>
+                    <p>{question.answer}</p>
+                  </details>
+                </article>
+              ))}
+            </div>
+          </section>
         </article>
 
         <footer className="study-reader-footer">

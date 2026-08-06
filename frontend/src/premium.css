@@ -853,6 +853,29 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .study-reader-rich-content ul { list-style: disc; }
 .study-reader-rich-content ol { list-style: decimal; }
 .study-reader-rich-content h2, .study-reader-rich-content h3, .study-reader-rich-content h4 { margin: 1.5em 0 .65em; color: var(--ink) !important; }
+.study-reader-learning-path {
+  display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(220px, .8fr); gap: 24px;
+  margin: 0 0 30px; padding: 22px; border: 1px solid #d7e3d8; border-radius: 16px;
+  background: linear-gradient(135deg, #f2f8f2, #fbfcf9);
+}
+.study-reader-learning-path span, .study-reader-mini-questions article > span { display: block; color: var(--accent-2); font-size: 10px; font-weight: 850; letter-spacing: .1em; text-transform: uppercase; }
+.study-reader-learning-path h3 { margin: 6px 0 8px; color: var(--ink) !important; font-size: 18px !important; line-height: 1.25 !important; }
+.study-reader-learning-path p { margin: 0; color: #414843; font-size: 14px; line-height: 1.65; }
+.study-reader-learning-path ol { display: grid; align-content: start; gap: 9px; margin: 0; padding-left: 20px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.study-reader-example { margin: 30px 0 0; padding: 18px 19px; border: 1px solid #e4d9b8; border-radius: 14px; background: #fffdf3; }
+.study-reader-example strong, .study-reader-mini-questions strong { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 13px; }
+.study-reader-example strong svg, .study-reader-mini-questions strong svg { width: 16px; height: 16px; color: #a97915; }
+.study-reader-example p { margin: 10px 0 0; color: #585240; font-size: 13px; line-height: 1.65; }
+.study-reader-mini-questions { width: 100%; margin: 30px 0 0; padding: 20px; border: 1px solid #dce3ec; border-radius: 16px; background: #f8fafc; }
+.study-reader-mini-questions > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.study-reader-mini-questions > header p { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.study-reader-mini-questions > header > span { flex: 0 0 auto; padding: 5px 8px; border-radius: 999px; background: #e9eff7; color: #475569; font-size: 10px; font-weight: 800; }
+.study-reader-mini-questions > div { display: grid; gap: 10px; margin-top: 16px; }
+.study-reader-mini-questions article { padding: 15px; border: 1px solid #e0e7ef; border-radius: 12px; background: #fff; }
+.study-reader-mini-questions article > p { margin: 6px 0 12px; color: var(--ink); font-size: 13px; font-weight: 650; line-height: 1.55; }
+.study-reader-mini-questions details { border-top: 1px solid #edf1f5; padding-top: 10px; }
+.study-reader-mini-questions summary { cursor: pointer; color: var(--accent-2); font-size: 12px; font-weight: 800; }
+.study-reader-mini-questions details p { margin: 9px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .study-reader-chapter {
   width: 100%; max-width: none; margin: 34px 0 0; padding: 30px 0 0 !important; border: 0 !important;
   border-top: 1px solid var(--line) !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important;
@@ -922,6 +945,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .study-reader-title h2 { font-size: 20px !important; }
   .study-reader-scroll { height: auto; min-height: 0; padding: 22px 17px 34px; }
   .study-reader-rich-content, .study-reader-plain-content { font-size: 14px; line-height: 1.72; }
+  .study-reader-learning-path { grid-template-columns: 1fr; gap: 16px; padding: 17px; }
+  .study-reader-learning-path ol { gap: 7px; }
+  .study-reader-example, .study-reader-mini-questions { padding: 16px; }
+  .study-reader-mini-questions > header { display: block; }
+  .study-reader-mini-questions > header > span { display: inline-block; margin-top: 10px; }
   .study-reader-chapter h3 { font-size: 18px !important; }
   .study-reader-footer { padding-inline: 12px; }
   .study-reader-footer > button { width: 100%; padding-inline: 13px; }

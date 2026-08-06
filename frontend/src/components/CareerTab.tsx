@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ArrowLeft, BookOpenCheck, BriefcaseBusiness, ChevronRight, Clock3,
@@ -87,6 +87,7 @@ export default function CareerTab({
   const [statusFilter, setStatusFilter] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [openingNoticePdf, setOpeningNoticePdf] = useState(false);
+  const creatingPlanRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,8 +137,10 @@ export default function CareerTab({
   };
 
   const createPlan = async () => {
-    if (!contest || !pendingRole || creatingRole) return;
+    if (!contest || !pendingRole || creatingRole || creatingPlanRef.current) return;
     if (onBeforeCreatePlan && !(await onBeforeCreatePlan())) return;
+    if (creatingPlanRef.current) return;
+    creatingPlanRef.current = true;
     setCreatingRole(pendingRole.id);
     setError('');
     try {
@@ -149,6 +152,7 @@ export default function CareerTab({
       console.error('Erro ao criar preparação automática:', cause);
       setError(cause instanceof Error ? cause.message : 'Não foi possível criar esta preparação.');
     } finally {
+      creatingPlanRef.current = false;
       setCreatingRole('');
     }
   };

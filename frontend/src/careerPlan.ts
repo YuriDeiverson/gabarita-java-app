@@ -170,13 +170,19 @@ export async function createAutomaticCareerPlan(
     },
   };
 
+  const remotePlans = await studyPlansApi.getAll(false);
   let existingPlanId: string | null = null;
   try {
     const existing = JSON.parse(localStorage.getItem(`${role.courseId}_study_config`) || '{}');
-    if (existing.examDate >= localTodayIso() && existing.contest === contest.id) existingPlanId = existing.studyPlanId || null;
+    const storedPlanId = existing.examDate >= localTodayIso() && existing.contest === contest.id
+      ? String(existing.studyPlanId || '')
+      : '';
+    if (storedPlanId && remotePlans.some(plan => String(plan.id) === storedPlanId)) {
+      existingPlanId = storedPlanId;
+    }
   } catch {}
   if (!existingPlanId) {
-    const reusable = (await studyPlansApi.getAll(false)).find(plan =>
+    const reusable = remotePlans.find(plan =>
       (plan.course_id || plan.courseId) === role.courseId &&
       (plan.exam_date || plan.examDate) === examDate && plan.title === role.label,
     );
