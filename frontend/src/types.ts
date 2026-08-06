@@ -12,6 +12,7 @@ export interface StudyCard {
     title: string;
     content: string;
     keyTakeaways?: string[];
+    miniQuestions?: Array<{ prompt: string; answer: string }>;
     createdAt?: string;
   }>;
   materials?: string[];

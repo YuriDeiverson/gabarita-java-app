@@ -560,7 +560,14 @@ export interface SharedStudySubject {
   reviewSummary: string[];
   content: string;
   keyTakeaways: string[];
-  contentBlocks: Array<{id:string;title:string;content:string;keyTakeaways?:string[];createdAt?:string}>;
+  contentBlocks: Array<{
+    id:string;
+    title:string;
+    content:string;
+    keyTakeaways?:string[];
+    miniQuestions?:Array<{prompt:string;answer:string}>;
+    createdAt?:string;
+  }>;
   updatedAt?: string;
 }
 

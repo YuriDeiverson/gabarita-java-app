@@ -207,7 +207,7 @@ export default function StudyTab({
     ...(activeCard.reviewSummary || []),
     ...(activeCard.keyTakeaways || []),
   ]).slice(0, 3);
-  const miniQuestions = [
+  const fallbackMiniQuestions = [
     {
       prompt: `Sem consultar o texto, explique qual habilidade você precisa desenvolver em “${activeCard.title}”.`,
       answer: objective,
@@ -221,6 +221,13 @@ export default function StudyTab({
       answer: reviewPoints[1] || applicationGuide(activeSection.title, activeCard.title),
     },
   ];
+  const materialMiniQuestions = contentBlocks
+    .flatMap((block) => block.miniQuestions || [])
+    .filter((question) => question.prompt?.trim() && question.answer?.trim())
+    .slice(0, 3);
+  const miniQuestions = materialMiniQuestions.length > 0
+    ? materialMiniQuestions
+    : fallbackMiniQuestions;
 
   return (
     <div id="study-tab-container" className="study-layout">
