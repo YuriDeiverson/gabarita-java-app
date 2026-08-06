@@ -3,6 +3,7 @@ package ai.gabarita.plan;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.*;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,17 +45,27 @@ public class StudyPlanService {
     }
 
     @Transactional Map<String,Object> create(UUID user, PlanRequest r) {
-        validate(r); UUID id=UUID.randomUUID();
-        jdbc.sql("""
-          INSERT INTO study_plans(id,user_id,exam_id,course_id,title,exam_date,is_template,block_minutes,break_minutes,
-          final_sprint_days,weekly_goal_minutes,monthly_goal_minutes,settings)
-          VALUES(:id,:u,:exam,:course,:title,:date,:template,:block,:break,:sprint,:weekly,:monthly,CAST(:settings AS jsonb))
-          """).param("id",id).param("u",user).param("exam",r.examId()).param("course",r.courseId())
-          .param("title",r.title()).param("date",r.examDate()).param("template",Boolean.TRUE.equals(r.template()))
-          .param("block",or(r.blockMinutes(),60)).param("break",or(r.breakMinutes(),10)).param("sprint",or(r.finalSprintDays(),14))
-          .param("weekly",r.weeklyGoalMinutes()).param("monthly",r.monthlyGoalMinutes()).param("settings",settings(r)).update();
-        replaceChildren(id,r); bootstrap.synchronize(id,user,r.studySections(),or(r.blockMinutes(),60),r.hoursPerDay());
-        audit(id,"CREATED"); return one(id,user);
+        String stage = "validar os dados";
+        try {
+            validate(r); UUID id=UUID.randomUUID();
+            stage = "registrar a preparação";
+            jdbc.sql("""
+              INSERT INTO study_plans(id,user_id,exam_id,course_id,title,exam_date,is_template,block_minutes,break_minutes,
+              final_sprint_days,weekly_goal_minutes,monthly_goal_minutes,settings)
+              VALUES(:id,:u,:exam,:course,:title,:date,:template,:block,:break,:sprint,:weekly,:monthly,CAST(:settings AS jsonb))
+              """).param("id",id).param("u",user).param("exam",r.examId()).param("course",r.courseId())
+              .param("title",r.title()).param("date",r.examDate()).param("template",Boolean.TRUE.equals(r.template()))
+              .param("block",or(r.blockMinutes(),60)).param("break",or(r.breakMinutes(),10)).param("sprint",or(r.finalSprintDays(),14))
+              .param("weekly",r.weeklyGoalMinutes()).param("monthly",r.monthlyGoalMinutes()).param("settings",settings(r)).update();
+            stage = "registrar a disponibilidade e os tópicos";
+            replaceChildren(id,r);
+            stage = "montar o roteiro e as atividades iniciais";
+            bootstrap.synchronize(id,user,r.studySections(),or(r.blockMinutes(),60),r.hoursPerDay());
+            stage = "registrar o histórico da preparação";
+            audit(id,"CREATED"); return one(id,user);
+        } catch (DataIntegrityViolationException ex) {
+            throw new IllegalStateException("Não foi possível criar a preparação ao " + stage + ".", ex);
+        }
     }
 
     @Transactional Map<String,Object> update(UUID id, UUID user, PlanRequest r) {

@@ -3,14 +3,21 @@ package ai.gabarita.study;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.*;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class StudyBootstrapService {
+    private static final Pattern CONSTRAINT_PATTERN = Pattern.compile("constraint \\\"([a-zA-Z0-9_]+)\\\"");
     private final JdbcClient jdbc;
     private final ObjectMapper json;
 
@@ -18,52 +25,72 @@ public class StudyBootstrapService {
 
     @Transactional
     public void synchronize(UUID planId, UUID userId, JsonNode sections, int blockMinutes, Integer hoursPerDay) {
-        jdbc.sql("INSERT INTO study_streaks(user_id) VALUES(:u) ON CONFLICT(user_id) DO NOTHING")
-                .param("u", userId).update();
-        jdbc.sql("INSERT INTO user_notification_preferences(user_id) VALUES(:u) ON CONFLICT(user_id) DO NOTHING")
-                .param("u", userId).update();
-        if (sections == null || !sections.isArray() || sections.isEmpty()) return;
+        String stage = "preparar o perfil de estudo";
+        try {
+            jdbc.sql("INSERT INTO study_streaks(user_id) VALUES(:u) ON CONFLICT(user_id) DO NOTHING")
+                    .param("u", userId).update();
+            jdbc.sql("INSERT INTO user_notification_preferences(user_id) VALUES(:u) ON CONFLICT(user_id) DO NOTHING")
+                    .param("u", userId).update();
+            if (sections == null || !sections.isArray() || sections.isEmpty()) return;
 
-        jdbc.sql("UPDATE roadmap_topics SET active=false WHERE plan_id=:p").param("p", planId).update();
-        int modulePosition = 0;
-        for (JsonNode section : sections) {
-            UUID moduleId = upsertModule(planId, modulePosition, section.path("title").asText("Disciplina"),
-                    section.path("paretoJustification").asText(null));
-            UUID prerequisite = null;
-            int topicPosition = 0;
-            for (JsonNode card : section.path("cards")) {
-                String source = section.path("id").asText("section-" + modulePosition) + ":" +
-                        card.path("id").asText("topic-" + topicPosition);
-                UUID topicId = upsertTopic(planId, moduleId, source, section, card, topicPosition,
-                        prerequisite, plannedMinutes(section, card, blockMinutes));
-                String initialStatus = prerequisite == null ? "AVAILABLE" : "LOCKED";
-                jdbc.sql("""
-                    INSERT INTO topic_progress(id,user_id,roadmap_topic_id,status)
-                    VALUES(gen_random_uuid(),:u,:t,:status)
-                    ON CONFLICT(user_id,roadmap_topic_id) DO NOTHING
-                    """).param("u", userId).param("t", topicId).param("status", initialStatus).update();
-                prerequisite = topicId;
-                topicPosition++;
+            stage = "montar o roteiro de matérias";
+            jdbc.sql("UPDATE roadmap_topics SET active=false WHERE plan_id=:p").param("p", planId).update();
+            int modulePosition = 0;
+            for (JsonNode section : sections) {
+                String subject = section.path("title").asText("Disciplina");
+                UUID moduleId;
+                try {
+                    moduleId = upsertModule(planId, modulePosition, subject,
+                            section.path("paretoJustification").asText(null));
+                } catch (DataIntegrityViolationException ex) {
+                    throw catalogConflict("a disciplina ‘" + subject + "’", ex);
+                }
+                UUID prerequisite = null;
+                int topicPosition = 0;
+                for (JsonNode card : section.path("cards")) {
+                    String source = sourceKey(
+                            section.path("id").asText("section-" + modulePosition),
+                            card.path("id").asText("topic-" + topicPosition));
+                    String topicTitle = card.path("title").asText("Assunto");
+                    try {
+                        UUID topicId = upsertTopic(planId, moduleId, source, section, card, topicPosition,
+                                prerequisite, plannedMinutes(section, card, blockMinutes));
+                        String initialStatus = prerequisite == null ? "AVAILABLE" : "LOCKED";
+                        jdbc.sql("""
+                            INSERT INTO topic_progress(id,user_id,roadmap_topic_id,status)
+                            VALUES(gen_random_uuid(),:u,:t,:status)
+                            ON CONFLICT(user_id,roadmap_topic_id) DO NOTHING
+                            """).param("u", userId).param("t", topicId).param("status", initialStatus).update();
+                        prerequisite = topicId;
+                    } catch (DataIntegrityViolationException ex) {
+                        throw catalogConflict("o assunto ‘" + topicTitle + "’ da disciplina ‘" + subject + "’", ex);
+                    }
+                    topicPosition++;
+                }
+                modulePosition++;
             }
-            modulePosition++;
+            jdbc.sql("""
+                UPDATE topic_progress tp SET status='AVAILABLE',updated_at=now()
+                FROM roadmap_topics rt WHERE tp.roadmap_topic_id=rt.id AND tp.user_id=:u AND rt.plan_id=:p
+                  AND rt.active AND rt.prerequisite_id IS NULL AND tp.status='LOCKED'
+                """).param("u",userId).param("p",planId).update();
+            jdbc.sql("""
+                UPDATE topic_progress tp SET status='LOCKED',updated_at=now()
+                FROM roadmap_topics rt
+                WHERE tp.roadmap_topic_id=rt.id AND tp.user_id=:u AND rt.plan_id=:p AND rt.active
+                  AND rt.prerequisite_id IS NOT NULL AND tp.status='AVAILABLE'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM topic_progress prerequisite
+                    WHERE prerequisite.user_id=:u AND prerequisite.roadmap_topic_id=rt.prerequisite_id
+                      AND prerequisite.status IN('COMPLETED','MASTERED'))
+                """).param("u", userId).param("p", planId).update();
+            stage = "gerar as atividades iniciais";
+            ensureToday(planId, userId, hoursPerDay == null ? 120 : Math.max(30, hoursPerDay * 60));
+            stage = "criar a notificação inicial";
+            createWelcomeNotification(planId, userId);
+        } catch (DataIntegrityViolationException ex) {
+            throw new IllegalStateException("Não foi possível preparar o plano ao " + stage + ".", ex);
         }
-        jdbc.sql("""
-            UPDATE topic_progress tp SET status='AVAILABLE',updated_at=now()
-            FROM roadmap_topics rt WHERE tp.roadmap_topic_id=rt.id AND tp.user_id=:u AND rt.plan_id=:p
-              AND rt.active AND rt.prerequisite_id IS NULL AND tp.status='LOCKED'
-            """).param("u",userId).param("p",planId).update();
-        jdbc.sql("""
-            UPDATE topic_progress tp SET status='LOCKED',updated_at=now()
-            FROM roadmap_topics rt
-            WHERE tp.roadmap_topic_id=rt.id AND tp.user_id=:u AND rt.plan_id=:p AND rt.active
-              AND rt.prerequisite_id IS NOT NULL AND tp.status='AVAILABLE'
-              AND NOT EXISTS (
-                SELECT 1 FROM topic_progress prerequisite
-                WHERE prerequisite.user_id=:u AND prerequisite.roadmap_topic_id=rt.prerequisite_id
-                  AND prerequisite.status IN('COMPLETED','MASTERED'))
-            """).param("u", userId).param("p", planId).update();
-        ensureToday(planId, userId, hoursPerDay == null ? 120 : Math.max(30, hoursPerDay * 60));
-        createWelcomeNotification(planId, userId);
     }
 
     @Transactional
@@ -224,6 +251,30 @@ public class StudyBootstrapService {
             VALUES(gen_random_uuid(),:u,:p,'PLAN_READY','Seu plano diário está pronto',
               'Comece pela primeira atividade recomendada e mantenha sua ofensiva ativa.',now(),'/','HIGH','DELIVERED')
             """).param("u", userId).param("p", planId).update();
+    }
+
+    private IllegalStateException catalogConflict(String item, DataIntegrityViolationException cause) {
+        String constraint = null;
+        for (Throwable current = cause; current != null && constraint == null; current = current.getCause()) {
+            Matcher matcher = CONSTRAINT_PATTERN.matcher(String.valueOf(current.getMessage()));
+            if (matcher.find()) constraint = matcher.group(1);
+        }
+        String detail = constraint == null ? "" : " (restrição: " + constraint + ").";
+        return new IllegalStateException("Não foi possível incluir " + item + " no roteiro" + detail, cause);
+    }
+
+    /** source_key is an internal identifier (not a title) and is limited to 180 characters in PostgreSQL. */
+    private String sourceKey(String sectionId, String cardId) {
+        String raw = sectionId + ":" + cardId;
+        if (raw.length() <= 180) return raw;
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(raw.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hash = new StringBuilder(64);
+            for (byte value : digest) hash.append(String.format("%02x", value));
+            return "generated-" + hash;
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("Não foi possível gerar o identificador do assunto.", ex);
+        }
     }
 
     private int number(Map<String,Object> row, String key) { return ((Number) row.get(key)).intValue(); }

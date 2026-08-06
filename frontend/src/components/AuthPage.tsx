@@ -2,6 +2,20 @@ import { FormEvent, useState } from 'react';
 import { BookOpenCheck, Eye, EyeOff, LockKeyhole, Mail, Sparkles, UserRound } from 'lucide-react';
 import { isSupabaseConfigured, supabase } from '../auth/supabase';
 
+const authenticationErrorMessage = (cause: unknown) => {
+  if (cause instanceof Error && cause.message.trim()) return cause.message;
+  if (cause && typeof cause === 'object') {
+    const record = cause as Record<string, unknown>;
+    for (const key of ['message', 'error_description', 'details', 'hint']) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim() && value.trim() !== '{}') {
+        return value.trim();
+      }
+    }
+  }
+  return 'Não foi possível concluir o cadastro. Verifique se o e-mail ainda existe e tente novamente.';
+};
+
 export default function AuthPage() {
   const [mode,setMode]=useState<'login'|'signup'>('login');
   const [name,setName]=useState('');
@@ -26,9 +40,9 @@ export default function AuthPage() {
         const {data,error:authError}=await supabase.auth.signUp({email:email.trim(),password,
           options:{data:{full_name:name.trim()}}});
         if(authError)throw authError;
-        if(!data.session)setNotice('Cadastro realizado. Confira seu e-mail para confirmar a conta e depois entre.');
+        if(!data.session)setNotice('Confira seu e-mail para confirmar a conta. Se ela já existia, entre ou solicite a redefinição de senha.');
       }
-    }catch(authError){setError(authError instanceof Error?authError.message:'Não foi possível autenticar.');}
+    }catch(authError){setError(authenticationErrorMessage(authError));}
     finally{setBusy(false);}
   };
 
