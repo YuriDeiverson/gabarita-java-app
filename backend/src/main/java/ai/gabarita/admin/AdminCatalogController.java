@@ -200,14 +200,15 @@ public class AdminCatalogController {
     public Map<String,Object> createStudySubject(@PathVariable UUID id,@Valid @RequestBody StudySubjectRequest r){currentUser.requireAdmin();
         RoleCurriculum role=roleCurriculum(id);JsonNode root=role.curriculum();JsonNode section=findSection(root,r.sectionId());
         if(section==null)throw new NoSuchElementException("Disciplina não encontrada");String title=r.title().trim();
-        for(var card:section.path("cards"))if(canonical(title).equals(canonical(card.path("title").asText())))
+        for(var card:section.path("cards"))if(subjectCanonical(title).equals(subjectCanonical(card.path("title").asText())))
             throw new IllegalArgumentException("Este assunto já existe nesta disciplina");
         String cardId=uniqueId(section.path("cards"),r.sectionId()+"_"+canonical(title).replace('-','_'),"assunto");
         var card=((com.fasterxml.jackson.databind.node.ObjectNode)section).withArray("cards").addObject();
         card.put("id",cardId);card.put("title",title);card.put("paretoRatio","Relevância do edital");card.put("isQuente",false);
         card.put("content","");card.putArray("keyTakeaways");card.putArray("contentBlocks");
         JsonNode topic=findTopic(root,r.sectionId());if(topic!=null)((com.fasterxml.jackson.databind.node.ObjectNode)topic).withArray("subtopics").add(title);
-        SharedSnapshot shared=findShared(title);if(shared==null)shared=upsertShared(section.path("title").asText(""),studyGroup(root,r.sectionId()),card);else applyShared(root,shared);
+        String discipline=section.path("title").asText("");
+        SharedSnapshot shared=findShared(title,discipline);if(shared==null)shared=upsertShared(discipline,studyGroup(root,r.sectionId()),card);else applyShared(root,shared);
         persistCurriculum(id,root);int synchronizedPlans=synchronizeShared(shared);
         return Map.of("id",cardId,"title",title,"sharedSubjectId",shared.id(),"synchronizedPlans",synchronizedPlans);
     }
@@ -304,10 +305,13 @@ public class AdminCatalogController {
           .param("id",roleId).query().listOfRows().stream().findFirst().orElseThrow(()->new NoSuchElementException("Cargo não encontrado"));
         JsonNode curriculum=parse(String.valueOf(role.get("curriculum_json")));
         JsonNode selected=findCard(curriculum,sectionId,cardId);if(selected==null)throw new NoSuchElementException("Assunto não encontrado");
-        SharedSnapshot existing=findShared(selected.path("title").asText());if(existing!=null)applyShared(curriculum,existing);
+        String discipline=findSectionTitle(curriculum,sectionId);
+        SharedSnapshot existing=findSharedById(selected.path("sharedSubjectId").asText());
+        if(existing==null)existing=findShared(selected.path("title").asText(),discipline);
+        if(existing!=null)applyShared(curriculum,existing);
         if(!mutation.apply(curriculum))throw new NoSuchElementException("Material não encontrado neste assunto");
         JsonNode card=findCard(curriculum,sectionId,cardId);if(card==null)throw new NoSuchElementException("Assunto não encontrado");
-        SharedSnapshot shared=upsertShared(findSectionTitle(curriculum,sectionId),studyGroup(curriculum,sectionId),card);return synchronizeShared(shared);
+        SharedSnapshot shared=upsertShared(discipline,studyGroup(curriculum,sectionId),card);return synchronizeShared(shared);
     }
     private JsonNode parse(String value){try{return new com.fasterxml.jackson.databind.ObjectMapper().readTree(value);}catch(Exception error){throw new IllegalArgumentException("Conteúdo programático inválido");}}
     private JsonNode findCard(JsonNode root,String sectionId,String cardId){JsonNode sections=root.isArray()?root:root.path("studySections");
@@ -315,7 +319,11 @@ public class AdminCatalogController {
             for(var card:section.path("cards"))if(cardId.trim().equals(card.path("id").asText()))return card;}return null;}
     private String findSectionTitle(JsonNode root,String sectionId){JsonNode sections=root.isArray()?root:root.path("studySections");
         if(sections.isArray())for(var section:sections)if(sectionId.trim().equals(section.path("id").asText()))return section.path("title").asText("");return "";}
-    private SharedSnapshot upsertShared(String discipline,String studyGroup,JsonNode card){String title=card.path("title").asText();String key=canonical(title);
+    private SharedSnapshot upsertShared(String discipline,String studyGroup,JsonNode card){String title=card.path("title").asText();
+        SharedSnapshot equivalent=findShared(title,discipline);String key=equivalent==null?subjectCanonical(title):equivalent.canonicalKey();
+        if(equivalent==null&&jdbc.sql("SELECT COUNT(*) FROM shared_study_subjects WHERE canonical_key=:key").param("key",key).query(Long.class).single()>0){
+            String suffix=String.format("%08x",canonical(discipline).hashCode());key=key.substring(0,Math.min(171,key.length()))+"-"+suffix;
+        }
         String sharedId=jdbc.sql("""
           INSERT INTO shared_study_subjects(canonical_key,title,discipline,study_group,study_objective,review_summary,base_content,key_takeaways,content_blocks)
           VALUES(:key,:title,:discipline,:studyGroup,'', '[]'::jsonb,:content,CAST(:points AS jsonb),CAST(:blocks AS jsonb))
@@ -326,12 +334,17 @@ public class AdminCatalogController {
           .param("points",card.path("keyTakeaways").isArray()?card.path("keyTakeaways").toString():"[]")
           .param("blocks",card.path("contentBlocks").isArray()?card.path("contentBlocks").toString():"[]").query(String.class).single();
         return sharedSnapshot(UUID.fromString(sharedId));}
-    private SharedSnapshot findShared(String title){var rows=jdbc.sql("""
+    private SharedSnapshot findShared(String title,String discipline){var rows=jdbc.sql("""
           SELECT id::text id,canonical_key,title,discipline,study_group,study_objective,review_summary::text summary,base_content,key_takeaways::text points,content_blocks::text blocks
-          FROM shared_study_subjects WHERE canonical_key=:key
-          """).param("key",canonical(title)).query().listOfRows();if(rows.isEmpty())return null;var row=rows.getFirst();
+          FROM shared_study_subjects
+          WHERE gabarita_subject_normalized(title)=gabarita_subject_normalized(:title)
+            AND gabarita_subject_normalized(discipline)=gabarita_subject_normalized(:discipline)
+          ORDER BY CASE WHEN lower(btrim(title))=lower(gabarita_subject_display_title(:title)) THEN 0 ELSE 1 END,created_at,id
+          LIMIT 1
+          """).param("title",title).param("discipline",discipline).query().listOfRows();if(rows.isEmpty())return null;var row=rows.getFirst();
         return new SharedSnapshot(String.valueOf(row.get("id")),String.valueOf(row.get("canonical_key")),String.valueOf(row.get("title")),
           String.valueOf(row.get("discipline")),String.valueOf(row.get("study_group")),String.valueOf(row.get("study_objective")),parse(String.valueOf(row.get("summary"))),String.valueOf(row.get("base_content")),parse(String.valueOf(row.get("points"))),parse(String.valueOf(row.get("blocks"))));}
+    private SharedSnapshot findSharedById(String value){if(value==null||value.isBlank())return null;try{return sharedSnapshot(UUID.fromString(value));}catch(IllegalArgumentException|NoSuchElementException ignored){return null;}}
     private void hydrateFromLibrary(JsonNode curriculum){var rows=jdbc.sql("""
           SELECT id::text id,canonical_key,title,discipline,study_group,study_objective,review_summary::text summary,base_content,key_takeaways::text points,content_blocks::text blocks
           FROM shared_study_subjects
@@ -348,12 +361,14 @@ public class AdminCatalogController {
             jdbc.sql("UPDATE study_plans SET settings=jsonb_set(settings,'{studySections}',CAST(:sections AS jsonb),true),updated_at=now() WHERE id=:id")
               .param("sections",sections.toString()).param("id",plan.get("id")).update();synchronizedPlans++;}}return synchronizedPlans;}
     private boolean applyShared(JsonNode root,SharedSnapshot shared){JsonNode sections=root.isArray()?root:root.path("studySections");if(!sections.isArray())return false;boolean changed=false;
-        for(var section:sections)for(var card:section.path("cards"))if(shared.canonicalKey().equals(canonical(card.path("title").asText()))){
+        for(var section:sections)for(var card:section.path("cards"))if(subjectCanonical(shared.title()).equals(subjectCanonical(card.path("title").asText()))
+          &&canonical(shared.discipline()).equals(canonical(section.path("title").asText()))){
             var object=(com.fasterxml.jackson.databind.node.ObjectNode)card;object.put("sharedSubjectId",shared.id());object.put("studyObjective",shared.studyObjective());object.set("reviewSummary",shared.reviewSummary().deepCopy());object.put("content",shared.content());
             object.set("keyTakeaways",shared.keyTakeaways().deepCopy());object.set("contentBlocks",shared.contentBlocks().deepCopy());changed=true;}return changed;}
     private String canonical(String value){String normalized=java.text.Normalizer.normalize(text(value),java.text.Normalizer.Form.NFD).replaceAll("\\p{M}","")
       .toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+","-").replaceAll("(^-|-$)","");
       if(normalized.length()<=180)return normalized;String hash=String.format("%08x",normalized.hashCode());return normalized.substring(0,171)+"-"+hash;}
+    private String subjectCanonical(String value){return canonical(text(value).replaceFirst("^\\s*\\d+(?:\\.\\d+)*[.)-]?\\s*",""));}
     private boolean appendMaterial(JsonNode root,StudyMaterialRequest r,String materialId){JsonNode sections=root.isArray()?root:root.path("studySections");
         JsonNode card=findCard(root,r.sectionId(),r.cardId());if(card==null)return false;
         var block=((com.fasterxml.jackson.databind.node.ObjectNode)card).withArray("contentBlocks").addObject();

@@ -276,7 +276,12 @@ const disciplinesFromCurriculum = (
     : [];
   const result = topics.map((topic, index) => {
     const id = String(topic.id || "");
-    const section = sections.find((item) => String(item.id || "") === id) || {};
+    const section =
+      sections.find((item) => String(item.id || "") === id) ||
+      (id === "ti_basica"
+        ? sections.find((item) => String(item.id || "") === "ti")
+        : undefined) ||
+      {};
     const cards = Array.isArray(section.cards)
       ? (section.cards as Array<Record<string, unknown>>)
       : [];

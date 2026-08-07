@@ -132,14 +132,17 @@ public class StudySessionService {
 
     @Transactional
     public Map<String,Object> finishQuestionPractice(UUID userId,UUID id,String notes){
+        var owned=jdbc.sql("SELECT id FROM study_sessions WHERE id=:id AND user_id=:u FOR UPDATE")
+                .param("id",id).param("u",userId).query(UUID.class).list();
+        if(owned.isEmpty())throw new NoSuchElementException("Sessão não encontrada");
         var session=one(userId,id);
         if(!"QUESTIONS".equals(session.get("session_kind"))) throw new IllegalStateException("Esta não é uma sessão de questões.");
         if("COMPLETED".equals(session.get("status"))) return completion(session,List.of("Sessão de questões já finalizada."));
         if(!List.of("RUNNING","PAUSED").contains(session.get("status"))) throw new IllegalStateException("Esta sessão não pode ser finalizada.");
-        if("RUNNING".equals(session.get("status"))) jdbc.sql("UPDATE study_sessions SET effective_seconds=effective_seconds+EXTRACT(EPOCH FROM(now()-active_since))::int WHERE id=:id").param("id",id).update();
+        if("RUNNING".equals(session.get("status"))) jdbc.sql("UPDATE study_sessions SET effective_seconds=effective_seconds+GREATEST(0,EXTRACT(EPOCH FROM(now()-COALESCE(active_since,now())))::int) WHERE id=:id").param("id",id).update();
         else {
             jdbc.sql("UPDATE session_pauses SET ended_at=now() WHERE session_id=:s AND ended_at IS NULL").param("s",id).update();
-            jdbc.sql("UPDATE study_sessions SET paused_seconds=paused_seconds+EXTRACT(EPOCH FROM(now()-paused_at))::int WHERE id=:id").param("id",id).update();
+            jdbc.sql("UPDATE study_sessions SET paused_seconds=paused_seconds+GREATEST(0,EXTRACT(EPOCH FROM(now()-COALESCE(paused_at,now())))::int WHERE id=:id").param("id",id).update();
         }
         jdbc.sql("UPDATE study_sessions SET status='COMPLETED',ended_at=now(),duration_seconds=effective_seconds,active_since=NULL,paused_at=NULL,notes=:notes,version=version+1 WHERE id=:id")
                 .param("notes",notes).param("id",id).update();

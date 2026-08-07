@@ -62,7 +62,7 @@ public class EngagementService {
         jdbc.sql("INSERT INTO study_streaks(user_id) VALUES(:u) ON CONFLICT(user_id) DO NOTHING").param("u", userId).update();
         if (valid && !wasValid) {
             var streak = jdbc.sql("SELECT * FROM study_streaks WHERE user_id=:u FOR UPDATE").param("u", userId).query().singleRow();
-            LocalDate last = (LocalDate) streak.get("last_valid_date");
+            LocalDate last = localDate(streak.get("last_valid_date"));
             int current = last != null && last.equals(today.minusDays(1)) ? number(streak, "current_streak") + 1 : 1;
             int longest = Math.max(current, number(streak, "longest_streak"));
             jdbc.sql("""
@@ -149,5 +149,11 @@ public class EngagementService {
     }
 
     private int number(Map<String,Object> row, String key) { Object value=row.get(key); return value instanceof Number n ? n.intValue() : 0; }
+    static LocalDate localDate(Object value) {
+        if (value == null) return null;
+        if (value instanceof LocalDate date) return date;
+        if (value instanceof java.sql.Date date) return date.toLocalDate();
+        return LocalDate.parse(String.valueOf(value));
+    }
     private String levelName(int level) { return switch(Math.min(level,5)) { case 1 -> "Iniciante"; case 2 -> "Aprendiz"; case 3 -> "Consistente"; case 4 -> "Estrategista"; default -> "Especialista"; }; }
 }
