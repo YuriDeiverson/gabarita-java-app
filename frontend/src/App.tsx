@@ -48,7 +48,9 @@ import {
   ChevronRight,
   CheckCheck,
   RefreshCw,
+  Pause,
   Play,
+  Square,
   TimerReset,
   Menu,
   Building2,
@@ -152,6 +154,8 @@ export default function App() {
     useState<StudyDashboardData | null>(null);
   const [headerTimerLoadedAt, setHeaderTimerLoadedAt] = useState(Date.now());
   const [headerTimerTick, setHeaderTimerTick] = useState(0);
+  const [contextSessionBusy, setContextSessionBusy] = useState(false);
+  const [contextSessionError, setContextSessionError] = useState("");
   const [newPlanSessionPrompt, setNewPlanSessionPrompt] =
     useState<Partial<StudySession> | null>(null);
   const [newPlanSessionBusy, setNewPlanSessionBusy] = useState(false);
@@ -1055,6 +1059,78 @@ export default function App() {
     }
   };
 
+  const pauseContextQuestionSession = async () => {
+    if (!activeHeaderSession?.id || contextSessionBusy) return;
+    setContextSessionBusy(true);
+    setContextSessionError("");
+    try {
+      const updated = await dailyStudyApi.pause(
+        String(activeHeaderSession.id),
+        "Pausa manual",
+      );
+      setHeaderStudyData((current) =>
+        current ? { ...current, active_session: updated } : current,
+      );
+      setHeaderTimerLoadedAt(Date.now());
+    } catch (error) {
+      setContextSessionError(
+        error instanceof Error ? error.message : "Não foi possível pausar.",
+      );
+    } finally {
+      setContextSessionBusy(false);
+    }
+  };
+
+  const resumeContextQuestionSession = async () => {
+    if (!activeHeaderSession?.id || contextSessionBusy) return;
+    setContextSessionBusy(true);
+    setContextSessionError("");
+    try {
+      const updated = await dailyStudyApi.resume(
+        String(activeHeaderSession.id),
+      );
+      setHeaderStudyData((current) =>
+        current ? { ...current, active_session: updated } : current,
+      );
+      setHeaderTimerLoadedAt(Date.now());
+    } catch (error) {
+      setContextSessionError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível continuar.",
+      );
+    } finally {
+      setContextSessionBusy(false);
+    }
+  };
+
+  const finishContextQuestionSession = async () => {
+    if (!activeHeaderSession?.id || contextSessionBusy) return;
+    setContextSessionBusy(true);
+    setContextSessionError("");
+    try {
+      await dailyStudyApi.finishQuestionPractice(
+        String(activeHeaderSession.id),
+      );
+      setHeaderStudyData((current) =>
+        current ? { ...current, active_session: {} } : current,
+      );
+      setHeaderTimerLoadedAt(Date.now());
+      setQuestionDailyTask(null);
+      setBreakNotice(null);
+      setCompletedBreakPrompt(null);
+      setDashboardVersion((value) => value + 1);
+    } catch (error) {
+      setContextSessionError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível finalizar.",
+      );
+    } finally {
+      setContextSessionBusy(false);
+    }
+  };
+
   const requestNewPlanConfiguration = useCallback(async () => {
     let session = headerStudyData?.active_session?.id
       ? (headerStudyData.active_session as Partial<StudySession>)
@@ -1379,7 +1455,10 @@ export default function App() {
 
   const accountActions = (mobile = false) => (
     <div className={mobile ? "mobile-account-actions" : "app-account"}>
-      {!mobile && hasPlan && globalSessionTimer()}
+      {!mobile &&
+        hasPlan &&
+        activeHeaderSession?.session_kind !== "QUESTIONS" &&
+        globalSessionTimer()}
       <div className="header-menu" data-header-menu>
         <button
           type="button"
@@ -1731,26 +1810,42 @@ export default function App() {
                   )}
                 </p>
               </div>
+              {activeHeaderSession.session_kind === "QUESTIONS" && (
+                <div className="context-session-controls">
+                  {activeHeaderSession.status === "RUNNING" ? (
+                    <button
+                      type="button"
+                      disabled={contextSessionBusy}
+                      onClick={() => void pauseContextQuestionSession()}
+                    >
+                      <Pause aria-hidden="true" /> Pausar
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={contextSessionBusy}
+                      onClick={() => void resumeContextQuestionSession()}
+                    >
+                      <Play aria-hidden="true" /> Continuar
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="is-finish"
+                    disabled={contextSessionBusy}
+                    onClick={() => void finishContextQuestionSession()}
+                  >
+                    <Square aria-hidden="true" /> Finalizar
+                  </button>
+                </div>
+              )}
+              {contextSessionError && (
+                <p className="context-session-error" role="alert">
+                  {contextSessionError}
+                </p>
+              )}
             </section>
           )}
-
-          <nav className="context-shortcuts context-default-card" aria-label="Atalhos">
-            <span>Atalhos</span>
-            <div>
-              <button type="button" onClick={() => setActiveTab("schedule")}>
-                <Calendar aria-hidden="true" />
-                <span>Cronograma</span>
-              </button>
-              <button type="button" onClick={() => {setNotedQuestionId("");setActiveTab("questions");}}>
-                <ListChecks aria-hidden="true" />
-                <span>Questões</span>
-              </button>
-              <button type="button" onClick={() => setActiveTab("performance")}>
-                <ChartNoAxesCombined aria-hidden="true" />
-                <span>Desempenho</span>
-              </button>
-            </div>
-          </nav>
         </>
       ) : (
         <>
@@ -1782,21 +1877,6 @@ export default function App() {
               Explorar concursos <ChevronRight aria-hidden="true" />
             </button>
           </section>
-          <nav className="context-shortcuts" aria-label="Ajustes rápidos">
-            <span>Ajustes rápidos</span>
-            <div className="context-shortcuts-single">
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingPreferences(true);
-                  setActiveTab("home");
-                }}
-              >
-                <Settings2 aria-hidden="true" />
-                <span>Disponibilidade</span>
-              </button>
-            </div>
-          </nav>
         </>
       )}
     </aside>
@@ -1804,7 +1884,7 @@ export default function App() {
 
   return (
     <div
-      className={`app-shell min-h-screen bg-slate-50 text-slate-800 flex flex-col ${hasPlan ? "has-plan" : "no-plan"} ${hasPlan || studyPreferences || isAdmin ? "has-desktop-navigation" : ""} ${showContextRail ? "has-context-rail" : ""} ${activeTab === "home" ? "is-home-tab" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${activeHeaderSession && activeTab !== "home" ? "has-active-timer" : ""}`}
+      className={`app-shell min-h-screen bg-slate-50 text-slate-800 flex flex-col ${hasPlan ? "has-plan" : "no-plan"} ${hasPlan || studyPreferences || isAdmin ? "has-desktop-navigation" : ""} ${showContextRail ? "has-context-rail" : ""} ${activeTab === "home" ? "is-home-tab" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${activeHeaderSession && activeHeaderSession.session_kind !== "QUESTIONS" && activeTab !== "home" ? "has-active-timer" : ""}`}
     >
       <a className="skip-link" href="#main-content">
         Pular para o conteúdo principal
@@ -1866,7 +1946,10 @@ export default function App() {
             </div>
             {accountActions(true)}
           </div>
-          {hasPlan && activeTab !== "home" && globalSessionTimer(true)}
+          {hasPlan &&
+            activeTab !== "home" &&
+            activeHeaderSession?.session_kind !== "QUESTIONS" &&
+            globalSessionTimer(true)}
         </div>
       </header>
 
@@ -2083,8 +2166,12 @@ export default function App() {
               }}
             />
           )}
-          {hasPlan && activeTab === "questions" && (
+          {hasPlan && (
             <QuestionBankTab
+              visible={activeTab === "questions"}
+              externalSession={
+                headerStudyData ? activeHeaderSession : undefined
+              }
               dailyTask={questionDailyTask}
               initialQuestionId={notedQuestionId}
               onDailyTaskFinished={() => setQuestionDailyTask(null)}

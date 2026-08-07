@@ -327,6 +327,391 @@ body { overflow-x: clip; overscroll-behavior-x: none; }
   .timer-ring { --ring-size: 128px !important; width: 128px !important; height: 128px !important; }
 }
 
+/* Project breakpoints -----------------------------------------------------
+   These overrides are intentionally limited to tablet and phone widths.
+   Keep them after the component-specific responsive rules so the desktop
+   cascade (1025px and wider) remains untouched. */
+@media (max-width: 1024px) {
+  .app-main,
+  .app-content,
+  .app-content > *,
+  #home-tab-container,
+  #study-tab-container,
+  #quiz-tab-container,
+  #schedule-tab-container,
+  #performance-tab-container,
+  .question-bank-tab,
+  .plan-manager,
+  .career-page,
+  .performance-v2 {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .app-content :where(img, video, canvas, iframe) {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+
+  .app-content :where(pre, .prose, [class*="rich-content"]) {
+    max-width: 100%;
+  }
+
+  .app-content pre {
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .app-content :where(input, select, textarea) {
+    max-width: 100%;
+  }
+
+  .course-grid,
+  .career-preparation-grid,
+  .career-catalog-grid,
+  .career-role-grid,
+  .career-detail-grid,
+  .performance-v2-topic-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .course-card:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .home-hero h2 {
+    max-width: 18ch;
+    font-size: clamp(2.4rem, 6vw, 3.8rem) !important;
+  }
+
+  .performance-v2-overview,
+  .performance-v2-main-grid,
+  .quiz-overview,
+  .schedule-overview,
+  .plan-config-grid.is-review {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .performance-v2-topic-table,
+  .daily-chart,
+  .table-wrapper,
+  [class*="table-container"] {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .plan-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .finish-modal,
+  .agenda-modal,
+  .career-modal,
+  .question-note-modal,
+  .admin-material-preview-modal {
+    max-width: 100%;
+    max-height: calc(100dvh - 24px - env(safe-area-inset-top));
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --mobile-gutter: 16px;
+  }
+
+  .app-main,
+  .sidebar-collapsed .app-main,
+  .no-plan .app-main,
+  .no-plan.sidebar-collapsed .app-main {
+    padding-inline: max(var(--mobile-gutter), env(safe-area-inset-left)) max(var(--mobile-gutter), env(safe-area-inset-right)) !important;
+  }
+
+  .app-main h2 {
+    font-size: clamp(1.35rem, 6.5vw, 2rem);
+    line-height: 1.08;
+  }
+
+  .app-main h3 {
+    font-size: clamp(1.05rem, 5vw, 1.35rem);
+    line-height: 1.18;
+  }
+
+  .app-main p,
+  .app-main li {
+    line-height: 1.55;
+  }
+
+  .daily-dashboard .timer-mode {
+    width: 100% !important;
+    max-width: 100%;
+  }
+
+  .daily-dashboard .timer-mode > strong {
+    width: 100%;
+    overflow: visible;
+    padding-inline: 4px;
+    font-size: clamp(8px, 2.35vw, 10.5px);
+    text-align: center;
+    text-overflow: initial;
+    white-space: nowrap;
+  }
+
+  .home-hero {
+    min-height: 0;
+    padding: 24px 20px !important;
+  }
+
+  .home-hero::before {
+    right: 16px;
+    top: 20px;
+    font-size: clamp(4.5rem, 24vw, 7rem);
+  }
+
+  .home-hero h2 {
+    max-width: 15ch;
+    font-size: clamp(2.1rem, 10vw, 3rem) !important;
+    line-height: .96 !important;
+  }
+
+  .home-hero p {
+    font-size: .96rem !important;
+  }
+
+  .course-grid,
+  .career-preparation-grid,
+  .career-catalog-grid,
+  .career-role-grid,
+  .career-detail-grid,
+  .performance-v2-topic-grid,
+  .performance-v2-sources {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .course-card:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+
+  .course-card {
+    min-height: 0;
+  }
+
+  .daily-main-grid,
+  .daily-secondary-grid,
+  .roadmap-modules,
+  .wizard-review-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .daily-kpis,
+  .quiz-stats,
+  .performance-metrics,
+  .performance-v2-metrics,
+  .skeleton-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .performance-v2-topic-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .performance-v2-periods,
+  .performance-periods,
+  .study-section-filters,
+  .schedule-week-nav {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .plan-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .plan-action {
+    width: 100%;
+    min-height: 48px;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .question-pomodoro-body,
+  .question-pomodoro-compact .question-pomodoro-body {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .question-pomodoro-actions,
+  .question-pomodoro-compact .question-pomodoro-actions {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .question-pomodoro-actions :where(button, select) {
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    justify-content: center;
+  }
+
+  .app-content :where(button, [role="button"], input, select, textarea) {
+    min-height: var(--touch-target);
+  }
+
+  .app-content :where(input[type="checkbox"], input[type="radio"]) {
+    width: auto;
+    min-height: 0;
+  }
+
+  .app-content :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+    width: 100%;
+    font-size: 16px;
+  }
+
+  .question-note-modal-backdrop,
+  .finish-modal-backdrop,
+  .agenda-modal-backdrop,
+  .career-modal-backdrop,
+  [role="dialog"].fixed {
+    padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  }
+
+  .notification-popover,
+  .profile-popover {
+    right: max(10px, env(safe-area-inset-right)) !important;
+    left: max(10px, env(safe-area-inset-left)) !important;
+    width: auto !important;
+    max-width: none;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --mobile-gutter: 12px;
+  }
+
+  .app-header-inner {
+    padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right)) !important;
+  }
+
+  .mobile-header-content {
+    grid-template-columns: 34px minmax(0, 1fr) auto !important;
+    gap: 7px !important;
+  }
+
+  .mobile-brand-mark {
+    width: 34px !important;
+    height: 34px !important;
+  }
+
+  .mobile-account-actions {
+    gap: 4px !important;
+  }
+
+  .mobile-account-actions .header-action-button {
+    width: 40px !important;
+    height: 40px !important;
+    min-height: 40px !important;
+  }
+
+  .mobile-bottom-nav button span {
+    font-size: 9px !important;
+  }
+
+  .home-hero,
+  .focus-card,
+  .today-plan-card,
+  .roadmap-card,
+  .recommendation-card,
+  .reviews-card,
+  .performance-layout section,
+  #performance-tab-container section {
+    padding: 16px 14px !important;
+  }
+
+  .home-hero h2 {
+    font-size: clamp(1.9rem, 11.5vw, 2.55rem) !important;
+  }
+
+  .daily-kpis,
+  .performance-metrics,
+  .performance-v2-metrics,
+  .quiz-stats,
+  .skeleton-metrics,
+  .finish-results {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .daily-kpis article,
+  .performance-metrics > div {
+    min-height: 0 !important;
+  }
+
+  .timer-stage {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .timer-ring {
+    margin-inline: auto;
+  }
+
+  .timer-details {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .plan-actions,
+  .career-filter-sheet > footer,
+  .pomodoro-rest-complete-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .question-pomodoro-actions,
+  .question-pomodoro-compact .question-pomodoro-actions {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .agenda-mobile-view {
+    padding: 14px 10px;
+  }
+
+  .agenda-mobile-week {
+    gap: 2px;
+  }
+
+  .agenda-mobile-week button {
+    min-height: 54px;
+    padding-inline: 1px;
+  }
+
+  .mobile-question-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .finish-modal,
+  .agenda-modal,
+  .career-modal,
+  .question-note-modal,
+  .admin-material-preview-modal {
+    width: 100% !important;
+    padding: 18px 14px calc(16px + env(safe-area-inset-bottom)) !important;
+    border-radius: 20px 20px 10px 10px !important;
+  }
+
+  .profile-study-grid,
+  .profile-account-actions {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }

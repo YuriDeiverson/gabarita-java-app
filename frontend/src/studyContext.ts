@@ -14,6 +14,12 @@ export const normalizeStudyText = (value?: string) => (value || '')
   .trim()
   .toLowerCase();
 
+// A numeração pertence à estrutura de cada edital, não à identidade do
+// assunto compartilhado ("1. Interpretação" e "Interpretação" são o mesmo
+// conteúdo; "Princípios" continua sendo separado pela disciplina).
+export const normalizeStudySubjectTitle = (value?: string) =>
+  normalizeStudyText(value).replace(/^\d+(?:\s+\d+)*\s+/, '');
+
 const STOP_WORDS = new Set(['de','da','do','das','dos','e','em','para','a','o','lei','n','no','na']);
 const tokens = (value?: string) => normalizeStudyText(value).split(' ').filter(token => token.length > 1 && !STOP_WORDS.has(token));
 

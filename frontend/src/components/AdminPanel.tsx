@@ -46,7 +46,10 @@ import {
   adminApi,
   catalogApi,
 } from "../services/api";
-import { normalizeStudyText } from "../studyContext";
+import {
+  normalizeStudySubjectTitle,
+  normalizeStudyText,
+} from "../studyContext";
 
 export type AdminSection =
   | "contests"
@@ -74,6 +77,7 @@ interface CurriculumDiscipline {
       studyObjective?: string;
       reviewSummary?: string[];
       id?: string;
+      sharedSubjectId?: string;
     }
   >;
 }
@@ -233,7 +237,12 @@ const curriculumFromDisciplines = (disciplines: CurriculumDiscipline[]) => {
           : "Prioridade definida pelo conteúdo do edital."),
       cards: subjects.map((title, index) => {
         const existing =
-          item.existingMaterials[title.toLocaleLowerCase("pt-BR")];
+          item.existingMaterials[title.toLocaleLowerCase("pt-BR")] ||
+          Object.entries(item.existingMaterials).find(
+            ([materialTitle]) =>
+              normalizeStudySubjectTitle(materialTitle) ===
+              normalizeStudySubjectTitle(title),
+          )?.[1];
         return {
           id: existing?.id || `${id}_${slugify(title) || index + 1}`,
           title,
@@ -241,6 +250,7 @@ const curriculumFromDisciplines = (disciplines: CurriculumDiscipline[]) => {
             ? "Alta relevância"
             : "Relevância do edital",
           isQuente: item.highPriority,
+          sharedSubjectId: existing?.sharedSubjectId,
           content: existing
             ? existing.content
             : "",
@@ -287,6 +297,7 @@ const disciplinesFromCurriculum = (
           reviewSummary: Array.isArray(card.reviewSummary)
             ? card.reviewSummary.map(String)
             : [],
+          sharedSubjectId: String(card.sharedSubjectId || "") || undefined,
         };
     });
     const subtopics = Array.isArray(topic.subtopics)
@@ -885,10 +896,13 @@ export default function AdminPanel({
     () =>
       sharedStudyLibrary.find(
         (item) =>
-          normalizeStudyText(item.title) ===
-          normalizeStudyText(String(materialCard?.title || "")),
+          item.id === String(materialCard?.sharedSubjectId || "") ||
+          (normalizeStudySubjectTitle(item.title) ===
+            normalizeStudySubjectTitle(String(materialCard?.title || "")) &&
+            normalizeStudyText(item.discipline) ===
+              normalizeStudyText(String(materialSection?.title || ""))),
       ),
-    [materialCard, sharedStudyLibrary],
+    [materialCard, materialSection, sharedStudyLibrary],
   );
   const effectiveMaterialCard = useMemo(
     () =>
@@ -1186,12 +1200,13 @@ export default function AdminPanel({
       current.map((discipline, index) => {
         if (index !== disciplineIndex) return discipline;
         const subjectsByName = new Map<string, string>();
-        sharedSubjects.forEach((subject) =>
-          subjectsByName.set(normalizeStudyText(subject.title), subject.title),
-        );
         subjectLines(discipline.subjectsText).forEach((subject) => {
-          const key = normalizeStudyText(subject);
+          const key = normalizeStudySubjectTitle(subject);
           if (!subjectsByName.has(key)) subjectsByName.set(key, subject);
+        });
+        sharedSubjects.forEach((subject) => {
+          const key = normalizeStudySubjectTitle(subject.title);
+          if (!subjectsByName.has(key)) subjectsByName.set(key, subject.title);
         });
         const libraryMaterials = sharedSubjects.reduce<
           CurriculumDiscipline["existingMaterials"]
@@ -1202,6 +1217,7 @@ export default function AdminPanel({
             contentBlocks: subject.contentBlocks,
             studyObjective: subject.studyObjective,
             reviewSummary: subject.reviewSummary,
+            sharedSubjectId: subject.id,
           };
           return materials;
         }, {});
@@ -1225,9 +1241,11 @@ export default function AdminPanel({
     disciplineIndex: number,
     selectedTitles: string[],
   ) => {
-    const selectedKeys = new Set(selectedTitles.map(normalizeStudyText));
+    const selectedKeys = new Set(
+      selectedTitles.map(normalizeStudySubjectTitle),
+    );
     const selectedSubjects = sharedStudyLibrary.filter((subject) =>
-      selectedKeys.has(normalizeStudyText(subject.title)),
+      selectedKeys.has(normalizeStudySubjectTitle(subject.title)),
     );
     const materials = selectedSubjects.reduce<
       CurriculumDiscipline["existingMaterials"]
@@ -1238,6 +1256,7 @@ export default function AdminPanel({
         contentBlocks: subject.contentBlocks,
         studyObjective: subject.studyObjective,
         reviewSummary: subject.reviewSummary,
+        sharedSubjectId: subject.id,
       };
       return current;
     }, {});
@@ -2653,8 +2672,8 @@ export default function AdminPanel({
                           (title) =>
                             !applicableSharedSubjects.some(
                               (subject) =>
-                                normalizeStudyText(subject.title) ===
-                                normalizeStudyText(title),
+                                normalizeStudySubjectTitle(subject.title) ===
+                                normalizeStudySubjectTitle(title),
                             ),
                         )
                         .map((title) => ({
@@ -2809,8 +2828,8 @@ export default function AdminPanel({
                             value={subjectOptions.filter((option) =>
                               selectedSubjectTitles.some(
                                 (title) =>
-                                  normalizeStudyText(title) ===
-                                  normalizeStudyText(option.value),
+                                  normalizeStudySubjectTitle(title) ===
+                                  normalizeStudySubjectTitle(option.value),
                               ),
                             )}
                             onChange={(options) =>

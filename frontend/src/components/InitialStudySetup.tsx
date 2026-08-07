@@ -1,11 +1,22 @@
-import { useMemo, useState } from 'react';
-import { Check, Clock3, LoaderCircle } from 'lucide-react';
-import { StudyPreferences } from '../careerPlan';
+import { useMemo, useState } from "react";
+import {
+  AlertCircle,
+  Check,
+  Clock3,
+  CopyCheck,
+  LoaderCircle,
+} from "lucide-react";
+import { StudyPreferences } from "../careerPlan";
+import "./InitialStudySetup.css";
 
 const weekdays = [
-  { value: 1, label: 'Seg' }, { value: 2, label: 'Ter' }, { value: 3, label: 'Qua' },
-  { value: 4, label: 'Qui' }, { value: 5, label: 'Sex' }, { value: 6, label: 'Sáb' },
-  { value: 0, label: 'Dom' },
+  { value: 1, label: "Seg", fullLabel: "Segunda-feira" },
+  { value: 2, label: "Ter", fullLabel: "Terça-feira" },
+  { value: 3, label: "Qua", fullLabel: "Quarta-feira" },
+  { value: 4, label: "Qui", fullLabel: "Quinta-feira" },
+  { value: 5, label: "Sex", fullLabel: "Sexta-feira" },
+  { value: 6, label: "Sáb", fullLabel: "Sábado" },
+  { value: 0, label: "Dom", fullLabel: "Domingo" },
 ];
 
 interface Props {
@@ -13,32 +24,121 @@ interface Props {
   onSave: (preferences: StudyPreferences) => void | Promise<void>;
 }
 
+type HoursDraft = Record<number, string>;
+
+const isValidHours = (value: string | undefined) => {
+  if (!value?.trim() || !/^\d+$/.test(value.trim())) return false;
+  const numericValue = Number(value);
+  return Number.isInteger(numericValue) && numericValue >= 1 && numericValue <= 24;
+};
+
+const initialHoursDraft = (initial?: StudyPreferences | null): HoursDraft =>
+  Object.fromEntries(
+    weekdays.map((day) => [
+      day.value,
+      String(initial?.hoursByWeekday?.[day.value] ?? initial?.hoursPerDay ?? 4),
+    ]),
+  );
+
 export default function InitialStudySetup({ initial, onSave }: Props) {
-  const [selectedDays, setSelectedDays] = useState<number[]>(initial?.selectedWeekdays || [1, 2, 3, 4, 5]);
-  const [hours, setHours] = useState<Record<number, number>>(initial?.hoursByWeekday || { 1: 4, 2: 4, 3: 4, 4: 4, 5: 4 });
+  const [selectedDays, setSelectedDays] = useState<number[]>(
+    initial?.selectedWeekdays || [1, 2, 3, 4, 5],
+  );
+  const [hours, setHours] = useState<HoursDraft>(() =>
+    initialHoursDraft(initial),
+  );
+  const [sharedHours, setSharedHours] = useState(
+    String(initial?.hoursPerDay ?? 4),
+  );
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
+
+  const invalidDays = useMemo(
+    () => selectedDays.filter((day) => !isValidHours(hours[day])),
+    [hours, selectedDays],
+  );
+  const formIsValid = selectedDays.length > 0 && invalidDays.length === 0;
+
   const averageHours = useMemo(() => {
-    if (selectedDays.length === 0) return 0;
-    return Math.max(1, Math.round(selectedDays.reduce((sum, day) => sum + Number(hours[day] || 1), 0) / selectedDays.length));
-  }, [hours, selectedDays]);
+    if (!formIsValid) return 0;
+    return Math.max(
+      1,
+      Math.round(
+        selectedDays.reduce((sum, day) => sum + Number(hours[day]), 0) /
+          selectedDays.length,
+      ),
+    );
+  }, [formIsValid, hours, selectedDays]);
+
+  const totalWeeklyHours = useMemo(
+    () =>
+      selectedDays.reduce(
+        (sum, day) => sum + (isValidHours(hours[day]) ? Number(hours[day]) : 0),
+        0,
+      ),
+    [hours, selectedDays],
+  );
 
   const toggleDay = (day: number) => {
-    setSelectedDays(current => current.includes(day) ? current.filter(item => item !== day) : [...current, day]);
-    setHours(current => ({ ...current, [day]: current[day] || 4 }));
+    setError("");
+    if (selectedDays.includes(day)) {
+      setSelectedDays((current) => current.filter((item) => item !== day));
+      return;
+    }
+
+    if (!isValidHours(hours[day])) {
+      const fallback = isValidHours(sharedHours) ? sharedHours : "4";
+      setHours((current) => ({ ...current, [day]: fallback }));
+    }
+    setSelectedDays((current) =>
+      current.includes(day) ? current : [...current, day],
+    );
+  };
+
+  const updateDayHours = (day: number, value: string) => {
+    setError("");
+    setHours((current) => ({ ...current, [day]: value }));
+  };
+
+  const applyHoursToSelectedDays = () => {
+    if (!isValidHours(sharedHours)) {
+      setError("Informe entre 1 e 24 horas para aplicar aos dias selecionados.");
+      return;
+    }
+    if (selectedDays.length === 0) {
+      setError("Selecione pelo menos um dia antes de aplicar uma carga horária.");
+      return;
+    }
+
+    setHours((current) => ({
+      ...current,
+      ...Object.fromEntries(selectedDays.map((day) => [day, sharedHours])),
+    }));
+    setError("");
   };
 
   const submit = async () => {
     if (selectedDays.length === 0) {
-      setError('Selecione pelo menos um dia disponível para estudar.');
+      setError("Selecione pelo menos um dia disponível para estudar.");
       return;
     }
+    if (invalidDays.length > 0) {
+      setError(
+        "Preencha todos os dias selecionados com um número inteiro entre 1 e 24.",
+      );
+      return;
+    }
+
     setSaving(true);
-    setError('');
+    setError("");
     try {
       await onSave({
-        selectedWeekdays: [...selectedDays].sort((a, b) => (a || 7) - (b || 7)),
-        hoursByWeekday: Object.fromEntries(selectedDays.map(day => [day, Math.max(1, Number(hours[day] || 1))])),
+        selectedWeekdays: [...selectedDays].sort(
+          (a, b) => (a || 7) - (b || 7),
+        ),
+        hoursByWeekday: Object.fromEntries(
+          selectedDays.map((day) => [day, Number(hours[day])]),
+        ),
         hoursPerDay: averageHours,
         blockMinutes: 60,
       });
@@ -48,37 +148,170 @@ export default function InitialStudySetup({ initial, onSave }: Props) {
   };
 
   return (
-    <section className="mx-auto max-w-4xl animate-fade-in space-y-6">
-      <header className="rounded-3xl bg-slate-950 px-6 py-8 text-white sm:px-10">
-        <span className="text-xs font-black uppercase tracking-[0.2em] text-blue-300">Configuração inicial</span>
-        <h2 className="mt-3 text-2xl font-black sm:text-4xl">Quando você pode estudar?</h2>
-        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-300">A data da prova já vem cadastrada em cada concurso. Informe apenas sua disponibilidade; ao escolher a preparação, o cronograma será calculado automaticamente.</p>
+    <section className="initial-study-setup animate-fade-in" aria-labelledby="availability-title">
+      <header className="availability-hero">
+        <span>Configuração inicial</span>
+        <h2 id="availability-title">Quando você pode estudar?</h2>
+        <p>
+          Selecione seus dias disponíveis e defina a carga diária. Você pode
+          aplicar o mesmo número a todos e ajustar apenas as exceções.
+        </p>
       </header>
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 space-y-8">
-        <div className="space-y-4">
+      <div className="availability-panel">
+        <div className="availability-panel-heading">
           <div>
-            <h3 className="flex items-center gap-2 text-sm font-extrabold text-slate-800"><Clock3 className="h-4 w-4 text-indigo-600" /> Disponibilidade de estudo</h3>
-            <p className="mt-1 text-xs text-slate-500">Selecione os dias e informe quantas horas possui em cada um.</p>
+            <span className="availability-step">Sua rotina semanal</span>
+            <h3>
+              <Clock3 aria-hidden="true" /> Disponibilidade de estudo
+            </h3>
+            <p>Marque os dias em que deseja incluir sessões no cronograma.</p>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-            {weekdays.map(day => {
-              const selected = selectedDays.includes(day.value);
-              return <div key={day.value} className={`rounded-2xl border p-3 transition ${selected ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 bg-slate-50'}`}>
-                <button type="button" onClick={() => toggleDay(day.value)} className="flex w-full items-center justify-between text-sm font-extrabold text-slate-700">
-                  {day.label}<span className={`flex h-5 w-5 items-center justify-center rounded-full ${selected ? 'bg-indigo-600 text-white' : 'border border-slate-300'}`}>{selected && <Check className="h-3 w-3" />}</span>
-                </button>
-                {selected && <label className="mt-3 flex items-center gap-1"><input type="number" min="1" max="24" step="1" value={hours[day.value] || 4} onChange={event => setHours(current => ({ ...current, [day.value]: Number(event.target.value) }))} className="min-w-0 w-full rounded-lg border border-indigo-200 bg-white px-2 py-1.5 text-center text-sm font-bold" /><span className="text-xs font-bold text-slate-500">h</span></label>}
-              </div>;
-            })}
+          <div className="availability-summary" aria-live="polite">
+            <strong>{selectedDays.length}</strong>
+            <span>{selectedDays.length === 1 ? "dia ativo" : "dias ativos"}</span>
+            <i aria-hidden="true" />
+            <strong>{totalWeeklyHours}h</strong>
+            <span>por semana</span>
           </div>
         </div>
 
-        {error && <p role="alert" className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">{error}</p>}
-        <button type="button" disabled={saving} onClick={() => void submit()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3.5 text-sm font-extrabold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-70 sm:w-auto sm:min-w-64">
-          {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-          {saving ? 'Salvando disponibilidade…' : 'Salvar e continuar'}
-        </button>
+        <div className="availability-bulk-editor">
+          <div>
+            <CopyCheck aria-hidden="true" />
+            <span>
+              <strong>Mesma carga todos os dias?</strong>
+              <small>Preencha uma vez e aplique aos dias selecionados.</small>
+            </span>
+          </div>
+          <label htmlFor="shared-study-hours">
+            <span>Horas por dia</span>
+            <div className="availability-hours-input">
+              <input
+                id="shared-study-hours"
+                type="number"
+                inputMode="numeric"
+                min="1"
+                max="24"
+                step="1"
+                value={sharedHours}
+                onChange={(event) => {
+                  setSharedHours(event.target.value);
+                  setError("");
+                }}
+                onFocus={(event) => event.currentTarget.select()}
+                aria-invalid={!isValidHours(sharedHours)}
+                aria-describedby="shared-hours-help"
+              />
+              <span aria-hidden="true">h</span>
+            </div>
+          </label>
+          <button type="button" onClick={applyHoursToSelectedDays}>
+            Aplicar aos selecionados
+          </button>
+          <small id="shared-hours-help" className="availability-visually-hidden">
+            Digite um número inteiro entre 1 e 24.
+          </small>
+        </div>
+
+        <fieldset className="availability-days">
+          <legend>Escolha os dias e revise as horas</legend>
+          <div className="availability-days-grid">
+            {weekdays.map((day) => {
+              const selected = selectedDays.includes(day.value);
+              const invalid = selected && !isValidHours(hours[day.value]);
+              const inputId = `study-hours-${day.value}`;
+              const errorId = `study-hours-error-${day.value}`;
+
+              return (
+                <div
+                  key={day.value}
+                  className={`availability-day-card ${selected ? "is-selected" : ""} ${invalid ? "is-invalid" : ""}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleDay(day.value)}
+                    aria-pressed={selected}
+                    aria-label={`${selected ? "Remover" : "Adicionar"} ${day.fullLabel}`}
+                    className="availability-day-toggle"
+                  >
+                    <span>
+                      <strong>{day.label}</strong>
+                      <small>{day.fullLabel}</small>
+                    </span>
+                    <i aria-hidden="true">{selected && <Check />}</i>
+                  </button>
+
+                  {selected ? (
+                    <label className="availability-day-hours" htmlFor={inputId}>
+                      <span>Horas disponíveis</span>
+                      <div className="availability-hours-input">
+                        <input
+                          id={inputId}
+                          type="number"
+                          inputMode="numeric"
+                          min="1"
+                          max="24"
+                          step="1"
+                          value={hours[day.value] ?? ""}
+                          onChange={(event) =>
+                            updateDayHours(day.value, event.target.value)
+                          }
+                          onFocus={(event) => event.currentTarget.select()}
+                          aria-invalid={invalid}
+                          aria-describedby={invalid ? errorId : undefined}
+                        />
+                        <span aria-hidden="true">h</span>
+                      </div>
+                      {invalid && (
+                        <small id={errorId} role="alert">
+                          Use um número de 1 a 24.
+                        </small>
+                      )}
+                    </label>
+                  ) : (
+                    <p className="availability-day-off">Dia não incluído</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        {error && (
+          <p role="alert" className="availability-error">
+            <AlertCircle aria-hidden="true" /> {error}
+          </p>
+        )}
+
+        <div className="availability-footer">
+          <p>
+            {formIsValid ? (
+              <>
+                <Check aria-hidden="true" /> Disponibilidade pronta para gerar
+                seu cronograma.
+              </>
+            ) : (
+              <>
+                <AlertCircle aria-hidden="true" /> Revise os campos destacados
+                antes de continuar.
+              </>
+            )}
+          </p>
+          <button
+            type="button"
+            disabled={saving}
+            aria-disabled={!formIsValid || saving}
+            onClick={() => void submit()}
+          >
+            {saving ? <LoaderCircle className="is-spinning" /> : <Check />}
+            {saving
+              ? "Salvando disponibilidade…"
+              : initial
+                ? "Salvar alterações"
+                : "Concluir configuração"}
+          </button>
+        </div>
       </div>
     </section>
   );

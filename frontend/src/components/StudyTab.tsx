@@ -7,6 +7,7 @@ import {
   CheckCircle,
   Lightbulb,
   ListFilter,
+  LoaderCircle,
   Target,
   X,
   Zap,
@@ -93,6 +94,7 @@ export default function StudyTab({
   onCurrentActivityComplete,
 }: StudyTabProps) {
   const [sections, setSections] = useState<StudySection[]>([]);
+  const [contentLoading, setContentLoading] = useState(true);
   const [contentError, setContentError] = useState("");
   const [activeSectionId, setActiveSectionId] = useState("");
   const [activeCardId, setActiveCardId] = useState("");
@@ -110,6 +112,7 @@ export default function StudyTab({
 
   useEffect(() => {
     let active = true;
+    setContentLoading(true);
     Promise.allSettled([studyPlansApi.getActive(), catalogApi.studyLibrary()])
       .then(([planResult, libraryResult]) => {
         if (!active) return;
@@ -127,7 +130,15 @@ export default function StudyTab({
         setSections(merged);
         setContentError("");
       })
-      .catch(() => setContentError("Não foi possível carregar o material do PostgreSQL."));
+      .catch(() => {
+        if (active)
+          setContentError(
+            "Não foi possível carregar o material do PostgreSQL.",
+          );
+      })
+      .finally(() => {
+        if (active) setContentLoading(false);
+      });
     return () => {
       active = false;
     };
@@ -190,6 +201,29 @@ export default function StudyTab({
     });
     if (activeCard.id === contextMatch?.card.id) onCurrentActivityComplete?.();
   };
+
+  if (contentLoading) {
+    return (
+      <div
+        className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white px-6 text-center"
+        role="status"
+        aria-live="polite"
+      >
+        <LoaderCircle
+          className="h-6 w-6 animate-spin text-indigo-600"
+          aria-hidden="true"
+        />
+        <div>
+          <strong className="text-sm font-extrabold text-slate-800">
+            Carregando seu material
+          </strong>
+          <p className="mt-1 text-xs text-slate-500">
+            Sincronizando o conteúdo do plano ativo…
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!activeSection || !activeCard) {
     return (

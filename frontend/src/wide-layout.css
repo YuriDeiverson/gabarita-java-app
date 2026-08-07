@@ -428,6 +428,56 @@
   background: #f1f6f1 !important;
 }
 
+.context-session-controls {
+  grid-column: 1 / -1;
+  margin-top: 9px;
+  padding-top: 10px;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px !important;
+  border-top: 1px solid #d7e1d8;
+}
+
+.context-session-controls button {
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid #55705c;
+  border-radius: 9px;
+  background: #55705c;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.context-session-controls button.is-finish {
+  border-color: #bdc7bf;
+  background: #fff;
+  color: #435047;
+}
+
+.context-session-controls button:disabled { cursor: wait; opacity: .52; }
+.context-session-controls button svg { width: 13px; height: 13px; }
+
+.app-main .context-session-card .context-session-error {
+  grid-column: 1 / -1;
+  margin-top: 7px;
+  padding: 8px;
+  overflow: visible;
+  border: 1px solid #dbc1c4;
+  border-radius: 8px;
+  background: #f7eaea;
+  color: #9a3544;
+  font-size: 8px;
+  line-height: 1.4;
+  text-overflow: initial;
+  white-space: normal;
+}
+
 .context-session-card > span {
   display: grid;
   width: 36px;
