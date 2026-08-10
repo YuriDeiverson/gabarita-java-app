@@ -145,6 +145,11 @@ export interface StudyDashboardData {
 
 // Study Plans API
 export const studyPlansApi = {
+  getSummaries: async (): Promise<StudyPlan[]> => {
+    const response = await fetch(`${API_BASE_URL}/study-plans/summaries`);
+    if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
+    return response.json();
+  },
   getAll: async (includeArchived = false): Promise<StudyPlan[]> => {
     const response = await fetch(`${API_BASE_URL}/study-plans?includeArchived=${includeArchived}`);
     if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
@@ -639,7 +644,8 @@ export interface AdminQuestionReport {
 }
 
 export const catalogApi = {
-  contests: () => jsonRequest<CatalogContest[]>('/catalog/contests'),
+  contests: (includeCurriculum = false) => jsonRequest<CatalogContest[]>(`/catalog/contests?includeCurriculum=${includeCurriculum}`),
+  contest: (id:string) => jsonRequest<CatalogContest>(`/catalog/contests/${encodeURIComponent(id)}`),
   contestNoticePdf: (id:string) => fileRequest<Blob>(`/catalog/contests/${id}/notice-pdf`, undefined, 'blob'),
   studyLibrary: () => jsonRequest<SharedStudySubject[]>('/catalog/study-library'),
 };

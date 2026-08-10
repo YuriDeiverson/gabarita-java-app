@@ -31,6 +31,21 @@ public class StudyPlanService {
                 .param("u", user).param("a", archived).query().listOfRows().stream()
                 .map(this::serializeSettings).toList();
     }
+    List<Map<String,Object>> summaries(UUID user) {
+        archiveExpired(user);
+        return jdbc.sql("""
+                SELECT sp.id,sp.course_id,sp.title,sp.exam_date,sp.status,sp.is_primary,sp.is_primary AS is_active,
+                  sp.created_at,sp.updated_at,COALESCE(sp.settings->'preferences','{}'::jsonb) settings,
+                  (SELECT COUNT(*) FROM roadmap_topics rt WHERE rt.plan_id=sp.id AND rt.active) total_topics,
+                  (SELECT COUNT(*) FROM roadmap_topics rt JOIN topic_progress tp ON tp.roadmap_topic_id=rt.id
+                    WHERE rt.plan_id=sp.id AND rt.active AND tp.user_id=:u AND tp.status='COMPLETED') completed_topics
+                FROM study_plans sp
+                WHERE sp.user_id=:u AND sp.status<>'ARCHIVED'
+                ORDER BY sp.is_primary DESC,sp.updated_at DESC
+                """)
+                .param("u",user).query().listOfRows().stream()
+                .map(this::serializeSettings).toList();
+    }
     Map<String,Object> one(UUID id, UUID user) {
         return jdbc.sql("SELECT *, is_primary AS is_active FROM study_plans WHERE id=:id AND user_id=:u")
                 .param("id",id).param("u",user).query().listOfRows().stream().findFirst()

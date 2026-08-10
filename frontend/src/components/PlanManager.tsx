@@ -7,9 +7,10 @@ import { StudyPlan, studyPlansApi } from '../services/api';
 
 interface PlanManagerProps {
   refreshKey?: number;
-  onActivated?: (courseId: string) => void;
+  initialPlans?: StudyPlan[];
+  onActivated?: (courseId: string, plan: StudyPlan) => void;
   onEdit?: (courseId: string) => void;
-  onDeleted?: (courseId: string) => void;
+  onDeleted?: (courseId: string, plan: StudyPlan) => void;
 }
 
 const courseLabel = (plan: StudyPlan) => {
@@ -27,9 +28,9 @@ const examDate = (plan: StudyPlan) => {
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(new Date(`${value}T00:00:00Z`));
 };
 
-export default function PlanManager({ refreshKey, onActivated, onEdit, onDeleted }: PlanManagerProps) {
-  const [plans, setPlans] = useState<StudyPlan[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function PlanManager({ refreshKey, initialPlans, onActivated, onEdit, onDeleted }: PlanManagerProps) {
+  const [plans, setPlans] = useState<StudyPlan[]>(initialPlans || []);
+  const [loading, setLoading] = useState(!initialPlans);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [history, setHistory] = useState<Record<string, unknown>[] | null>(null);
@@ -39,7 +40,7 @@ export default function PlanManager({ refreshKey, onActivated, onEdit, onDeleted
     setLoading(true);
     setError('');
     try {
-      setPlans(await studyPlansApi.getAll(false));
+      setPlans(await studyPlansApi.getSummaries());
     } catch (requestError) {
       console.error(requestError);
       setError('Não foi possível carregar os planos salvos no servidor.');
@@ -48,7 +49,14 @@ export default function PlanManager({ refreshKey, onActivated, onEdit, onDeleted
     }
   }, []);
 
-  useEffect(() => { loadPlans(); }, [loadPlans, refreshKey]);
+  useEffect(() => {
+    if (initialPlans) {
+      setPlans(initialPlans);
+      setLoading(false);
+      return;
+    }
+    void loadPlans();
+  }, [initialPlans, loadPlans, refreshKey]);
 
   const run = async (id: string, action: () => Promise<unknown>) => {
     setBusyId(id);
@@ -62,7 +70,7 @@ export default function PlanManager({ refreshKey, onActivated, onEdit, onDeleted
 
   const activate = (plan: StudyPlan) => run(plan.id, async () => {
     await studyPlansApi.activate(plan.id);
-    onActivated?.(plan.course_id || plan.courseId || '');
+    onActivated?.(plan.course_id || plan.courseId || '', { ...plan, is_primary: true, is_active: true });
   });
 
   const duplicate = (plan: StudyPlan) => run(plan.id, async () => {
@@ -71,9 +79,9 @@ export default function PlanManager({ refreshKey, onActivated, onEdit, onDeleted
 
   const remove = (plan: StudyPlan) => {
     if (window.confirm(`Excluir definitivamente o plano "${plan.title}" e seus dados relacionados?`)) {
-      onDeleted?.(plan.course_id || plan.courseId || '');
       run(plan.id, async () => {
         await studyPlansApi.delete(plan.id);
+        onDeleted?.(plan.course_id || plan.courseId || '', plan);
       });
     }
   };
@@ -94,7 +102,7 @@ export default function PlanManager({ refreshKey, onActivated, onEdit, onDeleted
       <div>
         <div>
           <h3 id="server-plans-title" className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
-            <FolderOpen className="w-5 h-5 text-indigo-600" /> Planos
+            <FolderOpen className="w-5 h-5 text-indigo-600" /> Minhas preparações
           </h3>
           <p className="text-sm text-slate-500 mt-1">Seus estudos salvos e prontos para continuar.</p>
         </div>

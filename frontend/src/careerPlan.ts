@@ -170,7 +170,7 @@ export async function createAutomaticCareerPlan(
     },
   };
 
-  const remotePlans = await studyPlansApi.getAll(false);
+  const remotePlans = await studyPlansApi.getSummaries();
   let existingPlanId: string | null = null;
   try {
     const existing = JSON.parse(localStorage.getItem(`${role.courseId}_study_config`) || '{}');

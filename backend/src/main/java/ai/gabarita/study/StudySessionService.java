@@ -98,7 +98,7 @@ public class StudySessionService {
         UUID id=UUID.randomUUID();
         int plannedMinutes=task==null?focusMinutes:number(task,"planned_minutes");
         int targetCycles=freeMode?1:task==null?1:Math.max(1,(int)Math.ceil(plannedMinutes/(focusMinutes+10d)));
-        String config=freeMode?null:"{\"focusMinutes\":"+focusMinutes+",\"shortBreakMinutes\":10,\"longBreakMinutes\":10,\"cycles\":4,\"targetCycles\":"+targetCycles+"}";
+        String config=questionPomodoroConfig(freeMode,focusMinutes,targetCycles);
         jdbc.sql("""
             INSERT INTO study_sessions(id,user_id,plan_id,daily_task_id,roadmap_topic_id,started_at,active_since,status,mode,pomodoro,device,session_kind,context_title)
             VALUES(:id,:u,:p,:task,:topic,now(),now(),'RUNNING',:mode,CAST(:config AS jsonb),:device,'QUESTIONS',:title)
@@ -111,6 +111,11 @@ public class StudySessionService {
         if(dailyTaskId!=null)jdbc.sql("UPDATE daily_tasks SET status='IN_PROGRESS',updated_at=now() WHERE id=:id AND status IN('PENDING','AVAILABLE')")
                 .param("id",dailyTaskId).update();
         return one(userId,id);
+    }
+
+    static String questionPomodoroConfig(boolean freeMode,int focusMinutes,int targetCycles){
+        if(freeMode)return "{}";
+        return "{\"focusMinutes\":"+focusMinutes+",\"shortBreakMinutes\":10,\"longBreakMinutes\":10,\"cycles\":4,\"targetCycles\":"+targetCycles+"}";
     }
 
     @Transactional

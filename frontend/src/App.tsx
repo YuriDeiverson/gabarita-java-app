@@ -7,6 +7,7 @@ import StudyDashboard from "./components/StudyDashboard";
 import QuestionBankTab from "./components/QuestionBankTab";
 import QuestionNotesTab from "./components/QuestionNotesTab";
 import CareerTab from "./components/CareerTab";
+import PlanManager from "./components/PlanManager";
 import AdminPanel, { AdminSection } from "./components/AdminPanel";
 import InitialStudySetup from "./components/InitialStudySetup";
 import {
@@ -21,6 +22,7 @@ import {
   StudyDashboardData,
   StudySession,
   QuestionNote,
+  StudyPlan,
 } from "./services/api";
 import { ActiveStudyContext } from "./studyContext";
 import { useAuth } from "./auth/AuthContext";
@@ -96,6 +98,18 @@ const hasActiveStudyPlan = () =>
     })(),
   );
 
+const settingsFromPlan = (plan: StudyPlan) => {
+  try {
+    const root = typeof plan.settings === "string" ? JSON.parse(plan.settings) : plan.settings || {};
+    return typeof root.preferences === "object" && root.preferences ? root.preferences as Record<string, unknown> : root as Record<string, unknown>;
+  } catch {
+    return {} as Record<string, unknown>;
+  }
+};
+
+const isPrimaryPlan = (plan: StudyPlan) =>
+  plan.is_primary === true || plan.is_active === true || plan.is_active === 1;
+
 export default function App() {
   const { user, signOut } = useAuth();
   const isAdmin = Boolean(
@@ -119,6 +133,8 @@ export default function App() {
   const [homeMode, setHomeMode] = useState<"dashboard" | "plans">(() =>
     hasActiveStudyPlan() ? "dashboard" : "plans",
   );
+  const [serverPlans, setServerPlans] = useState<StudyPlan[]>([]);
+  const [plansBootstrapping, setPlansBootstrapping] = useState(true);
   const [studyContext, setStudyContext] = useState<ActiveStudyContext | null>(
     () => {
       try {
@@ -265,6 +281,47 @@ export default function App() {
     (localStorage.getItem("admin_active_section") as AdminSection) ||
     "contests",
   );
+
+  const hydrateActivePlan = useCallback((plan: StudyPlan) => {
+    const courseId = String(plan.course_id || plan.courseId || "");
+    const examDate = String(plan.exam_date || plan.examDate || "");
+    if (!courseId || !examDate) return false;
+
+    const settings = settingsFromPlan(plan);
+    const config = {
+      ...settings,
+      studyPlanId: plan.id,
+      examDate,
+      targetRole: String(settings.targetRole || plan.title || "Preparação"),
+    };
+    localStorage.setItem("active_course", courseId);
+    localStorage.setItem("study_config", JSON.stringify(config));
+    localStorage.setItem(`${courseId}_study_config`, JSON.stringify(config));
+    localStorage.removeItem("study_plan_deleted");
+
+    const selectedWeekdays = Array.isArray(settings.selectedWeekdays)
+      ? settings.selectedWeekdays.map(Number).filter(day => day >= 0 && day <= 6)
+      : [];
+    if (selectedWeekdays.length > 0) {
+      const rawHours = typeof settings.hoursByWeekday === "object" && settings.hoursByWeekday
+        ? settings.hoursByWeekday as Record<string, unknown>
+        : {};
+      const preferences: StudyPreferences = {
+        selectedWeekdays,
+        hoursByWeekday: Object.fromEntries(
+          Object.entries(rawHours).map(([day, hours]) => [Number(day), Math.max(1, Number(hours || 1))]),
+        ),
+        hoursPerDay: Math.max(1, Number(settings.hoursPerDay || 4)),
+        blockMinutes: 60,
+      };
+      saveStudyPreferences(preferences, user?.id);
+      setStudyPreferences(preferences);
+    }
+
+    setActiveCourse(courseId);
+    setHasPlan(true);
+    return true;
+  }, [user?.id]);
 
   const loadHeaderNotifications = useCallback(async (showLoading = false) => {
     if (showLoading) setNotificationLoading(true);
@@ -466,63 +523,35 @@ export default function App() {
   }, [activeTab]);
 
   useEffect(() => {
-    const courseId = localStorage.getItem("active_course");
-    if (!courseId || localStorage.getItem("study_plan_deleted") === "true")
-      return;
+    let cancelled = false;
+    setPlansBootstrapping(true);
+    studyPlansApi.getSummaries()
+      .then((plans) => {
+        if (cancelled) return;
+        setServerPlans(plans);
+        const activePlan = plans.find(isPrimaryPlan);
+        if (activePlan) hydrateActivePlan(activePlan);
+        else {
+          localStorage.setItem("study_plan_deleted", "true");
+          ["active_course", "study_config", "active_study_context"].forEach(key => localStorage.removeItem(key));
+          setActiveCourse("seplag_informatica");
+          setHasPlan(false);
+        }
 
-    const rawConfig = localStorage.getItem(`${courseId}_study_config`);
-    if (!rawConfig) return;
-
-    let localPlanId: string | null = null;
-    try {
-      localPlanId = JSON.parse(rawConfig).studyPlanId || null;
-    } catch {
-      return;
-    }
-    if (!localPlanId || String(localPlanId).startsWith("local-")) return;
-
-    studyPlansApi
-      .getAll(false)
-      .then((remotePlans) => {
-        if (remotePlans.some((plan) => String(plan.id) === String(localPlanId)))
-          return;
-
-        localStorage.setItem("study_plan_deleted", "true");
-        [
-          "seplag_informatica",
-          "policial_civil",
-          "tecnico_enfermagem",
-          "jornalismo",
-        ].forEach((id) => {
-          [
-            "study_sections",
-            "quiz_questions",
-            "schedule_weeks",
-            "study_config",
-            "study_schedule_progress",
-            "quiz_answers",
-          ].forEach((key) => localStorage.removeItem(`${id}_${key}`));
-        });
-        [
-          "active_course",
-          "custom_study_sections",
-          "custom_quiz_questions",
-          "custom_schedule_weeks",
-          "study_config",
-          "study_schedule_progress",
-          "quiz_answers",
-          "quiz_answer_history",
-          "quiz_answer_events",
-          "active_quiz_questions_cache",
-        ].forEach((key) => localStorage.removeItem(key));
-
-        setHasPlan(false);
+        setStudyContext(null);
+        localStorage.removeItem("active_study_context");
         setActiveTab("home");
+        setHomeMode(plans.length === 1 && activePlan ? "dashboard" : plans.length > 0 ? "plans" : "dashboard");
       })
       .catch(() => {
-        // Preserve an offline plan when the API is unavailable.
-      });
-  }, []);
+        if (cancelled) return;
+        const localPlanAvailable = hasActiveStudyPlan();
+        setHasPlan(localPlanAvailable);
+        setHomeMode(localPlanAvailable ? "dashboard" : "plans");
+      })
+      .finally(() => { if (!cancelled) setPlansBootstrapping(false); });
+    return () => { cancelled = true; };
+  }, [hydrateActivePlan, user?.id]);
 
   useEffect(() => {
     setStudyPreferences(loadStudyPreferences(user?.id));
@@ -1332,7 +1361,13 @@ export default function App() {
     setProfileMenuOpen(false);
     setMobileProfileOpen(false);
     setNotificationMenuOpen(false);
-    setActiveTab("career");
+    setHomeMode("plans");
+    setActiveTab("home");
+    setPlansBootstrapping(true);
+    studyPlansApi.getSummaries()
+      .then(setServerPlans)
+      .catch(() => {})
+      .finally(() => setPlansBootstrapping(false));
   };
   const openProfileDestination = (
     tab: "career" | "schedule" | "performance" | "notes" | "admin",
@@ -2193,7 +2228,50 @@ export default function App() {
 
         {/* Tab Content Rendering */}
         <div className="app-content min-w-0 flex-grow transition-all duration-300">
+          {activeTab === "home" && plansBootstrapping && (
+            <section className="mx-auto flex min-h-64 max-w-4xl items-center justify-center gap-3 text-slate-500" role="status">
+              <RefreshCw className="h-5 w-5 animate-spin" aria-hidden="true" />
+              <span>Carregando sua preparação…</span>
+            </section>
+          )}
+          {activeTab === "home" && !plansBootstrapping && homeMode === "plans" && (
+            <PlanManager
+              initialPlans={serverPlans}
+              onActivated={(_courseId, plan) => {
+                hydrateActivePlan(plan);
+                setServerPlans(current => current.map(item => ({
+                  ...item,
+                  is_primary: item.id === plan.id,
+                  is_active: item.id === plan.id,
+                })));
+                setHomeMode("dashboard");
+              }}
+              onEdit={(courseId) => {
+                if (courseId) {
+                  localStorage.setItem("active_course", courseId);
+                  setActiveCourse(courseId);
+                }
+                setActiveTab("career");
+              }}
+              onDeleted={(_courseId, plan) => {
+                setServerPlans(current => {
+                  const remaining = current.filter(item => item.id !== plan.id);
+                  if (remaining.length === 0) setHomeMode("dashboard");
+                  return remaining;
+                });
+                if (isPrimaryPlan(plan)) {
+                  const deletedCourseId = String(plan.course_id || plan.courseId || "");
+                  localStorage.setItem("study_plan_deleted", "true");
+                  ["active_course", "study_config", "active_study_context"].forEach(key => localStorage.removeItem(key));
+                  if (deletedCourseId) localStorage.removeItem(`${deletedCourseId}_study_config`);
+                  setHasPlan(false);
+                }
+              }}
+            />
+          )}
           {activeTab === "home" &&
+            !plansBootstrapping &&
+            homeMode !== "plans" &&
             (!studyPreferences || editingPreferences) && (
               <InitialStudySetup
                 initial={studyPreferences}
@@ -2201,6 +2279,7 @@ export default function App() {
               />
             )}
           {activeTab === "home" &&
+            !plansBootstrapping &&
             studyPreferences &&
             !editingPreferences &&
             hasPlan &&
@@ -2208,7 +2287,7 @@ export default function App() {
               <StudyDashboard
                 key={dashboardVersion}
                 initialData={headerStudyData}
-                onManagePlans={() => setActiveTab("career")}
+                onManagePlans={openPlanManager}
                 onOpenStudy={openStudyContext}
                 onOpenQuestions={(id, minutes) => {
                   setQuestionDailyTask(
@@ -2222,6 +2301,8 @@ export default function App() {
               />
             )}
           {activeTab === "home" &&
+            !plansBootstrapping &&
+            homeMode !== "plans" &&
             studyPreferences &&
             !editingPreferences &&
             !hasPlan && (

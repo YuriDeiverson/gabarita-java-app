@@ -30,6 +30,9 @@ public class StudyPlanController {
     @GetMapping public List<Map<String,Object>> all(@RequestParam(defaultValue = "false") boolean includeArchived) {
         return service.all(currentUser.id(), includeArchived);
     }
+    @GetMapping("/summaries") public List<Map<String,Object>> summaries() {
+        return service.summaries(currentUser.id());
+    }
     @GetMapping("/{id}") public Map<String,Object> one(@PathVariable UUID id) { return service.one(id, currentUser.id()); }
     @GetMapping("/active/current") public Map<String,Object> active() { return service.active(currentUser.id()); }
     @PostMapping @ResponseStatus(HttpStatus.CREATED)

@@ -79,6 +79,9 @@ export default function CareerTab({
   const [preparationVersion, setPreparationVersion] = useState(0);
   const [remotePlans, setRemotePlans] = useState<StudyPlan[]>([]);
   const [remoteContests, setRemoteContests] = useState<CareerContest[]>([]);
+  const [loadingPlans, setLoadingPlans] = useState(true);
+  const [loadingCatalog, setLoadingCatalog] = useState(true);
+  const [openingContestId, setOpeningContestId] = useState('');
   const [search, setSearch] = useState('');
   const [stateFilter, setStateFilter] = useState('');
   const [areaFilter, setAreaFilter] = useState('');
@@ -91,15 +94,17 @@ export default function CareerTab({
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([studyPlansApi.getAll(false), catalogApi.contests()])
-      .then(([plans, catalog]) => {
-        if (cancelled) return;
-        setRemotePlans(plans);
-        setRemoteContests(catalog as CareerContest[]);
-      })
-      .catch(cause => {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : 'Erro ao carregar os dados. Tente novamente mais tarde.');
-      });
+    setLoadingPlans(true);
+    setLoadingCatalog(true);
+    setError('');
+    studyPlansApi.getSummaries()
+      .then(plans => { if (!cancelled) setRemotePlans(plans); })
+      .catch(() => { if (!cancelled) setError('Suas preparações não puderam ser carregadas agora.'); })
+      .finally(() => { if (!cancelled) setLoadingPlans(false); });
+    catalogApi.contests()
+      .then(catalog => { if (!cancelled) setRemoteContests(catalog as CareerContest[]); })
+      .catch(() => { if (!cancelled) setError('Não foi possível carregar o catálogo de concursos. Tente novamente mais tarde.'); })
+      .finally(() => { if (!cancelled) setLoadingCatalog(false); });
     return () => { cancelled = true; };
   }, [preparationVersion]);
 
@@ -235,6 +240,23 @@ export default function CareerTab({
     }
   };
 
+  const openContest = async (item: CareerContest) => {
+    if (!item.databaseId || openingContestId) {
+      if (!item.databaseId) setContest(item);
+      return;
+    }
+    setOpeningContestId(item.id);
+    setError('');
+    try {
+      const detailedContest = await catalogApi.contest(item.databaseId);
+      setContest(detailedContest as CareerContest);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível carregar os cargos deste concurso.');
+    } finally {
+      setOpeningContestId('');
+    }
+  };
+
   const selectedRoleTopics = contest && pendingRole ? roleTopics(contest, pendingRole) : [];
   const filters = [
     { label: 'Estado', value: stateFilter, setter: setStateFilter, options: availableContests.map(item => item.state) },
@@ -283,6 +305,10 @@ export default function CareerTab({
           </div>
         )}
       </header>
+
+      {!contest && loadingPlans && (
+        <p className="career-empty" role="status"><LoaderCircle className="animate-spin" aria-hidden="true" /> Carregando suas preparações…</p>
+      )}
 
       {!contest && preparations.length > 0 && (
         <section className="career-section">
@@ -358,13 +384,16 @@ export default function CareerTab({
                   <div><dt>Estado</dt><dd>{item.state}</dd></div>
                   <div className="career-meta-wide"><dt>Cargos disponíveis</dt><dd>{item.roles.map(role => role.label).join(', ')}</dd></div>
                 </dl>
-                <button type="button" onClick={() => setContest(item)} className="career-button career-button-dark career-card-cta">
-                  Ver cargos <ChevronRight aria-hidden="true" />
+                <button type="button" disabled={Boolean(openingContestId)} onClick={() => void openContest(item)} className="career-button career-button-dark career-card-cta">
+                  {openingContestId === item.id ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
+                  {openingContestId === item.id ? 'Carregando cargos…' : 'Ver cargos'}
+                  {openingContestId !== item.id && <ChevronRight aria-hidden="true" />}
                 </button>
               </article>
             ))}
           </div>
-          {filteredContests.length === 0 && <p className="career-empty">Nenhum concurso corresponde aos filtros selecionados.</p>}
+          {loadingCatalog && <p className="career-empty" role="status"><LoaderCircle className="animate-spin" aria-hidden="true" /> Carregando concursos disponíveis…</p>}
+          {!loadingCatalog && filteredContests.length === 0 && <p className="career-empty">Nenhum concurso corresponde aos filtros selecionados.</p>}
         </section>
       ) : (
         <section className="career-section career-detail">

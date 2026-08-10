@@ -37,7 +37,7 @@ public class AdminCatalogController {
     public record StudyDisciplineRequest(@NotBlank String title){}
     public record StudySubjectRequest(@NotBlank String sectionId,@NotBlank String title){}
 
-    @GetMapping public List<Map<String,Object>> all(){currentUser.requireAdmin();return catalog.catalog(true);}
+    @GetMapping public List<Map<String,Object>> all(){currentUser.requireAdmin();return catalog.catalog(true,true);}
 
     @PostMapping("/contests") @ResponseStatus(HttpStatus.CREATED)
     public Map<String,Object> createContest(@Valid @RequestBody ContestRequest r){currentUser.requireAdmin();

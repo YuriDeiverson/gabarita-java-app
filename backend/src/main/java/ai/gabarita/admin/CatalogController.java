@@ -19,7 +19,25 @@ public class CatalogController {
     public CatalogController(JdbcClient jdbc,ObjectMapper json){this.jdbc=jdbc;this.json=json;}
 
     @GetMapping("/contests")
-    public List<Map<String,Object>> contests(){return catalog(false);}
+    public List<Map<String,Object>> contests(
+      @RequestParam(defaultValue="false") boolean includeCurriculum
+    ){return catalog(false,includeCurriculum);}
+
+    @GetMapping("/contests/{id}")
+    public Map<String,Object> contestDetails(@PathVariable UUID id){
+        var rows=jdbc.sql("""
+          SELECT id,code,label,acronym,organization,description,board,exam_date,status,state,area,education,
+            vacancies,remuneration,location,stages,notice_reference,active,
+            notice_pdf IS NOT NULL notice_pdf_available,notice_pdf_name,notice_pdf_size,notice_pdf_updated_at
+          FROM catalog_contests WHERE id=:id AND active
+          """).param("id",id).query().listOfRows();
+        if(rows.isEmpty())throw new NoSuchElementException("Concurso não encontrado");
+        var item=contest(rows.getFirst());
+        var roles=roles(id,false,true);
+        if(roles.isEmpty())throw new NoSuchElementException("Nenhum cargo disponível para este concurso");
+        item.put("roles",roles);
+        return item;
+    }
 
     @GetMapping("/contests/{id}/notice-pdf")
     public ResponseEntity<byte[]> noticePdf(@PathVariable UUID id){
@@ -48,7 +66,7 @@ public class CatalogController {
             item.put("updatedAt",row.get("updated_at"));result.add(item);}return result;
     }
 
-    List<Map<String,Object>> catalog(boolean includeInactive){
+    List<Map<String,Object>> catalog(boolean includeInactive,boolean includeCurriculum){
         var contests=jdbc.sql("""
           SELECT id,code,label,acronym,organization,description,board,exam_date,status,state,area,education,
             vacancies,remuneration,location,stages,notice_reference,active,
@@ -60,16 +78,23 @@ public class CatalogController {
         var result=new ArrayList<Map<String,Object>>();
         for(var row:contests){
             UUID contestId=(UUID)row.get("id");
-            var roles=jdbc.sql("""
-              SELECT id,code,label,course_id,board,include_discursive,requirement,remuneration,vacancies,
-                estimated_hours,curriculum::text curriculum_json,active
-              FROM catalog_roles WHERE contest_id=:contest AND (:all OR active) ORDER BY label
-              """).param("contest",contestId).param("all",includeInactive).query().listOfRows();
-            var item=contest(row);var roleItems=new ArrayList<Map<String,Object>>();
-            for(var role:roles)roleItems.add(role(role,contestId));
+            var roleItems=roles(contestId,includeInactive,includeCurriculum);
+            var item=contest(row);
             if(!includeInactive&&roleItems.isEmpty())continue;
             item.put("roles",roleItems);result.add(item);
         }
+        return result;
+    }
+
+    private List<Map<String,Object>> roles(UUID contestId,boolean includeInactive,boolean includeCurriculum){
+        String curriculumColumn=includeCurriculum ? ",curriculum::text curriculum_json" : "";
+        var rows=jdbc.sql("""
+          SELECT id,code,label,course_id,board,include_discursive,requirement,remuneration,vacancies,
+            estimated_hours,active%s
+          FROM catalog_roles WHERE contest_id=:contest AND (:all OR active) ORDER BY label
+          """.formatted(curriculumColumn)).param("contest",contestId).param("all",includeInactive).query().listOfRows();
+        var result=new ArrayList<Map<String,Object>>();
+        for(var row:rows)result.add(role(row,contestId,includeCurriculum));
         return result;
     }
 
@@ -84,12 +109,14 @@ public class CatalogController {
         item.put("noticePdfAvailable",row.get("notice_pdf_available"));item.put("noticePdfName",row.get("notice_pdf_name"));
         item.put("noticePdfSize",row.get("notice_pdf_size"));item.put("noticePdfUpdatedAt",row.get("notice_pdf_updated_at"));return item;
     }
-    Map<String,Object> role(Map<String,Object> row,UUID contestId){
+    Map<String,Object> role(Map<String,Object> row,UUID contestId,boolean includeCurriculum){
         var item=new LinkedHashMap<String,Object>();item.put("databaseId",String.valueOf(row.get("id")));item.put("contestDatabaseId",contestId.toString());
         item.put("id",row.get("code"));item.put("label",row.get("label"));item.put("courseId",row.get("course_id"));item.put("board",row.get("board"));
         item.put("includeDiscursive",row.get("include_discursive"));item.put("requirement",row.get("requirement"));item.put("remuneration",row.get("remuneration"));
         item.put("vacancies",row.get("vacancies"));item.put("estimatedHours",row.get("estimated_hours"));item.put("active",row.get("active"));
-        try{item.put("curriculum",json.readTree(String.valueOf(row.get("curriculum_json"))));}catch(Exception ignored){item.put("curriculum",json.createObjectNode());}
+        if(includeCurriculum){
+            try{item.put("curriculum",json.readTree(String.valueOf(row.get("curriculum_json"))));}catch(Exception ignored){item.put("curriculum",json.createObjectNode());}
+        }
         return item;
     }
     private LocalDate date(Object value){if(value instanceof LocalDate date)return date;if(value instanceof java.sql.Date date)return date.toLocalDate();return LocalDate.parse(String.valueOf(value));}

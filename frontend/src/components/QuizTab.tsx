@@ -279,7 +279,7 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     const courseId=localStorage.getItem('active_course');
     if(!courseId)return;
     let cancelled=false;
-    catalogApi.contests().then(catalog=>{
+    catalogApi.contests(true).then(catalog=>{
       if(!cancelled)setCurriculumTopics(curriculumTopicsForCourse(catalog,courseId));
     }).catch(error=>console.warn('Assuntos do edital indisponíveis; exibindo apenas os assuntos já cadastrados nas questões.',error));
     return()=>{cancelled=true;};
