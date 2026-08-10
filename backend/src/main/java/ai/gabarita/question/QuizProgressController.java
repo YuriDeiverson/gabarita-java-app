@@ -1,6 +1,7 @@
 package ai.gabarita.question;
 
 import ai.gabarita.auth.CurrentUser;
+import ai.gabarita.study.EngagementService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.util.*;
@@ -13,8 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequestMapping("/api/quiz-progress")
 public class QuizProgressController {
     private final JdbcClient jdbc;
-    private final CurrentUser currentUser;
-    QuizProgressController(JdbcClient jdbc,CurrentUser currentUser) { this.jdbc = jdbc;this.currentUser=currentUser; }
+    private final CurrentUser currentUser; private final EngagementService engagement;
+    QuizProgressController(JdbcClient jdbc,CurrentUser currentUser,EngagementService engagement) { this.jdbc = jdbc;this.currentUser=currentUser;this.engagement=engagement; }
 
     public record ProgressInput(@NotNull UUID studyPlanId, @NotNull Object questionId,
                                 @NotBlank String answer, boolean isCorrect,UUID roadmapTopicId,String topicTitle) {}
@@ -60,6 +61,7 @@ public class QuizProgressController {
             topic_title=COALESCE(EXCLUDED.topic_title,quiz_answer_events.topic_title)
           """).param("p",r.studyPlanId()).param("q",String.valueOf(r.questionId())).param("answer",r.answer())
                 .param("correct",r.isCorrect()).param("topic",r.roadmapTopicId()).param("title",r.topicTitle()).update();
+        engagement.recordQuestionActivity(currentUser.id(),r.studyPlanId());
         return saved;
     }
     @PutMapping("/{id}") public Map<String,Object> update(@PathVariable UUID id,@Valid @RequestBody ProgressUpdate r) {

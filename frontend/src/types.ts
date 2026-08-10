@@ -48,6 +48,7 @@ export type QuestionAnswer = 'Certo' | 'Errado' | QuestionChoice;
 export interface Question {
   id: number | string;
   category: QuestionCategory | string;
+  area?: string;
   board?: string;
   topic?: string;
   text: string;
@@ -58,6 +59,14 @@ export interface Question {
   passageId?: string; // e.g., "capitalismo-vigilancia"
   passageTitle?: string;
   passageContent?: string;
+  year?: number;
+  difficulty?: number;
+  courseIds?: string[];
+  roles?: string[];
+  educationLevels?: string[];
+  formationAreas?: string[];
+  activityAreas?: string[];
+  isOutdated?: boolean;
 }
 
 export interface QuizState {

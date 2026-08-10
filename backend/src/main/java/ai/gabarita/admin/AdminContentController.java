@@ -19,9 +19,10 @@ public class AdminContentController {
 
     public record PassageRequest(@NotBlank String title,@NotBlank String content,String source){}
     public record OptionRequest(@NotBlank String label,@NotBlank String text){}
-    public record QuestionRequest(@NotBlank String courseId,@NotBlank String category,String topic,@NotBlank String board,
+    public record QuestionRequest(String courseId,@NotBlank String category,String topic,@NotBlank String board,
       @NotBlank String type,@NotBlank String text,@NotBlank String correct,String explanation,String reference,
-      UUID passageId,List<@Valid OptionRequest> options,String status){}
+      String passageId,String passageTitle,String passageContent,String passageSource,
+      List<@Valid OptionRequest> options,String status){}
     public record QuestionBatchRequest(@NotEmpty @Size(max=500) List<@Valid QuestionRequest> questions){}
     public record ReportReviewRequest(@Pattern(regexp="RESOLVED|DISMISSED") String status,String adminNote){}
 
@@ -145,16 +146,17 @@ public class AdminContentController {
             var existing=jdbc.sql("""
               SELECT id FROM questions WHERE md5(regexp_replace(lower(statement),'[^[:alnum:]]','','g'))
                 =md5(regexp_replace(lower(:statement),'[^[:alnum:]]','','g')) LIMIT 1
-              """).param("statement",r.text().trim()).query(UUID.class).list();
+            """).param("statement",r.text().trim()).query(UUID.class).list();
             if(!existing.isEmpty()){attachCourse(existing.getFirst(),r.courseId());return existing.getFirst();}
         }
+        UUID passageId=resolvePassage(r);
         if(update){
             int changed=jdbc.sql("""
               UPDATE questions SET board=:board,type=:type,statement=:statement,explanation=:explanation,status=:status,
                 correct_answer=CAST(:answer AS jsonb),metadata=CAST(:metadata AS jsonb),passage_id=:passage,updated_at=now() WHERE id=:id
               """).param("board",r.board().trim()).param("type",questionType(r)).param("statement",r.text().trim())
               .param("explanation",text(r.explanation())).param("status",status).param("answer",answer).param("metadata",metadata)
-              .param("passage",r.passageId(),Types.OTHER).param("id",id).update();
+              .param("passage",passageId,Types.OTHER).param("id",id).update();
             if(changed==0)throw new NoSuchElementException("Questão não encontrada");
             jdbc.sql("DELETE FROM question_options WHERE question_id=:id").param("id",id).update();
         }else jdbc.sql("""
@@ -162,16 +164,36 @@ public class AdminContentController {
               VALUES(:id,:board,:type,:statement,:explanation,:status,CAST(:answer AS jsonb),CAST(:metadata AS jsonb),:passage)
               """).param("id",id).param("board",r.board().trim()).param("type",questionType(r)).param("statement",r.text().trim())
               .param("explanation",text(r.explanation())).param("status",status).param("answer",answer).param("metadata",metadata)
-              .param("passage",r.passageId(),Types.OTHER).update();
+              .param("passage",passageId,Types.OTHER).update();
         int position=0;if(r.options()!=null)for(var option:r.options())jdbc.sql("""
           INSERT INTO question_options(id,question_id,label,content,position) VALUES(gen_random_uuid(),:question,:label,:content,:position)
           """).param("question",id).param("label",option.label().trim().toUpperCase(Locale.ROOT)).param("content",option.text().trim()).param("position",position++).update();
         attachCourse(id,r.courseId());return id;
     }
 
-    private void attachCourse(UUID questionId,String courseId){jdbc.sql("""
-      INSERT INTO question_courses(question_id,course_id) VALUES(:question,:course) ON CONFLICT DO NOTHING
-      """).param("question",questionId).param("course",courseId.trim()).update();}
+    private void attachCourse(UUID questionId,String courseId){
+      String normalized=text(courseId);
+      if(normalized.isBlank()) return;
+      jdbc.sql("""
+        INSERT INTO question_courses(question_id,course_id) VALUES(:question,:course) ON CONFLICT DO NOTHING
+        """).param("question",questionId).param("course",normalized).update();
+    }
+
+    private UUID resolvePassage(QuestionRequest r){
+        String suppliedId=text(r.passageId());String content=text(r.passageContent());
+        if(content.isBlank()&&!suppliedId.isBlank()){
+            try{return UUID.fromString(suppliedId);}
+            catch(IllegalArgumentException ignored){content=suppliedId;}
+        }
+        if(content.isBlank())return null;
+        var existing=jdbc.sql("SELECT id FROM passages WHERE content=:content LIMIT 1")
+          .param("content",content).query(UUID.class).list();
+        if(!existing.isEmpty())return existing.getFirst();
+        return jdbc.sql("""
+          INSERT INTO passages(id,title,content,source) VALUES(gen_random_uuid(),:title,:content,:source) RETURNING id
+          """).param("title",fallback(r.passageTitle(),"Texto de apoio"))
+          .param("content",content).param("source",fallback(r.passageSource(),text(r.reference()))).query(UUID.class).single();
+    }
 
     private String questionType(QuestionRequest r){return r.options()!=null&&!r.options().isEmpty()?"MULTIPLE_CHOICE":r.type().trim().toUpperCase(Locale.ROOT);}
     private void validateQuestion(QuestionRequest r){String type=r.type().trim().toUpperCase(Locale.ROOT);String correct=r.correct().trim();

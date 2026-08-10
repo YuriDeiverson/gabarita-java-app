@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { QuestionAnswer, QuestionCategory, Question } from '../types';
-import { QuestionNote, questionsApi, quizProgressApi } from '../services/api';
-import { CheckCircle2, XCircle, Filter, Sparkles, AlertCircle, Info, Bookmark, Flag, Target, ChevronDown, LoaderCircle, NotebookPen, Save, Trash2 } from 'lucide-react';
-import { ActiveStudyContext, normalizeStudyText, questionRelevance } from '../studyContext';
+import { QuestionAnswer, Question } from '../types';
+import { CatalogContest, QuestionNote, catalogApi, questionsApi, quizProgressApi } from '../services/api';
+import { CheckCircle2, XCircle, Filter, Sparkles, AlertCircle, Info, Bookmark, Flag, Target, ChevronDown, LoaderCircle, NotebookPen, Save, Trash2, X } from 'lucide-react';
+import { ActiveStudyContext, normalizeStudySubjectTitle, normalizeStudyText, questionRelevance } from '../studyContext';
 import { filterQuestionsByBoards, questionBoardsFromConfig, questionExamBoard } from '../questionBanks';
 
 interface QuizTabProps {
@@ -15,6 +15,22 @@ interface QuizTabProps {
 }
 
 export interface GuidedReviewResult { topicTitle:string; subjectName:string; answered:number; correct:number; wrong:number; accuracy:number; }
+
+type FilterOption={value:string;label?:string;count?:number};
+type MultiFilterProps={id:string;label:string;options:Array<string|FilterOption>;selected:string[];onChange:(values:string[])=>void;openFilterId:string|null;onOpenFilterChange:(id:string|null)=>void;emptyLabel?:string};
+const MultiFilter=({id,label,options,selected,onChange,openFilterId,onOpenFilterChange,emptyLabel='Todas'}:MultiFilterProps)=>{
+  const toggle=(value:string)=>onChange(selected.includes(value)?selected.filter(item=>item!==value):[...selected,value]);
+  const open=openFilterId===id;
+  return <details open={open} className="relative min-w-40 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-700">
+    <summary onClick={event=>{event.preventDefault();const filter=event.currentTarget.closest('details');onOpenFilterChange(open?null:id);if(!open)window.requestAnimationFrame(()=>filter?.scrollIntoView({behavior:'smooth',block:'nearest'}));}} className="cursor-pointer list-none px-3 py-2 font-bold marker:content-none">{label}<span className="ml-1 font-normal text-slate-400">{selected.length?`(${selected.length})`:`(${emptyLabel})`}</span></summary>
+    <div className="absolute z-30 mt-1 max-h-64 min-w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 shadow-xl">
+      {options.length===0?<p className="px-2 py-1.5 text-slate-400">Sem opções disponíveis</p>:options.map(item=>{
+        const option=typeof item==='string'?{value:item,label:item}:item;
+        return <label key={option.value} className="flex cursor-pointer items-start justify-between gap-2 rounded px-2 py-1.5 hover:bg-slate-50"><span className="flex items-start gap-2"><input type="checkbox" checked={selected.includes(option.value)} onChange={()=>toggle(option.value)} className="mt-0.5"/><span>{option.label||option.value}</span></span>{option.count!=null&&<small className="rounded bg-slate-100 px-1.5 py-0.5 font-bold text-slate-400">{option.count}</small>}</label>;
+      })}
+    </div>
+  </details>;
+};
 
 const belongsToExactTopic=(question:Question,context:ActiveStudyContext)=>{
   const searchable=normalizeStudyText([question.topic,question.reference,question.text].filter(Boolean).join(' '));
@@ -69,6 +85,80 @@ const writeGuidedReviewDraft=(key:string|null,draft:Omit<GuidedReviewDraft,'upda
   catch(error){console.warn('Não foi possível salvar o progresso local da revisão.',error);}
 };
 
+type CurriculumTopic = { title?: unknown; subtopics?: unknown };
+
+const topicKey=(value:string)=>normalizeStudySubjectTitle(value);
+
+const isPrimaryCurriculumTopic=(value:string)=>{
+  const trimmed=value.trim();
+  // "4.1" and "II.3" are details of a subject and must not be selectable here.
+  return !/^\s*(?:\d+|[IVXLCDM]+)\s*[.)]\s*\d+/i.test(trimmed);
+};
+
+const categoryMatchesCurriculum=(category:string,title:string)=>{
+  const normalizedCategory=normalizeStudyText(category);
+  const normalizedTitle=normalizeStudyText(title);
+  if(normalizedCategory.includes(normalizedTitle)||normalizedTitle.includes(normalizedCategory))return true;
+  if(normalizedCategory==='portugues')return /lingua portuguesa|portugues/.test(normalizedTitle);
+  if(normalizedCategory==='ti basica')return /informatica|tecnologia da informacao/.test(normalizedTitle);
+  if(normalizedCategory==='conhecimentos de alagoas')return /alagoas/.test(normalizedTitle);
+  if(normalizedCategory==='etica e compliance')return /etica/.test(normalizedTitle);
+  return false;
+};
+
+const curriculumTopicsForCourse=(catalog:CatalogContest[],courseId:string)=>{
+  const topicsByCategory:Record<string,string[]>={};
+  const roles=catalog.flatMap(contest=>contest.roles).filter(role=>role.courseId===courseId);
+  roles.forEach(role=>{
+    const topics=Array.isArray(role.curriculum?.topics)?role.curriculum.topics as CurriculumTopic[]:[];
+    topics.forEach(subject=>{
+      const title=String(subject.title||'').trim();
+      const subtopics=Array.isArray(subject.subtopics)?subject.subtopics.map(String):[];
+      if(!title||subtopics.length===0)return;
+      const primaryTopics=subtopics.filter(isPrimaryCurriculumTopic);
+      if(primaryTopics.length===0)return;
+      const titleKey=normalizeStudyText(title);
+      topicsByCategory[titleKey]=[...(topicsByCategory[titleKey]||[]),...primaryTopics];
+      // O currículo descreve a disciplina como "Língua Portuguesa", enquanto
+      // as questões podem registrá-la simplesmente como "Português".
+      const knownCategories=['Português','TI Básica','Ética e Compliance','Conhecimentos de Alagoas','Língua Inglesa','Conhecimentos Específicos','Conhecimentos Específicos - Jornalismo','Conhecimentos Específicos - Técnico em Enfermagem'];
+      knownCategories.filter(category=>categoryMatchesCurriculum(category,title)).forEach(category=>{
+        const key=normalizeStudyText(category);
+        topicsByCategory[key]=[...(topicsByCategory[key]||[]),...primaryTopics];
+      });
+    });
+  });
+  return Object.fromEntries(Object.entries(topicsByCategory).map(([category,topics])=>[
+    category,
+    Array.from(new Map(topics.map(topic=>[topicKey(topic),topic])).values()),
+  ]));
+};
+
+const questionMatchesTopic=(question:Question,selectedTopic:string)=>{
+  const selected=topicKey(selectedTopic);
+  const questionTopic=topicKey(question.topic||'');
+  return Boolean(selected&&questionTopic&&(questionTopic===selected||questionTopic.includes(selected)||selected.includes(questionTopic)));
+};
+
+const specificDisciplineSuffix=(category:string)=>String(category||'').replace(/^conhecimentos\s+espec[ií]ficos\s*(?:[-–—:]\s*)?/i,'').trim();
+const categoryGroup=(category:string)=>{
+  const normalized=normalizeStudyText(category);
+  if(normalized.startsWith('conhecimentos especificos'))return 'Conhecimentos Específicos';
+  if(['portugues','lingua portuguesa','lingua inglesa','ti basica','etica e compliance','conhecimentos de alagoas','conhecimentos gerais'].includes(normalized)
+    ||normalized.startsWith('conhecimentos gerais'))return 'Conhecimentos Gerais';
+  return 'Outras disciplinas';
+};
+const categoryLabel=(category:string)=>{
+  if(categoryGroup(category)!=='Conhecimentos Específicos')return category;
+  const suffix=specificDisciplineSuffix(category);
+  return suffix?`Específicos · ${suffix}`:'Específicos · Geral';
+};
+const questionCategoryGroup=(question:Question)=>{
+  const area=String(question.area||'').trim();
+  if(area==='Conhecimentos Gerais'||area==='Conhecimentos Específicos')return area;
+  return categoryGroup(String(question.category));
+};
+
 export default function QuizTab({mode='session',studyContext,onQuestionAnswered,onReviewComplete,initialQuestionId}:QuizTabProps) {
   const reviewDraftKey=useMemo(()=>mode==='session'&&studyContext?guidedReviewDraftKey(studyContext):null,
     [mode,studyContext?.roadmapTopicId,studyContext?.topicTitle]);
@@ -92,9 +182,26 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     return saved ? JSON.parse(saved) : {};
   });
 
-  const [categoryFilter, setCategoryFilter] = useState<QuestionCategory | 'Todos'>('Todos');
-  const [statusFilter, setStatusFilter] = useState<'Todos' | 'Respondidas' | 'Não Respondidas' | 'Corretas' | 'Incorretas' | 'Anuladas'>('Todos');
+  const [categoryGroupFilters,setCategoryGroupFilters]=useState<string[]>([]);
+  const [categoryFilters,setCategoryFilters]=useState<string[]>([]);
+  const [topicFilters,setTopicFilters]=useState<string[]>([]);
+  const [statusFilters,setStatusFilters]=useState<string[]>([]);
+  const [boardFilters,setBoardFilters]=useState<string[]>([]);
+  const [yearFilters,setYearFilters]=useState<string[]>([]);
+  const [roleFilters,setRoleFilters]=useState<string[]>([]);
+  const [educationFilters,setEducationFilters]=useState<string[]>([]);
+  const [formationFilters,setFormationFilters]=useState<string[]>([]);
+  const [activityAreaFilters,setActivityAreaFilters]=useState<string[]>([]);
+  const [modalityFilters,setModalityFilters]=useState<string[]>([]);
+  const [difficultyFilters,setDifficultyFilters]=useState<string[]>([]);
+  const [excludeAnnulled,setExcludeAnnulled]=useState(false);
+  const [excludeOutdated,setExcludeOutdated]=useState(false);
+  const [excludeInedit,setExcludeInedit]=useState(false);
+  const [curriculumTopics,setCurriculumTopics]=useState<Record<string,string[]>>({});
   const [mobileFiltersOpen,setMobileFiltersOpen]=useState(false);
+  const [advancedFiltersOpen,setAdvancedFiltersOpen]=useState(false);
+  const [openFilterId,setOpenFilterId]=useState<string|null>(null);
+  const filterPanelRef=useRef<HTMLDivElement>(null);
   const [visibleQuestions, setVisibleQuestions] = useState(()=>initialReviewDraft?.visibleQuestions||10);
   const [favoriteQuestions, setFavoriteQuestions] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('quiz_favorite_questions') || '[]')); } catch { return new Set(); }
@@ -110,6 +217,15 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     initialReviewDraft?.questionIds.forEach(id=>reviewed.delete(id));
     return reviewed;
   });
+
+  useEffect(()=>{
+    if(!openFilterId)return;
+    const closeOnOutsideClick=(event:MouseEvent)=>{
+      if(!filterPanelRef.current?.contains(event.target as Node))setOpenFilterId(null);
+    };
+    document.addEventListener('mousedown',closeOnOutsideClick);
+    return()=>document.removeEventListener('mousedown',closeOnOutsideClick);
+  },[openFilterId]);
   const [reviewGoal,setReviewGoal]=useState(()=>initialReviewDraft?.reviewGoal||10);
   const activeAnswers=mode==='session'?cycleAnswers:answers;
   const [reportedQuestions, setReportedQuestions] = useState<Set<string>>(() => {
@@ -144,18 +260,30 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
 
   useEffect(() => {
     const courseId = localStorage.getItem('active_course');
-    if (!courseId) {
+    if (mode==='session'&&!courseId) {
       setQuestionsError('Nenhum curso ativo foi selecionado.');
       return;
     }
-    questionsApi.forCourse(courseId).then(remoteQuestions => {
-      setQuestions(filterQuestionsByBoards(remoteQuestions, selectedQuestionBoards));
-      setQuestionsError(remoteQuestions.length ? '' : 'Ainda não há questões cadastradas para este curso.');
+    const request=mode==='all'?questionsApi.all():questionsApi.forCourse(courseId!);
+    request.then(remoteQuestions => {
+      const visible=mode==='all'?remoteQuestions:filterQuestionsByBoards(remoteQuestions, selectedQuestionBoards);
+      setQuestions(visible);
+      setQuestionsError(visible.length ? '' : mode==='all'?'Ainda não há questões cadastradas.':'Ainda não há questões cadastradas para este curso.');
     }).catch(cause => {
       setQuestions([]);
-      setQuestionsError(cause instanceof Error ? cause.message : 'Não foi possível carregar as questões do PostgreSQL.');
+      setQuestionsError(cause instanceof Error ? cause.message : 'Erro ao carregar as questões. Tente novamente mais tarde.');
     });
-  }, [selectedQuestionBoards]);
+  }, [mode,selectedQuestionBoards,currentCourseId]);
+
+  useEffect(()=>{
+    const courseId=localStorage.getItem('active_course');
+    if(!courseId)return;
+    let cancelled=false;
+    catalogApi.contests().then(catalog=>{
+      if(!cancelled)setCurriculumTopics(curriculumTopicsForCourse(catalog,courseId));
+    }).catch(error=>console.warn('Assuntos do edital indisponíveis; exibindo apenas os assuntos já cadastrados nas questões.',error));
+    return()=>{cancelled=true;};
+  },[currentCourseId]);
 
   useEffect(()=>{
     if(mode!=='session')return;
@@ -166,7 +294,7 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     setDraftQuestionIds(draft?.questionIds||[]);
     setUsedBeforeCycle(reviewed);
     setReviewGoal(draft?.reviewGoal||10);
-    setStatusFilter('Todos');
+    setStatusFilters([]);
     setVisibleQuestions(draft?.visibleQuestions||20);
   },[mode,reviewDraftKey]);
 
@@ -198,7 +326,7 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
 
   useEffect(() => {
     if(mode==='all')setVisibleQuestions(10);
-  }, [categoryFilter, statusFilter, mode]);
+  }, [categoryGroupFilters,categoryFilters,topicFilters,statusFilters,boardFilters,yearFilters,roleFilters,educationFilters,formationFilters,activityAreaFilters,modalityFilters,difficultyFilters,excludeAnnulled,excludeOutdated,excludeInedit,mode]);
 
   const noteForQuestion=(questionId:number|string)=>questionNotes.find(item=>
     item.course_id===currentCourseId&&String(item.question_id)===String(questionId));
@@ -324,6 +452,51 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
 
   const scopedQuestions=useMemo(()=>mode==='session'?questionPool.slice(0,reviewGoal):questionPool,[mode,questionPool,reviewGoal]);
 
+  const availableCategories=useMemo(()=>{
+    if(categoryGroupFilters.length===0)return scopedQuestions.map(question=>String(question.category));
+    return scopedQuestions.filter(question=>categoryGroupFilters.includes(questionCategoryGroup(question)))
+      .map(question=>String(question.category));
+  },[categoryGroupFilters,scopedQuestions]);
+
+  useEffect(()=>{
+    setCategoryFilters(current=>current.filter(category=>availableCategories.includes(category)));
+  },[availableCategories]);
+
+  const availableTopics=useMemo(()=>{
+    if(categoryFilters.length===0)return [];
+    const fromCurriculum=categoryFilters.flatMap(category=>curriculumTopics[normalizeStudyText(category)]||[]);
+    if(mode!=='all'&&fromCurriculum.length>0)return Array.from(new Map(fromCurriculum.map(topic=>[topicKey(topic),topic])).values());
+    return Array.from(new Map(scopedQuestions
+      .filter(question=>categoryFilters.includes(String(question.category))&&question.topic&&topicKey(question.topic)!==topicKey(String(question.category))&&isPrimaryCurriculumTopic(question.topic))
+      .map(question=>[topicKey(question.topic||''),question.topic||'']))
+      .values());
+  },[categoryFilters,curriculumTopics,scopedQuestions,mode]);
+
+  useEffect(()=>{
+    setTopicFilters(current=>current.filter(selected=>availableTopics.some(topic=>topicKey(topic)===topicKey(selected))));
+  },[availableTopics]);
+
+  const filterOptions=useMemo(()=>{
+    const strings=(values:(string|undefined)[])=>Array.from(new Set(values.filter((value):value is string=>Boolean(value&&value.trim())).map(value=>value.trim()))).sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    const flatten=(values:(string[]|undefined)[])=>strings(values.flatMap(value=>value||[]));
+    const countedOptions=(values:string[],label:(value:string)=>string=(value=>value))=>{
+      const counts=new Map<string,number>();
+      values.forEach(value=>counts.set(value,(counts.get(value)||0)+1));
+      return [...counts.entries()].sort(([left],[right])=>label(left).localeCompare(label(right),'pt-BR'))
+        .map(([value,count])=>({value,label:label(value),count}));
+    };
+    return {
+      categoryGroups:countedOptions(scopedQuestions.map(question=>questionCategoryGroup(question)),value=>value),
+      categories:countedOptions(availableCategories,categoryLabel),
+      boards:strings(scopedQuestions.map(question=>questionExamBoard(question))),
+      years:strings(scopedQuestions.map(question=>question.year?String(question.year):undefined)).sort((a,b)=>Number(b)-Number(a)),
+      roles:flatten(scopedQuestions.map(question=>question.roles)),
+      education:flatten(scopedQuestions.map(question=>question.educationLevels)),
+      formation:flatten(scopedQuestions.map(question=>question.formationAreas)),
+      activityAreas:flatten(scopedQuestions.map(question=>question.activityAreas)),
+    };
+  },[scopedQuestions,availableCategories]);
+
   // Calculate statistics
   const stats = useMemo(() => {
     const validQuestions = scopedQuestions.filter(q => q.correct !== 'Anulada');
@@ -373,37 +546,42 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
   // Filter questions based on selected filters
   const filteredQuestions = useMemo(() => {
     return scopedQuestions.filter(q => {
-      // Category filter
-      const categoryMatch = categoryFilter === 'Todos' || q.category === categoryFilter;
-
-      // Status filter
-      let statusMatch = true;
+      const categoryGroupMatch=categoryGroupFilters.length===0||categoryGroupFilters.includes(questionCategoryGroup(q));
+      const categoryMatch = categoryFilters.length===0 || categoryFilters.includes(String(q.category));
+      const topicMatch = topicFilters.length===0 || topicFilters.some(topic=>questionMatchesTopic(q,topic));
+      const boardMatch=boardFilters.length===0||boardFilters.includes(questionExamBoard(q));
+      const yearMatch=yearFilters.length===0||(q.year!=null&&yearFilters.includes(String(q.year)));
+      const roleMatch=roleFilters.length===0||roleFilters.some(value=>q.roles?.includes(value));
+      const educationMatch=educationFilters.length===0||educationFilters.some(value=>q.educationLevels?.includes(value));
+      const formationMatch=formationFilters.length===0||formationFilters.some(value=>q.formationAreas?.includes(value));
+      const activityAreaMatch=activityAreaFilters.length===0||activityAreaFilters.some(value=>q.activityAreas?.includes(value));
+      const modality=q.options?.length?'Múltipla escolha':'Certo ou errado';
+      const modalityMatch=modalityFilters.length===0||modalityFilters.includes(modality);
+      const difficulty=Math.max(1,Math.min(5,Number(q.difficulty||3)));
+      // A escala persistida vai de 1 a 5 e o valor histórico padrão é 3 (Média).
+      const difficultyLabel=difficulty===1?'Fácil':difficulty<=3?'Média':difficulty===4?'Difícil':'Muito difícil';
+      const difficultyMatch=difficultyFilters.length===0||difficultyFilters.includes(difficultyLabel);
       const userAnswer = activeAnswers[q.id];
       const isAnnulled = q.correct === 'Anulada';
       const isCorrect = !isAnnulled && userAnswer === q.correct;
-
-      if (statusFilter === 'Respondidas') {
-        statusMatch = !isAnnulled && !!userAnswer;
-      } else if (statusFilter === 'Não Respondidas') {
-        statusMatch = !isAnnulled && !userAnswer;
-      } else if (statusFilter === 'Corretas') {
-        statusMatch = !!userAnswer && isCorrect;
-      } else if (statusFilter === 'Incorretas') {
-        statusMatch = !isAnnulled && !!userAnswer && !isCorrect;
-      } else if (statusFilter === 'Anuladas') {
-        statusMatch = isAnnulled;
-      }
-
-      return categoryMatch && statusMatch;
+      const statusMatch=statusFilters.length===0||statusFilters.some(status=>
+        (status==='Resolvidas'&&!isAnnulled&&Boolean(userAnswer))||
+        (status==='Não resolvidas'&&!isAnnulled&&!userAnswer)||
+        (status==='Acertei'&&Boolean(userAnswer)&&isCorrect)||
+        (status==='Errei'&&!isAnnulled&&Boolean(userAnswer)&&!isCorrect)||
+        (status==='Anuladas'&&isAnnulled));
+      const isInedit=/\bin[eé]dit|simulado\b/i.test(`${q.reference||''} ${q.text}`);
+      return categoryGroupMatch&&categoryMatch&&topicMatch&&boardMatch&&yearMatch&&roleMatch&&educationMatch&&formationMatch&&activityAreaMatch&&modalityMatch&&difficultyMatch&&statusMatch
+        &&(!excludeAnnulled||!isAnnulled)&&(!excludeOutdated||!q.isOutdated)&&(!excludeInedit||!isInedit);
     });
-  }, [categoryFilter, statusFilter, activeAnswers, scopedQuestions]);
+  }, [categoryGroupFilters,categoryFilters,topicFilters,statusFilters,boardFilters,yearFilters,roleFilters,educationFilters,formationFilters,activityAreaFilters,modalityFilters,difficultyFilters,excludeAnnulled,excludeOutdated,excludeInedit,activeAnswers,scopedQuestions]);
 
   useEffect(()=>{
     if(mode!=='all'||!initialQuestionId||openedQuestionRef.current===initialQuestionId)return;
     const targetIndex=scopedQuestions.findIndex(question=>String(question.id)===String(initialQuestionId));
     if(targetIndex<0)return;
     openedQuestionRef.current=initialQuestionId;
-    setCategoryFilter('Todos');setStatusFilter('Todos');
+    setCategoryGroupFilters([]);setCategoryFilters([]);setTopicFilters([]);setStatusFilters([]);
     setVisibleQuestions(current=>Math.max(current,targetIndex+1));
     window.setTimeout(()=>document.getElementById(`q-card-${initialQuestionId}`)?.scrollIntoView({behavior:'smooth',block:'center'}),120);
   },[initialQuestionId,mode,scopedQuestions]);
@@ -418,7 +596,7 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
 
   useEffect(() => {
     const sentinel = loadMoreRef.current;
-    if (!sentinel || visibleQuestions >= filteredQuestions.length) return;
+    if (mobileFiltersOpen || !sentinel || visibleQuestions >= filteredQuestions.length) return;
 
     const observer = new IntersectionObserver(
       entries => {
@@ -431,7 +609,22 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
 
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [visibleQuestions, filteredQuestions.length]);
+  }, [mobileFiltersOpen, visibleQuestions, filteredQuestions.length]);
+
+  useEffect(()=>{
+    if(!mobileFiltersOpen)return;
+    const body=document.body;
+    const root=document.documentElement;
+    const previous={
+      bodyOverflow:body.style.overflow, rootOverflow:root.style.overflow,
+    };
+    root.style.overflow='hidden';
+    body.style.overflow='hidden';
+    return()=>{
+      root.style.overflow=previous.rootOverflow;
+      body.style.overflow=previous.bodyOverflow;
+    };
+  },[mobileFiltersOpen]);
 
   const selectedExamBoard=useMemo(()=>{
     const course=localStorage.getItem('active_course')||'seplag_informatica';
@@ -445,6 +638,24 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     ? stats.bankAwareScore
     : usesCebraspeScoring?stats.cebraspeScore:stats.simpleScore;
   const currentAccuracy=stats.answeredCount?Math.round(stats.correctCount*100/stats.answeredCount):0;
+  const activeFilterCount=[
+    categoryGroupFilters.length,categoryFilters.length,topicFilters.length,statusFilters.length,boardFilters.length,
+    yearFilters.length,roleFilters.length,educationFilters.length,formationFilters.length,activityAreaFilters.length,
+    modalityFilters.length,difficultyFilters.length,excludeAnnulled?1:0,excludeOutdated?1:0,excludeInedit?1:0,
+  ].reduce((total,count)=>total+count,0);
+  const resetFilters=()=>{
+    setCategoryGroupFilters([]);setCategoryFilters([]);setTopicFilters([]);setStatusFilters([]);setBoardFilters([]);setYearFilters([]);
+    setRoleFilters([]);setEducationFilters([]);setFormationFilters([]);setActivityAreaFilters([]);setModalityFilters([]);setDifficultyFilters([]);
+    setExcludeAnnulled(false);setExcludeOutdated(false);setExcludeInedit(false);
+  };
+  const closeMobileFilters=()=>{
+    setMobileFiltersOpen(false);
+    setOpenFilterId(null);
+  };
+  const toggleMobileFilters=()=>{
+    if(mobileFiltersOpen)closeMobileFilters();
+    else {setAdvancedFiltersOpen(true);setMobileFiltersOpen(true);}
+  };
 
   return (
     <div id="quiz-tab-container" className="quiz-layout space-y-7">
@@ -470,42 +681,60 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
       </section>}
 
       {/* Question Filters Row */}
-      <button type="button" className="quiz-mobile-filter-trigger" onClick={()=>setMobileFiltersOpen(value=>!value)} aria-expanded={mobileFiltersOpen} aria-controls="question-bank-filters"><span><Filter/>Filtros do banco</span><span>{categoryFilter!=='Todos'||statusFilter!=='Todos'?'Ativos':'Todos'}<ChevronDown/></span></button>
-      <div id="question-bank-filters" className={`quiz-filters ${mobileFiltersOpen?'is-mobile-open':''} flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-slate-100`}>
-        <div className="flex items-center gap-2 text-sm font-bold text-slate-700 shrink-0">
-          <Filter className="w-4 h-4 text-slate-400" />
-          <span>{mode==='session'?'Questões da sessão:':'Filtros do banco:'}</span>
+      <button type="button" className="quiz-mobile-filter-trigger" onClick={toggleMobileFilters} aria-expanded={mobileFiltersOpen} aria-controls="question-bank-filters"><span><Filter/>Filtros do banco</span><span>{activeFilterCount?`${activeFilterCount} ativos`:'Todos'}<ChevronDown/></span></button>
+      {mobileFiltersOpen&&<button type="button" className="quiz-filter-sheet-backdrop" aria-label="Fechar filtros" onClick={closeMobileFilters}/>}
+      <div ref={filterPanelRef} id="question-bank-filters" className={`quiz-filters ${mobileFiltersOpen?'is-mobile-open':''} space-y-3 bg-white p-4 rounded-xl shadow-sm border border-slate-100`}>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-bold text-slate-700">
+          <span className="flex items-center gap-2"><Filter className="w-4 h-4 text-slate-400" />{mode==='session'?'Questões da sessão':'Filtros do banco'}</span>
+          <div className="flex items-center gap-2">
+            {mode==='all'&&<span className="text-xs font-medium text-slate-400">{filteredQuestions.length} {filteredQuestions.length===1?'questão encontrada':'questões encontradas'}</span>}
+            <button type="button" className="quiz-filter-sheet-close" onClick={closeMobileFilters}>Fechar <X aria-hidden="true"/></button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 grow justify-start md:justify-end">
-          {/* Category Selector */}
-          {mode==='all'&&<select
-            id="select-category-filter"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value as any)}
-            className="bg-slate-50 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-slate-400 transition"
-          >
-            <option value="Todos">Todas as Disciplinas</option>
-            {Array.from(new Set(scopedQuestions.map(q => q.category))).map(cat => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>}
+        <div className="quiz-filter-scroll-content grid grid-cols-1 gap-3">
+          {mode==='all'&&<>
+            <section className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
+              <p className="mb-2 text-[11px] font-extrabold uppercase tracking-wide text-indigo-700">Conteúdo</p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                <MultiFilter id="category-group" label="Área" options={filterOptions.categoryGroups} selected={categoryGroupFilters} onChange={values=>{setCategoryGroupFilters(values);setCategoryFilters([]);setTopicFilters([]);}} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todas"/>
+                <MultiFilter id="category" label="Disciplina" options={filterOptions.categories} selected={categoryFilters} onChange={values=>{setCategoryFilters(values);setTopicFilters([]);}} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todas"/>
+                {categoryFilters.length>0&&<MultiFilter id="topic" label="Assunto" options={availableTopics} selected={topicFilters} onChange={setTopicFilters} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todos"/>}
+              </div>
 
-          {/* Status Selector */}
-          <select
-            id="select-status-filter"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="bg-slate-50 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-slate-400 transition"
-          >
-            <option value="Todos">Status: Todos</option>
-            <option value="Respondidas">Respondidas</option>
-            <option value="Não Respondidas">Não Respondidas</option>
-            <option value="Corretas">Corretas</option>
-            <option value="Incorretas">Incorretas</option>
-            <option value="Anuladas">Anuladas</option>
-          </select>
+            </section>
+            <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="mb-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-600">Prova e desempenho</p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                <MultiFilter id="question-status" label="Minhas questões" options={['Resolvidas','Não resolvidas','Acertei','Errei','Anuladas']} selected={statusFilters} onChange={setStatusFilters} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todas"/>
+                <MultiFilter id="board" label="Banca" options={filterOptions.boards} selected={boardFilters} onChange={setBoardFilters} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todas"/>
+                <MultiFilter id="year" label="Ano" options={filterOptions.years} selected={yearFilters} onChange={setYearFilters} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todos"/>
+              </div>
+            </section>
+            <details open={advancedFiltersOpen} onToggle={event=>{if(event.target===event.currentTarget){setAdvancedFiltersOpen(event.currentTarget.open);setOpenFilterId(null);}}} className="quiz-advanced-filters rounded-lg border border-indigo-100 bg-indigo-50/40 text-xs text-slate-700">
+              <summary className="cursor-pointer px-3 py-2.5 font-extrabold text-indigo-700">Mais filtros</summary>
+              <div className="grid gap-2 border-t border-indigo-100 bg-white p-3 sm:grid-cols-2 xl:grid-cols-3">
+                <MultiFilter id="role" label="Cargo" options={filterOptions.roles} selected={roleFilters} onChange={setRoleFilters} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todos"/>
+                <MultiFilter id="education" label="Nível" options={filterOptions.education} selected={educationFilters} onChange={setEducationFilters} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todos"/>
+                <MultiFilter id="formation" label="Área de formação" options={filterOptions.formation} selected={formationFilters} onChange={setFormationFilters} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todas"/>
+                <MultiFilter id="activity-area" label="Área de atuação" options={filterOptions.activityAreas} selected={activityAreaFilters} onChange={setActivityAreaFilters} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todas"/>
+                <MultiFilter id="modality" label="Modalidade" options={['Certo ou errado','Múltipla escolha']} selected={modalityFilters} onChange={setModalityFilters} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todas"/>
+                <MultiFilter id="difficulty" label="Dificuldade" options={['Fácil','Média','Difícil','Muito difícil']} selected={difficultyFilters} onChange={setDifficultyFilters} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todas"/>
+                <div className="col-span-full mt-1 border-t border-slate-100 pt-2 text-slate-600">
+                  <p className="mb-1.5 font-bold">Excluir do resultado</p>
+                  <label className="mr-3 inline-flex items-center gap-1.5"><input type="checkbox" checked={excludeOutdated} onChange={event=>setExcludeOutdated(event.target.checked)}/>Desatualizadas</label>
+                  <label className="mr-3 inline-flex items-center gap-1.5"><input type="checkbox" checked={excludeAnnulled} onChange={event=>setExcludeAnnulled(event.target.checked)}/>Anuladas</label>
+                  <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={excludeInedit} onChange={event=>setExcludeInedit(event.target.checked)}/>Inéditas e simulados</label>
+                </div>
+              </div>
+            </details>
+            <button type="button" onClick={resetFilters} className="quiz-filter-reset rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100">Limpar todos os filtros</button>
+          </>}
         </div>
+        {mode==='all'&&<footer className="quiz-filter-mobile-actions">
+          <button type="button" onClick={resetFilters}>Limpar</button>
+          <button type="button" onClick={closeMobileFilters}>Filtrar</button>
+        </footer>}
       </div>
 
       {/* Questions List */}
@@ -684,12 +913,13 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
                     }`}>
                       <div className="flex items-center gap-1.5 font-bold mb-1">
                         <Info className="w-4 h-4 shrink-0" />
-                        <span>JUSTIFICATIVA DA BANCA:</span>
+                        <span>EXPLICAÇÃO E MINI REVISÃO:</span>
                         <span className="ml-1 px-1.5 py-0.5 rounded bg-black/5 font-mono text-[10px]">
                           Gabarito: {q.correct}
                         </span>
                       </div>
                       <p>{q.explanation}</p>
+                      {q.topic && <p className="pt-2 text-[11px] font-semibold opacity-80">Para revisar: {q.topic}.</p>}
                     </div>
                   )}
                 </div>

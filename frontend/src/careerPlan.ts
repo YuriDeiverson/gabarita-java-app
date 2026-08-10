@@ -120,7 +120,7 @@ export async function createAutomaticCareerPlan(
   const topics = topicsForCareerRole(role);
   const allSections = role.curriculum?.studySections || [];
   if (topics.length === 0 || allSections.length === 0) {
-    throw new Error('O conteúdo programático deste cargo ainda não foi cadastrado no PostgreSQL.');
+    throw new Error('O conteúdo programático deste cargo ainda não foi cadastrado.');
   }
 
   const selectedTopicIds = topicIdsForCareer(contest.id, role);

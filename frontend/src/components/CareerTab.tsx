@@ -98,7 +98,7 @@ export default function CareerTab({
         setRemoteContests(catalog as CareerContest[]);
       })
       .catch(cause => {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : 'Não foi possível carregar o catálogo do PostgreSQL.');
+        if (!cancelled) setError(cause instanceof Error ? cause.message : 'Erro ao carregar os dados. Tente novamente mais tarde.');
       });
     return () => { cancelled = true; };
   }, [preparationVersion]);

@@ -3,27 +3,46 @@ import { supabase } from '../auth/supabase';
 export const API_BASE_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 
 const nativeFetch=globalThis.fetch.bind(globalThis);
+const GENERIC_LOAD_ERROR = 'Erro ao carregar. Tente novamente mais tarde.';
+const GENERIC_ACTION_ERROR = 'Não foi possível concluir a operação. Tente novamente mais tarde.';
 const fetch=async(input:RequestInfo|URL,init:RequestInit={}):Promise<Response>=>{
-  const {data}=await supabase.auth.getSession();
-  const headers=new Headers(init.headers);
-  if(data.session?.access_token)headers.set('Authorization',`Bearer ${data.session.access_token}`);
-  let response=await nativeFetch(input,{...init,headers});
-  if(response.status===401&&data.session){
-    const refreshed=await supabase.auth.refreshSession();
-    const token=refreshed.data.session?.access_token;
-    if(token&&token!==data.session.access_token){headers.set('Authorization',`Bearer ${token}`);response=await nativeFetch(input,{...init,headers});}
-    if(response.status===401)window.dispatchEvent(new Event('gabarita:unauthorized'));
+  const controller = new AbortController();
+  let timedOut = false;
+  const onAbort = () => controller.abort();
+  init.signal?.addEventListener('abort', onAbort, { once: true });
+  const timeout = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 20_000);
+
+  try {
+    const {data}=await supabase.auth.getSession();
+    const headers=new Headers(init.headers);
+    if(data.session?.access_token)headers.set('Authorization',`Bearer ${data.session.access_token}`);
+    let response=await nativeFetch(input,{...init,headers,signal:controller.signal});
+    if(response.status===401&&data.session){
+      const refreshed=await supabase.auth.refreshSession();
+      const token=refreshed.data.session?.access_token;
+      if(token&&token!==data.session.access_token){headers.set('Authorization',`Bearer ${token}`);response=await nativeFetch(input,{...init,headers,signal:controller.signal});}
+      if(response.status===401)window.dispatchEvent(new Event('gabarita:unauthorized'));
+    }
+    return response;
+  } catch {
+    // Não exponha falhas de rede, timeout ou detalhes de serviços ao usuário.
+    throw new Error(GENERIC_LOAD_ERROR);
+  } finally {
+    window.clearTimeout(timeout);
+    init.signal?.removeEventListener('abort', onAbort);
   }
-  return response;
 };
 
 const getApiErrorMessage = async (response: Response, fallback: string) => {
-  try {
-    const data = await response.json();
-    return data?.error || data?.message || `${fallback} (${response.status})`;
-  } catch {
-    return `${fallback} (${response.status})`;
-  }
+  // A resposta detalhada pode conter nomes de serviços, SQL ou rastros internos.
+  // A interface deve exibir somente uma orientação segura e compreensível.
+  void response;
+  return /^(failed|erro interno|internal server)/i.test(fallback.trim())
+    ? GENERIC_LOAD_ERROR
+    : fallback || GENERIC_ACTION_ERROR;
 };
 
 export interface StudyPlan {
@@ -128,19 +147,19 @@ export interface StudyDashboardData {
 export const studyPlansApi = {
   getAll: async (includeArchived = false): Promise<StudyPlan[]> => {
     const response = await fetch(`${API_BASE_URL}/study-plans?includeArchived=${includeArchived}`);
-    if (!response.ok) throw new Error('Failed to fetch study plans');
+    if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
     return response.json();
   },
 
   getById: async (id: string): Promise<StudyPlan> => {
     const response = await fetch(`${API_BASE_URL}/study-plans/${id}`);
-    if (!response.ok) throw new Error('Failed to fetch study plan');
+    if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
     return response.json();
   },
 
   getActive: async (): Promise<StudyPlan> => {
     const response = await fetch(`${API_BASE_URL}/study-plans/active/current`);
-    if (!response.ok) throw new Error('Failed to fetch active study plan');
+    if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
     return response.json();
   },
 
@@ -193,7 +212,7 @@ export const studyPlansApi = {
       method: 'DELETE',
     });
     if (!response.ok) {
-      throw new Error(await getApiErrorMessage(response, 'Failed to delete study plan'));
+      throw new Error(GENERIC_ACTION_ERROR);
     }
   },
 
@@ -207,25 +226,25 @@ export const studyPlansApi = {
   duplicate: async (id: string, title?: string): Promise<StudyPlan> => {
     const query = title ? `?title=${encodeURIComponent(title)}` : '';
     const response = await fetch(`${API_BASE_URL}/study-plans/${id}/duplicate${query}`, { method: 'POST' });
-    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to duplicate study plan'));
+    if (!response.ok) throw new Error(GENERIC_ACTION_ERROR);
     return response.json();
   },
 
   archive: async (id: string): Promise<StudyPlan> => {
     const response = await fetch(`${API_BASE_URL}/study-plans/${id}/archive`, { method: 'PATCH' });
-    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to archive study plan'));
+    if (!response.ok) throw new Error(GENERIC_ACTION_ERROR);
     return response.json();
   },
 
   restore: async (id: string): Promise<StudyPlan> => {
     const response = await fetch(`${API_BASE_URL}/study-plans/${id}/restore`, { method: 'PATCH' });
-    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to restore study plan'));
+    if (!response.ok) throw new Error(GENERIC_ACTION_ERROR);
     return response.json();
   },
 
   history: async (id: string): Promise<Record<string, unknown>[]> => {
     const response = await fetch(`${API_BASE_URL}/study-plans/${id}/history`);
-    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to fetch plan history'));
+    if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
     return response.json();
   },
 };
@@ -234,13 +253,13 @@ export const studyPlansApi = {
 export const quizProgressApi = {
   getByStudyPlan: async (studyPlanId: string): Promise<QuizProgress[]> => {
     const response = await fetch(`${API_BASE_URL}/quiz-progress/study-plan/${studyPlanId}`);
-    if (!response.ok) throw new Error('Failed to fetch quiz progress');
+    if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
     return response.json();
   },
 
   getById: async (id: string): Promise<QuizProgress> => {
     const response = await fetch(`${API_BASE_URL}/quiz-progress/${id}`);
-    if (!response.ok) throw new Error('Failed to fetch quiz progress');
+    if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
     return response.json();
   },
 
@@ -257,7 +276,7 @@ export const quizProgressApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!response.ok) throw new Error('Failed to save quiz progress');
+    if (!response.ok) throw new Error(GENERIC_ACTION_ERROR);
     return response.json();
   },
 
@@ -270,7 +289,7 @@ export const quizProgressApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!response.ok) throw new Error('Failed to update quiz progress');
+    if (!response.ok) throw new Error(GENERIC_ACTION_ERROR);
     return response.json();
   },
 
@@ -278,14 +297,14 @@ export const quizProgressApi = {
     const response = await fetch(`${API_BASE_URL}/quiz-progress/${id}`, {
       method: 'DELETE',
     });
-    if (!response.ok) throw new Error('Failed to delete quiz progress');
+    if (!response.ok) throw new Error(GENERIC_ACTION_ERROR);
   },
 
   deleteByStudyPlan: async (studyPlanId: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/quiz-progress/study-plan/${studyPlanId}`, {
       method: 'DELETE',
     });
-    if (!response.ok) throw new Error('Failed to delete quiz progress');
+    if (!response.ok) throw new Error(GENERIC_ACTION_ERROR);
   },
 
   getStats: async (studyPlanId: string): Promise<{
@@ -294,7 +313,7 @@ export const quizProgressApi = {
     wrong_answers: number;
   }> => {
     const response = await fetch(`${API_BASE_URL}/quiz-progress/stats/${studyPlanId}`);
-    if (!response.ok) throw new Error('Failed to fetch quiz statistics');
+    if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
     return response.json();
   },
 };
@@ -310,7 +329,7 @@ export const scheduleApi = {
 
   getProgress: async (studyPlanId: string): Promise<ScheduleProgress[]> => {
     const response = await fetch(`${API_BASE_URL}/schedule/progress/${studyPlanId}`);
-    if (!response.ok) throw new Error('Failed to fetch schedule progress');
+    if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
     return response.json();
   },
 
@@ -324,7 +343,7 @@ export const scheduleApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!response.ok) throw new Error('Failed to save schedule progress');
+    if (!response.ok) throw new Error(GENERIC_ACTION_ERROR);
     return response.json();
   },
 
@@ -336,7 +355,7 @@ export const scheduleApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!response.ok) throw new Error('Failed to update schedule progress');
+    if (!response.ok) throw new Error(GENERIC_ACTION_ERROR);
     return response.json();
   },
 
@@ -344,7 +363,7 @@ export const scheduleApi = {
     const response = await fetch(`${API_BASE_URL}/schedule/progress/${id}`, {
       method: 'DELETE',
     });
-    if (!response.ok) throw new Error('Failed to delete schedule progress');
+    if (!response.ok) throw new Error(GENERIC_ACTION_ERROR);
   },
 
   generate: async (data: {
@@ -368,13 +387,13 @@ export const scheduleApi = {
     completed_blocks: number;
   }> => {
     const response = await fetch(`${API_BASE_URL}/schedule/stats/${studyPlanId}`);
-    if (!response.ok) throw new Error('Failed to fetch schedule statistics');
+    if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
     return response.json();
   },
 
   regenerate: async (studyPlanId: string): Promise<{ blocksCreated: number; warning: string }> => {
     const response = await fetch(`${API_BASE_URL}/schedule/plans/${studyPlanId}/regenerate`, { method: 'POST' });
-    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to regenerate schedule'));
+    if (!response.ok) throw new Error(GENERIC_ACTION_ERROR);
     return response.json();
   },
 };
@@ -393,27 +412,23 @@ export interface QuestionNote {
 }
 
 export const questionsApi = {
+  all: async (): Promise<import('../types').Question[]> => {
+    const response = await fetch(`${API_BASE_URL}/questions/all`);
+    if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
+    const rows = await response.json();
+    return rows.map(questionFromApiRow);
+  },
   forCourse: async (courseId: string): Promise<import('../types').Question[]> => {
     const response = await fetch(`${API_BASE_URL}/questions/course/${encodeURIComponent(courseId)}`);
-    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to fetch course questions'));
+    if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
     const rows = await response.json();
-    return rows.map((row: any) => {
-      let options = row.options || row.alternatives;
-      if (typeof options === 'string') {
-        try { options = JSON.parse(options); } catch { options = undefined; }
-      }
-      return { id: row.id, category: row.category, board: row.board || row.exam_board,
-        topic: row.topic || row.category, text: row.text,
-        options: Array.isArray(options) ? options : undefined,
-        correct: row.correct_option || row.correct, explanation: row.explanation, reference: row.reference,
-        passageId: row.passage_id, passageTitle: row.passage_title, passageContent: row.passage_content };
-    });
+    return rows.map(questionFromApiRow);
   },
   importLegacy: async (courseId: string, questions: unknown[]): Promise<{ imported: number; updated: number; total: number }> => {
     const response = await fetch(`${API_BASE_URL}/questions/import/legacy?courseId=${encodeURIComponent(courseId)}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(questions),
     });
-    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to import legacy questions'));
+    if (!response.ok) throw new Error(GENERIC_ACTION_ERROR);
     return response.json();
   },
   report: (data:{questionId:string;courseId?:string;text:string;category?:string;reference?:string;reason:string;details?:string}) =>
@@ -427,19 +442,41 @@ export const questionsApi = {
   },
 };
 
+const arrayFromApi=(value:unknown):string[]=>{
+  if(Array.isArray(value))return value.map(String);
+  if(typeof value==='string')try{return Array.isArray(JSON.parse(value))?JSON.parse(value).map(String):[];}catch{return [];}
+  return [];
+};
+
+const questionFromApiRow=(row:any):import('../types').Question=>{
+  let options = row.options || row.alternatives;
+  if (typeof options === 'string') {
+    try { options = JSON.parse(options); } catch { options = undefined; }
+  }
+  return { id: row.id, category: row.category, area: row.area, board: row.board || row.exam_board,
+    topic: row.topic || row.category, text: row.text,
+    options: Array.isArray(options) ? options : undefined,
+    correct: row.correct_option || row.correct, explanation: row.explanation, reference: row.reference,
+    passageId: row.passage_id, passageTitle: row.passage_title, passageContent: row.passage_content,
+    year: row.year == null ? undefined : Number(row.year), difficulty: row.difficulty == null ? undefined : Number(row.difficulty),
+    courseIds: arrayFromApi(row.course_ids), roles: arrayFromApi(row.roles),
+    educationLevels: arrayFromApi(row.education_levels), formationAreas: arrayFromApi(row.formation_areas),
+    activityAreas: arrayFromApi(row.activity_areas), isOutdated: row.outdated===true||row.outdated==='true'||row.outdated===1 };
+};
+
 export const simulationsApi = {
   create: async (data: Record<string, unknown>) => {
     const response = await fetch(`${API_BASE_URL}/simulations`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
     });
-    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to create simulation'));
+    if (!response.ok) throw new Error(GENERIC_ACTION_ERROR);
     return response.json();
   },
   answer: async (id: string, data: { questionId: string; answer: unknown; timeSpentSeconds: number }) => {
     const response = await fetch(`${API_BASE_URL}/simulations/${id}/answers`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
     });
-    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to save answer'));
+    if (!response.ok) throw new Error(GENERIC_ACTION_ERROR);
     return response.json();
   },
   start: (id: string) => fetch(`${API_BASE_URL}/simulations/${id}/start`, { method: 'PATCH' }),
@@ -452,7 +489,7 @@ export const analyticsApi = {
     const params = new URLSearchParams({ days: String(days) });
     if (planId && !String(planId).startsWith('local-')) params.set('planId', planId);
     const response = await fetch(`${API_BASE_URL}/analytics/dashboard?${params}`);
-    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to fetch dashboard'));
+    if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
     return response.json();
   },
 };
@@ -470,13 +507,18 @@ const jsonRequest = async <T>(path: string, options?: RequestInit): Promise<T> =
       new Promise<Response>((_, reject) => {
         timeout = window.setTimeout(() => {
           controller.abort();
-          reject(new Error('A API demorou mais de 20 segundos para responder. Verifique o backend e tente novamente.'));
+          reject(new Error(GENERIC_LOAD_ERROR));
         }, 20_000);
       }),
     ]);
-    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'A operação não foi concluída'));
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, GENERIC_ACTION_ERROR));
     if (response.status === 204) return undefined as T;
     return response.json();
+  } catch (error) {
+    if (error instanceof Error && (error.message === GENERIC_LOAD_ERROR || error.message === GENERIC_ACTION_ERROR)) {
+      throw error;
+    }
+    throw new Error(GENERIC_LOAD_ERROR);
   } finally {
     window.clearTimeout(timeout);
   }
@@ -495,14 +537,19 @@ const fileRequest = async <T extends Blob | Record<string, unknown> | void>(
       new Promise<Response>((_, reject) => {
         timeout = window.setTimeout(() => {
           controller.abort();
-          reject(new Error('A API demorou mais de 20 segundos para responder. Verifique o backend e tente novamente.'));
+          reject(new Error(GENERIC_LOAD_ERROR));
         }, 20_000);
       }),
     ]);
-    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'A operação não foi concluída'));
+    if (!response.ok) throw new Error(await getApiErrorMessage(response, GENERIC_ACTION_ERROR));
     if (responseType === 'none' || response.status === 204) return undefined as T;
     if (responseType === 'blob') return response.blob() as Promise<T>;
     return response.json();
+  } catch (error) {
+    if (error instanceof Error && (error.message === GENERIC_LOAD_ERROR || error.message === GENERIC_ACTION_ERROR)) {
+      throw error;
+    }
+    throw new Error(GENERIC_LOAD_ERROR);
   } finally {
     window.clearTimeout(timeout);
   }

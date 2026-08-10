@@ -1878,6 +1878,8 @@ footer {
 /* Header account and notifications */
 .app-account { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .mobile-account-actions { display: none; align-items: center; gap: 7px; }
+.header-streak-trigger { min-width: 48px; height: 40px; padding: 0 9px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; border: 1px solid #f3d7bb; border-radius: 10px; background: #fff8ef; color: #c65b13; font-size: 12px; font-weight: 800; cursor: default; user-select: none; }
+.header-streak-trigger svg { width: 17px; height: 17px; fill: currentColor; }
 .header-menu { position: relative; }
 .header-action-button { width: 40px; height: 40px; min-height: 40px; padding: 0; display: grid; place-items: center; border: 1px solid #e1e5ed; border-radius: 10px; background: #fff; color: #59657a; cursor: pointer; transition: border-color .18s, background .18s, color .18s; }
 .header-action-button:hover, .header-action-button[aria-expanded="true"] { border-color: #cbd4eb; background: #f5f7fc; color: #334a99; }

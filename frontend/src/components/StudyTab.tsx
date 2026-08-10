@@ -120,7 +120,7 @@ export default function StudyTab({
           ? settingsObject(planResult.value.settings).studySections
           : null;
         if (!Array.isArray(remote)) {
-          setContentError("O plano ativo não possui material cadastrado no PostgreSQL.");
+          setContentError("O plano ativo ainda não possui material cadastrado.");
           setSections([]);
           return;
         }
@@ -133,7 +133,7 @@ export default function StudyTab({
       .catch(() => {
         if (active)
           setContentError(
-            "Não foi possível carregar o material do PostgreSQL.",
+            "Erro ao carregar o material. Tente novamente mais tarde.",
           );
       })
       .finally(() => {

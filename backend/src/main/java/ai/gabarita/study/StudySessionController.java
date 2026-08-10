@@ -28,4 +28,5 @@ public class StudySessionController {
         return service.finish(currentUser.id(),id,value.questionsAnswered()==null?0:value.questionsAnswered(),value.correctAnswers()==null?0:value.correctAnswers(),value.notes());
     }
     @PostMapping("/{id}/cancel") public Map<String,Object> cancel(@PathVariable UUID id,@RequestBody(required=false) CancelInput input){return service.cancel(currentUser.id(),id,input==null?null:input.notes());}
+    @PostMapping("/expire-inactive") public Map<String,Object> expireInactive(){return Map.of("cancelled",service.cancelForInactivity(currentUser.id()));}
 }

@@ -4,15 +4,19 @@ import ai.gabarita.auth.CurrentUser;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.constraints.*;
 import jakarta.validation.Valid;
+import java.text.Normalizer;
 import java.sql.Types;
 import java.util.*;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/api/questions")
 public class QuestionController {
+    private static final Logger log=LoggerFactory.getLogger(QuestionController.class);
     private final JdbcClient jdbc; private final ObjectMapper json;
     private final CurrentUser currentUser;
     QuestionController(JdbcClient jdbc,ObjectMapper json,CurrentUser currentUser){this.jdbc=jdbc;this.json=json;this.currentUser=currentUser;}
@@ -23,21 +27,99 @@ public class QuestionController {
     public record QuestionNoteRequest(@NotBlank @Size(max=180) String questionId,@Size(max=120) String courseId,
       @NotBlank String text,@Size(max=180) String category,@Size(max=220) String topic,@Size(max=300) String reference,
       @NotBlank @Size(max=4000) String note){}
+    // Mantém a rota raiz por compatibilidade e expõe uma rota explícita para o banco global.
+    // A ausência de courseId deliberadamente lista as questões de todos os
+    // cursos, cargos e concursos vinculados ao banco.
+    @GetMapping public List<Map<String,Object>> all(){return questions("");}
+
+    @GetMapping("/all") public List<Map<String,Object>> allQuestions(){return questions("");}
+
     @GetMapping("/course/{courseId}") public List<Map<String,Object>> byCourse(@PathVariable String courseId) {
-      return jdbc.sql("""
+      return questions(courseId);
+    }
+
+    private List<Map<String,Object>> questions(String courseId) {
+      try {
+      var questions=jdbc.sql("""
         SELECT q.id::text id,COALESCE(q.metadata->>'category',s.name,'Geral') category,
+        COALESCE(NULLIF(q.metadata->>'area',''),CASE WHEN COALESCE(q.metadata->>'category',s.name,'') LIKE 'Conhecimentos Específicos%' THEN 'Conhecimentos Específicos' ELSE 'Conhecimentos Gerais' END) area,
         COALESCE(NULLIF(q.metadata->>'topic',''),q.metadata->>'category',s.name,'Geral') topic,q.statement text,
-        q.board,q.type,
+        q.board,q.type,q.difficulty,
+        COALESCE(q.exam_year,NULLIF(substring(COALESCE(q.metadata->>'reference','') FROM '19[0-9]{2}|20[0-9]{2}'),'')::integer) AS "year",
         CASE WHEN q.status='ANNULLED' THEN 'Anulada' ELSE q.correct_answer #>> '{}' END correct,
         COALESCE(q.explanation,'') explanation,COALESCE(q.metadata->>'reference',q.board,'') reference,
         COALESCE(q.passage_id::text,NULLIF(q.metadata->>'passageId','')) passage_id,
         p.title passage_title,p.content passage_content,
+        EXISTS(SELECT 1 FROM question_reports report WHERE report.question_id=q.id AND report.reason='OUTDATED'
+          AND report.status IN('PENDING','RESOLVED')) outdated,
+        COALESCE((SELECT jsonb_agg(item.value ORDER BY item.value) FROM (
+          SELECT DISTINCT linked.course_id value FROM question_courses linked WHERE linked.question_id=q.id
+        ) item),'[]'::jsonb)::text course_ids,
+        COALESCE((SELECT jsonb_agg(item.value ORDER BY item.value) FROM (
+          SELECT DISTINCT role.label value FROM question_courses linked JOIN catalog_roles role ON role.course_id=linked.course_id
+          WHERE linked.question_id=q.id
+        ) item),'[]'::jsonb)::text roles,
+        COALESCE((SELECT jsonb_agg(item.value ORDER BY item.value) FROM (
+          SELECT DISTINCT contest.education value FROM question_courses linked
+          JOIN catalog_roles role ON role.course_id=linked.course_id JOIN catalog_contests contest ON contest.id=role.contest_id
+          WHERE linked.question_id=q.id AND BTRIM(contest.education)<>''
+        ) item),'[]'::jsonb)::text education_levels,
+        COALESCE((SELECT jsonb_agg(item.value ORDER BY item.value) FROM (
+          SELECT DISTINCT role.requirement value FROM question_courses linked JOIN catalog_roles role ON role.course_id=linked.course_id
+          WHERE linked.question_id=q.id AND BTRIM(role.requirement)<>''
+        ) item),'[]'::jsonb)::text formation_areas,
+        COALESCE((SELECT jsonb_agg(item.value ORDER BY item.value) FROM (
+          SELECT DISTINCT contest.area value FROM question_courses linked
+          JOIN catalog_roles role ON role.course_id=linked.course_id JOIN catalog_contests contest ON contest.id=role.contest_id
+          WHERE linked.question_id=q.id AND BTRIM(contest.area)<>''
+        ) item),'[]'::jsonb)::text activity_areas,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('label',qo.label,'text',qo.content) ORDER BY qo.position)
           FROM question_options qo WHERE qo.question_id=q.id),'[]'::jsonb)::text options
-        FROM questions q JOIN question_courses qc ON qc.question_id=q.id
+        FROM questions q
         LEFT JOIN subjects s ON s.id=q.subject_id LEFT JOIN passages p ON p.id=q.passage_id
-        WHERE qc.course_id=:course AND q.status IN('ACTIVE','ANNULLED') ORDER BY q.created_at,q.id
+        WHERE (:course='' OR EXISTS(SELECT 1 FROM question_courses course WHERE course.question_id=q.id AND course.course_id=:course))
+          AND q.status IN('ACTIVE','ANNULLED') ORDER BY q.created_at,q.id
         """).param("course",courseId).query().listOfRows();
+      // Older imported questions were stored only with the discipline. Infer the
+      // main subject while they are read, so the new filter works immediately
+      // without changing manually curated topic metadata.
+      questions.forEach(this::inferLegacyTopic);
+      return questions;
+      } catch (RuntimeException error) {
+        // A listagem global não pode ficar indisponível se algum dado opcional
+        // de catálogo estiver inconsistente. Os filtros básicos continuam
+        // funcionando com a consulta compatível abaixo.
+        log.warn("Falha ao carregar metadados avançados das questões; usando consulta compatível.",error);
+        return basicQuestions(courseId);
+      }
+    }
+
+    private List<Map<String,Object>> basicQuestions(String courseId) {
+      String scope=courseId.isBlank()?"":" JOIN question_courses course ON course.question_id=q.id ";
+      String condition=courseId.isBlank()?"":" AND course.course_id=:course ";
+      String sql="""
+        SELECT q.id::text id,COALESCE(q.metadata->>'category',s.name,'Geral') category,
+        COALESCE(NULLIF(q.metadata->>'area',''),CASE WHEN COALESCE(q.metadata->>'category',s.name,'') LIKE 'Conhecimentos Específicos%' THEN 'Conhecimentos Específicos' ELSE 'Conhecimentos Gerais' END) area,
+        COALESCE(NULLIF(q.metadata->>'topic',''),q.metadata->>'category',s.name,'Geral') topic,q.statement text,
+        q.board,q.type,q.difficulty,q.exam_year AS "year",
+        CASE WHEN q.status='ANNULLED' THEN 'Anulada' ELSE q.correct_answer #>> '{}' END correct,
+        COALESCE(q.explanation,'') explanation,COALESCE(q.metadata->>'reference',q.board,'') reference,
+        COALESCE(q.passage_id::text,NULLIF(q.metadata->>'passageId','')) passage_id,
+        p.title passage_title,p.content passage_content,
+        '[]'::text course_ids,'[]'::text roles,'[]'::text education_levels,
+        '[]'::text formation_areas,'[]'::text activity_areas,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('label',qo.label,'text',qo.content) ORDER BY qo.position)
+          FROM question_options qo WHERE qo.question_id=q.id),'[]'::jsonb)::text options
+        FROM questions q
+        """+scope+"""
+        LEFT JOIN subjects s ON s.id=q.subject_id LEFT JOIN passages p ON p.id=q.passage_id
+        WHERE q.status IN('ACTIVE','ANNULLED')
+        """+condition+" ORDER BY q.created_at,q.id";
+      var query=jdbc.sql(sql);
+      if(!courseId.isBlank())query=query.param("course",courseId);
+      var questions=query.query().listOfRows();
+      questions.forEach(this::inferLegacyTopic);
+      return questions;
     }
     @PostMapping("/import/legacy") @Transactional public Map<String,Object> importLegacy(@RequestParam String courseId,@RequestBody List<LegacyQuestion> questions){
       currentUser.requireAdmin();
@@ -125,4 +207,50 @@ public class QuestionController {
     private String reportReason(String value){String reason=value.trim().toUpperCase(Locale.ROOT);
       if(!Set.of("ANSWER","STATEMENT","EXPLANATION","OUTDATED","OTHER").contains(reason))throw new IllegalArgumentException("Motivo de sinalização inválido");return reason;}
     private String text(String value){return value==null?"":value.trim();}
+
+    private void inferLegacyTopic(Map<String,Object> question){
+      String category=text(String.valueOf(question.getOrDefault("category","")));
+      String currentTopic=text(String.valueOf(question.getOrDefault("topic","")));
+      if(!currentTopic.isBlank()&&!sameTopic(category,currentTopic))return;
+      String searchable=normalized(String.valueOf(question.getOrDefault("text",""))+" "+String.valueOf(question.getOrDefault("reference","")));
+      String inferred=switch(normalized(category)){
+        case "portugues", "lingua portuguesa" -> portugueseTopic(searchable);
+        case "ti basica", "nocoes de informatica" -> technologyTopic(searchable);
+        default -> "";
+      };
+      if(!inferred.isBlank())question.put("topic",inferred);
+    }
+
+    private String portugueseTopic(String text){
+      if(matches(text,"reescrit","substituicao de palavra","substituicao do trecho","reorganizacao","preserva.{0,30}sentido"))
+        return "6. Reescrita de frases e parágrafos do texto";
+      if(matches(text,"ortograf","acentu","hifen","grafia"))
+        return "3. Domínio da ortografia oficial";
+      if(matches(text,"coes[a-z]* textual","conector","referenciacao","sequenciacao textual","retomada"))
+        return "4. Domínio dos mecanismos de coesão textual";
+      if(matches(text,"morfossint","sintax","sujeito","predicado","oracao","classe gramatical","forma verbal","concordancia","regencia","crase","pontuacao","pronome atono"))
+        return "5. Domínio da estrutura morfossintática do período";
+      if(matches(text,"genero textual","tipo textual","tipologia","narrativ","dissertativ","injuntiv","descritiv"))
+        return "2. Reconhecimento de tipos e gêneros textuais";
+      return "1. Compreensão e interpretação de textos de gêneros variados";
+    }
+
+    private String technologyTopic(String text){
+      if(matches(text,"microsoft office","microsoft word","microsoft excel","powerpoint","planilha","apresentacao"))
+        return "2. Edição de textos, planilhas e apresentações (ambiente Microsoft Office)";
+      if(matches(text,"sistema operacional","\\bwindows\\b","\\blinux\\b"))
+        return "1. Noções de sistema operacional (ambiente Windows)";
+      if(matches(text,"rede de computador","internet","intranet","navegador","microsoft edge","firefox","google chrome","outlook","correio eletronico","cloud computing"))
+        return "3. Redes de computadores";
+      if(matches(text,"organizacao de informacao","gerenciamento de arquivo","gerenciamento de pasta","\\barquivo\\b","\\bpasta\\b"))
+        return "4. Organização e gerenciamento de informações, arquivos, pastas e programas";
+      if(matches(text,"seguranca da informacao","malware","virus","worm","antivirus","firewall","anti spyware","backup","cloud storage"))
+        return "5. Segurança da informação";
+      return "";
+    }
+
+    private boolean sameTopic(String first,String second){return normalized(first).equals(normalized(second));}
+    private boolean matches(String value,String... patterns){for(String pattern:patterns)if(value.matches(".*(?:"+pattern+").*"))return true;return false;}
+    private String normalized(String value){return Normalizer.normalize(value==null?"":value,Normalizer.Form.NFD)
+      .replaceAll("\\p{M}","").toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+"," ").trim();}
 }

@@ -162,7 +162,7 @@ export default function PerformanceTab() {
       setData(await analyticsApi.dashboard(period, activePlanId));
     } catch (requestError) {
       setData(null);
-      setError(requestError instanceof Error ? requestError.message : 'Não foi possível carregar o desempenho do PostgreSQL.');
+      setError(requestError instanceof Error ? requestError.message : 'Erro ao carregar o desempenho. Tente novamente mais tarde.');
     } finally {
       setLoading(false);
     }

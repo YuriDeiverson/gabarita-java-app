@@ -370,7 +370,6 @@ const emptySharedSubjectForm = {
   reviewSummary: "",
 };
 const emptyQuestion = {
-  courseId: "",
   category: "",
   topic: "",
   board: "",
@@ -386,7 +385,6 @@ const emptyQuestion = {
 const questionBatchTemplate = JSON.stringify(
   [
     {
-      courseId: "identificador_do_curso",
       category: "Língua Portuguesa",
       topic: "Interpretação de textos",
       board: "CEBRASPE",
@@ -400,10 +398,10 @@ const questionBatchTemplate = JSON.stringify(
       explanation: "Comentário do gabarito",
       reference: "Banca — Órgão — Ano",
       status: "ACTIVE",
-      passageId: null,
+      passageTitle: "Título do texto de apoio",
+      passageContent: "Conteúdo completo do texto de apoio.",
     },
     {
-      courseId: "identificador_do_curso",
       category: "Direito Administrativo",
       topic: "Atos administrativos",
       board: "CEBRASPE",
@@ -413,18 +411,12 @@ const questionBatchTemplate = JSON.stringify(
       explanation: "Comentário do gabarito",
       reference: "Banca — Órgão — Ano",
       status: "ACTIVE",
-      passageId: null,
     },
   ],
   null,
   2,
 );
 const questionBatchFields = [
-  {
-    name: "courseId",
-    description:
-      "Identificador do curso/cargo ao qual a questão pertencerá. Use exatamente o ID exibido no cadastro do edital/cargo.",
-  },
   {
     name: "category",
     description:
@@ -470,9 +462,9 @@ const questionBatchFields = [
       "Origem da questão, normalmente no formato Banca — Órgão — Ano. É opcional.",
   },
   {
-    name: "passageId",
+    name: "passageContent",
     description:
-      "ID de um texto de apoio já cadastrado na aba Textos de apoio. Use null quando a questão não depender de nenhum texto.",
+      "Conteúdo completo do texto de apoio. O sistema cria ou reutiliza o texto e o vincula à questão. Use passageTitle e passageSource para identificá-lo.",
   },
   {
     name: "status",
@@ -585,7 +577,6 @@ export default function AdminPanel({
   const [editingRole, setEditingRole] = useState("");
   const [editingPassage, setEditingPassage] = useState("");
   const [editingQuestion, setEditingQuestion] = useState("");
-  const [questionFilter, setQuestionFilter] = useState("");
   const [questionArea, setQuestionArea] = useState("");
   const [questionAreas, setQuestionAreas] = useState<string[]>([]);
   const [questionPage, setQuestionPage] = useState(1);
@@ -998,37 +989,6 @@ export default function AdminPanel({
       }, 0),
     [materialRoles],
   );
-  const courseIds = useMemo(
-    () =>
-      [...new Set(roles.map((item) => item.courseId).filter(Boolean))].sort(),
-    [roles],
-  );
-  const questionCurriculum = useMemo(
-    () =>
-      roles.find((item) => item.courseId === questionForm.courseId)?.curriculum,
-    [questionForm.courseId, roles],
-  );
-  const questionCategories = useMemo(() => {
-    const topics = Array.isArray(questionCurriculum?.topics)
-      ? (questionCurriculum.topics as Array<Record<string, unknown>>)
-      : [];
-    return [
-      ...new Set(
-        topics.map((item) => String(item.title || "")).filter(Boolean),
-      ),
-    ];
-  }, [questionCurriculum]);
-  const questionTopics = useMemo(() => {
-    const topics = Array.isArray(questionCurriculum?.topics)
-      ? (questionCurriculum.topics as Array<Record<string, unknown>>)
-      : [];
-    const selected = topics.find(
-      (item) => String(item.title || "") === questionForm.category,
-    );
-    return Array.isArray(selected?.subtopics)
-      ? selected.subtopics.map(String)
-      : [];
-  }, [questionCurriculum, questionForm.category]);
   const notify = (message: string) => {
     setSuccess(message);
     window.setTimeout(() => setSuccess(""), 3500);
@@ -1751,7 +1711,6 @@ export default function AdminPanel({
       ? emptyQuestion
       : {
           ...emptyQuestion,
-          courseId: questionForm.courseId,
           category: questionForm.category,
           topic: questionForm.topic,
           board: questionForm.board,
@@ -1802,7 +1761,6 @@ export default function AdminPanel({
       }
       const question = item as Record<string, unknown>;
       const missing = [
-        "courseId",
         "category",
         "board",
         "type",
@@ -1850,7 +1808,6 @@ export default function AdminPanel({
 
   const editQuestion = (item: AdminQuestion) => {
     setQuestionForm({
-      courseId: item.courseId,
       category: item.category,
       topic: item.topic,
       board: item.board,
@@ -1876,7 +1833,6 @@ export default function AdminPanel({
     try {
       const result = await adminApi.questions({
         query: questionSearch.trim(),
-        courseId: questionFilter,
         area: questionArea,
         page,
         pageSize: 10,
@@ -2025,12 +1981,12 @@ export default function AdminPanel({
     );
 
   return (
-    <main className="mx-auto w-full max-w-7xl animate-fade-in pb-12">
-      <header className="mb-6 rounded-3xl bg-gradient-to-br from-slate-950 to-indigo-950 p-6 text-white shadow-xl sm:p-8">
+    <main className="admin-panel mx-auto w-full max-w-7xl animate-fade-in pb-12">
+      <header className="admin-panel-hero mb-6 rounded-3xl bg-gradient-to-br from-slate-950 to-indigo-950 p-6 text-white shadow-xl sm:p-8">
         <span className="text-xs font-black uppercase tracking-[.18em] text-indigo-300">
           Administração
         </span>
-        <h2 className="mt-2 text-2xl font-black text-gray-600 sm:text-3xl">
+        <h2 className="mt-2 text-2xl font-black text-white sm:text-3xl">
           Catálogo e banco de conteúdo
         </h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
@@ -2041,32 +1997,49 @@ export default function AdminPanel({
       </header>
 
       <nav
-        className="mb-6 grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm min-[1200px]:hidden"
+        className="admin-section-nav mb-6 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm min-[1200px]:hidden"
         aria-label="Seções administrativas"
       >
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => {
-                setSection(tab.id);
-                onSectionChange?.(tab.id);
-                setError("");
-              }}
-              className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-extrabold transition ${section === tab.id ? "bg-indigo-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}
-            >
-              <Icon className="h-4 w-4" />
-              {tab.label}
-              <span
-                className={`rounded-full px-2 py-0.5 text-[10px] ${section === tab.id ? "bg-white/20" : "bg-slate-100"}`}
-              >
-                {tab.count}
-              </span>
-            </button>
-          );
-        })}
+        <label className="admin-section-select">
+          <span>Gerenciar</span>
+          <Select<SelectOption, false>
+            classNamePrefix="admin-react-select"
+            options={tabs.map((tab) => ({
+              value: tab.id,
+              label: `${tab.label}${tab.count ? ` (${tab.count})` : ""}`,
+            }))}
+            value={tabs
+              .map((tab) => ({
+                value: tab.id,
+                label: `${tab.label}${tab.count ? ` (${tab.count})` : ""}`,
+              }))
+              .find((option) => option.value === section) || null}
+            onChange={(option) => {
+              if (!option) return;
+              const nextSection = option.value as AdminSection;
+              setSection(nextSection);
+              onSectionChange?.(nextSection);
+              setError("");
+            }}
+            isSearchable={false}
+            menuPlacement="auto"
+            menuPosition="fixed"
+            menuPortalTarget={document.body}
+            maxMenuHeight={240}
+            styles={{
+              menuPortal: (base) => ({
+                ...base,
+                zIndex: 200,
+                maxWidth: "calc(100vw - 32px)",
+              }),
+              menu: (base) => ({
+                ...base,
+                width: "100%",
+                maxWidth: "calc(100vw - 32px)",
+              }),
+            }}
+          />
+        </label>
       </nav>
 
       {error && (
@@ -2689,7 +2662,7 @@ export default function AdminPanel({
                     return (
                       <section
                         key={discipline.key}
-                        className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5"
+                        className="admin-curriculum-card rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5"
                       >
                         <div className="mb-4 flex items-center justify-between gap-3">
                           <button
@@ -3988,41 +3961,12 @@ export default function AdminPanel({
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,.85fr)]">
             <AdminCard
               title={editingQuestion ? "Editar questão" : "Nova questão"}
-              description="Use uma alternativa por linha no formato A | texto da alternativa."
+              description="Use uma alternativa por linha no formato A | texto da alternativa. As questões são globais e organizadas por disciplina e assunto."
             >
               <form
                 onSubmit={submitQuestion}
                 className="grid gap-4 sm:grid-cols-2"
               >
-                <Field label="Curso/cargo">
-                  <select
-                    required
-                    className={inputClass}
-                    value={questionForm.courseId}
-                    onChange={(e) => {
-                      const role = roles.find(
-                        (item) => item.courseId === e.target.value,
-                      );
-                      setQuestionForm((v) => ({
-                        ...v,
-                        courseId: e.target.value,
-                        board: v.board || role?.board || "",
-                        category: "",
-                        topic: "",
-                      }));
-                    }}
-                  >
-                    <option value="">Selecione</option>
-                    {roles.map((item) => (
-                      <option
-                        key={item.databaseId || item.id}
-                        value={item.courseId}
-                      >
-                        {item.contest.acronym} — {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
                 <Field label="Banca">
                   <input
                     required
@@ -4035,7 +3979,6 @@ export default function AdminPanel({
                 </Field>
                 <Field label="Disciplina">
                   <input
-                    list="admin-question-categories"
                     required
                     className={inputClass}
                     value={questionForm.category}
@@ -4047,26 +3990,15 @@ export default function AdminPanel({
                       }))
                     }
                   />
-                  <datalist id="admin-question-categories">
-                    {questionCategories.map((value) => (
-                      <option key={value} value={value} />
-                    ))}
-                  </datalist>
                 </Field>
                 <Field label="Assunto">
                   <input
-                    list="admin-question-topics"
                     className={inputClass}
                     value={questionForm.topic}
                     onChange={(e) =>
                       setQuestionForm((v) => ({ ...v, topic: e.target.value }))
                     }
                   />
-                  <datalist id="admin-question-topics">
-                    {questionTopics.map((value) => (
-                      <option key={value} value={value} />
-                    ))}
-                  </datalist>
                 </Field>
                 <Field label="Tipo">
                   <select
@@ -4215,7 +4147,7 @@ export default function AdminPanel({
             </AdminCard>
             <AdminCard
               title="Questões cadastradas"
-              description="Consulte todas as questões do banco em páginas de 10 e refine por curso, área ou pesquisa."
+              description="Consulte todas as questões do banco em páginas de 10 e refine por disciplina ou pesquisa."
             >
               <form
                 onSubmit={(event) => void searchQuestions(event)}
@@ -4230,20 +4162,6 @@ export default function AdminPanel({
                     placeholder="Ex.: crase, LGPD, CEBRASPE ou ID da questão"
                   />
                 </div>
-                <select
-                  aria-label="Filtrar questões por curso"
-                  className={inputClass}
-                  value={questionFilter}
-                  onChange={(e) => {
-                    setQuestionFilter(e.target.value);
-                    setQuestionArea("");
-                  }}
-                >
-                  <option value="">Todos os cursos</option>
-                  {courseIds.map((id) => (
-                    <option key={id}>{id}</option>
-                  ))}
-                </select>
                 <select
                   aria-label="Filtrar questões por área"
                   className={inputClass}
@@ -4389,7 +4307,7 @@ function AdminCard({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+    <section className="admin-card rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <header className="mb-5">
         <h3 className="text-lg font-black text-slate-950">{title}</h3>
         <p className="mt-1 text-sm leading-5 text-slate-500">{description}</p>
@@ -4429,7 +4347,7 @@ function FormActions({
   cancel: () => void;
 }) {
   return (
-    <div className="flex flex-wrap justify-end gap-2 sm:col-span-2">
+    <div className="admin-form-actions flex flex-wrap justify-end gap-2 sm:col-span-2">
       {editing && (
         <button type="button" className={buttonSecondary} onClick={cancel}>
           <X className="h-4 w-4" />
@@ -4463,17 +4381,19 @@ function RecordCard({
   onDelete: () => void;
 }) {
   return (
-    <article className="rounded-2xl border border-slate-200 p-4">
-      <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600">
-        {eyebrow}
-      </span>
-      <h4 className="mt-1 line-clamp-3 text-sm font-extrabold leading-5 text-slate-900">
-        {title}
-      </h4>
-      <p className="mt-1.5 line-clamp-3 text-xs leading-5 text-slate-500">
-        {details}
-      </p>
-      <div className="mt-3 flex gap-2">
+    <article className="admin-record-card rounded-2xl border border-slate-200 p-4">
+      <div className="admin-record-card-content">
+        <span className="admin-record-card-eyebrow text-[10px] font-black uppercase tracking-wider text-indigo-600">
+          {eyebrow}
+        </span>
+        <h4 className="mt-1 line-clamp-3 text-sm font-extrabold leading-5 text-slate-900">
+          {title}
+        </h4>
+        <p className="mt-1.5 line-clamp-3 text-xs leading-5 text-slate-500">
+          {details}
+        </p>
+      </div>
+      <div className="admin-record-card-actions mt-3 flex gap-2">
         <button type="button" onClick={onEdit} className={buttonSecondary}>
           <Pencil className="h-3.5 w-3.5" />
           Editar
