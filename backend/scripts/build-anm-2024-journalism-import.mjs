@@ -30,6 +30,11 @@ C C C C C E E C C C C E C E E E C E E C
 C E C C X E E C C C`.match(/[ECX]/g);
 if (!answers || answers.length !== 120) throw new Error('Gabarito incompleto.');
 
+const explanations = JSON.parse(readFileSync(new URL('./data/anm-2024-jornalismo-explanations.json', import.meta.url), 'utf8'));
+if (!Array.isArray(explanations) || explanations.length !== 120) {
+  throw new Error('O arquivo de comentários revisados deve conter exatamente 120 explicações.');
+}
+
 const categoryFor = (item) => {
   if (item <= 10) return ['Língua Portuguesa', 'Compreensão e interpretação de textos'];
   if (item <= 15) return ['Língua Inglesa', 'Compreensão de textos'];
@@ -79,6 +84,9 @@ const itemText = (number) => {
   const next = number === 120 ? raw.length : raw.slice(after).search(new RegExp(`(?:^|\\n)${number + 1}\\s+`));
   let value = raw.slice(after, next < 0 ? raw.length : after + next);
   if (number === 120) value = value.split('Espaço livre')[0];
+  if (number === 10) value = value.split('For the first time, 2025')[0];
+  if (number === 97) value = value.split('Em 1967, eu era repórter iniciante')[0];
+  if (number === 107) value = value.split('Desde a Conferência do Clima de 1972')[0];
   value = value.replace(/\n(?:Julgue|A respeito|No que|De acordo|Em relação|Acerca|Considerando|Com base|A partir)\b[\s\S]*$/, '');
   return value.replace(/\s+/g, ' ').trim();
 };
@@ -90,7 +98,7 @@ const questions = Array.from({ length: 120 }, (_, index) => {
   const question = {
     courseId: 'jornalismo', category, topic, board: 'CEBRASPE', type: 'TRUE_FALSE',
     text: itemText(item), correct: answer,
-    explanation: answer === 'Anulada' ? 'Gabarito oficial informado: questão anulada.' : `Gabarito oficial informado: ${answer}.`,
+    explanation: explanations[index],
     reference: `CEBRASPE — ANM — Edital 2024 — Item ${item}`,
     status: answer === 'Anulada' ? 'ANNULLED' : 'ACTIVE',
   };

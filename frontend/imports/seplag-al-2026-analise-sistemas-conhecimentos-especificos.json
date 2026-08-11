@@ -547,7 +547,7 @@
     "type": "TRUE_FALSE",
     "text": "Em ambientes de Big Data, metadados técnicos são insuficientes para garantir a correta utilização das informações por usuários de negócio, sendo necessária a integração de metadados de negócio, como glossários e definições de domínio.",
     "correct": "Errado",
-    "explanation": "Item errado, conforme o gabarito fornecido. Metadados técnicos descrevem estrutura, origem e processamento dos dados; metadados de negócio trazem significado, glossários e regras de domínio. A questão foi julgada errada, portanto não se deve tratar a formulação apresentada como uma regra absoluta do edital.",
+    "explanation": "Item errado. O problema está em afirmar que os metadados de negócio são sempre necessários para garantir o uso correto dos dados. Eles acrescentam contexto — definições, regras e vocabulário do domínio — e facilitam o trabalho dos usuários de negócio, mas essa integração não é uma condição obrigatória em todo cenário: contratos de dados, documentação ou conhecimento prévio do domínio também podem orientar o uso. Logo, metadados técnicos e de negócio são complementares, porém a conclusão absoluta do enunciado torna o item errado.",
     "reference": "CEBRASPE — SEPLAG/AL — Especialista em Gestão Pública — Análise de Sistemas — Edital 2026 — Item 96",
     "status": "ACTIVE"
   },
@@ -571,7 +571,7 @@
     "type": "TRUE_FALSE",
     "text": "A adoção de schema-on-read em Big Data pressupõe persistência dos dados no formato original, sem validação rígida de esquema na ingestão, aplicando estrutura e semântica somente no momento da leitura.",
     "correct": "Errado",
-    "explanation": "Item errado, conforme o gabarito fornecido. Schema-on-read adia a interpretação do esquema para o consumo dos dados, mas isso não elimina toda validação, governança ou estrutura na ingestão. A frase trata o conceito como ausência total de controle e, por isso, simplifica-o de modo indevido.",
+    "explanation": "Item errado. Schema-on-read significa que o esquema necessário à análise é aplicado principalmente quando os dados são lidos; não significa que a ingestão obrigatoriamente preserve tudo no formato original nem que fique sem validação. O pipeline ainda pode verificar formato, qualidade e segurança, além de organizar, particionar ou transformar dados antes do consumo. As expressões “sem validação rígida” e “somente no momento da leitura” generalizam o conceito e são o ponto que invalida o item.",
     "reference": "CEBRASPE — SEPLAG/AL — Especialista em Gestão Pública — Análise de Sistemas — Edital 2026 — Item 98",
     "status": "ACTIVE"
   },

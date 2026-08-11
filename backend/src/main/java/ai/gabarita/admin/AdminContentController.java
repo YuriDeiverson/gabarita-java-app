@@ -20,7 +20,7 @@ public class AdminContentController {
     public record PassageRequest(@NotBlank String title,@NotBlank String content,String source){}
     public record OptionRequest(@NotBlank String label,@NotBlank String text){}
     public record QuestionRequest(String courseId,@NotBlank String category,String topic,@NotBlank String board,
-      @NotBlank String type,@NotBlank String text,@NotBlank String correct,String explanation,String reference,
+      @NotBlank String type,@NotBlank String text,@NotBlank String correct,@NotBlank @Size(max=4000) String explanation,String reference,
       String passageId,String passageTitle,String passageContent,String passageSource,
       List<@Valid OptionRequest> options,String status){}
     public record QuestionBatchRequest(@NotEmpty @Size(max=500) List<@Valid QuestionRequest> questions){}

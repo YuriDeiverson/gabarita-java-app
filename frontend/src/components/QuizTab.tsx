@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { QuestionAnswer, Question } from '../types';
 import { CatalogContest, QuestionNote, catalogApi, questionsApi, quizProgressApi } from '../services/api';
-import { CheckCircle2, XCircle, Filter, Sparkles, AlertCircle, Info, Bookmark, Flag, Target, ChevronDown, LoaderCircle, NotebookPen, Save, Trash2, X } from 'lucide-react';
+import { CheckCircle2, XCircle, Filter, Sparkles, AlertCircle, Info, Bookmark, Flag, Target, ChevronDown, ChevronUp, LoaderCircle, NotebookPen, Save, Trash2, X, BookOpenText, CircleHelp } from 'lucide-react';
 import { ActiveStudyContext, normalizeStudySubjectTitle, normalizeStudyText, questionRelevance } from '../studyContext';
 import { filterQuestionsByBoards, questionBoardsFromConfig, questionExamBoard } from '../questionBanks';
 
@@ -159,6 +159,17 @@ const questionCategoryGroup=(question:Question)=>{
   return categoryGroup(String(question.category));
 };
 
+const presentQuestionText=(value:string)=>{
+  let text=String(value||'').trim();
+  // Referência de prova pertence ao cabeçalho do cartão, não ao enunciado.
+  text=text.replace(/^\[[^\]]*(?:item|quest[aã]o|19\d{2}|20\d{2})[^\]]*\]\s*/i,'');
+  text=text.replace(/[ \t]+([,.;:!?])/g,'$1').replace(/[ \t]{2,}/g,' ');
+  if(text&&!/[.!?…:;](?:["'”’`)}\]])*$/u.test(text))text+=text.endsWith('—')?'':'.';
+  return text;
+};
+
+const passageReadingTime=(content:string)=>Math.max(1,Math.ceil(content.trim().split(/\s+/).filter(Boolean).length/210));
+
 export default function QuizTab({mode='session',studyContext,onQuestionAnswered,onReviewComplete,initialQuestionId}:QuizTabProps) {
   const reviewDraftKey=useMemo(()=>mode==='session'&&studyContext?guidedReviewDraftKey(studyContext):null,
     [mode,studyContext?.roadmapTopicId,studyContext?.topicTitle]);
@@ -202,6 +213,8 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
   const [advancedFiltersOpen,setAdvancedFiltersOpen]=useState(false);
   const [openFilterId,setOpenFilterId]=useState<string|null>(null);
   const filterPanelRef=useRef<HTMLDivElement>(null);
+  const [compactReadingView,setCompactReadingView]=useState(()=>typeof window!=='undefined'&&window.matchMedia('(max-width: 1199px)').matches);
+  const [passageVisibility,setPassageVisibility]=useState<Record<string,boolean>>({});
   const [visibleQuestions, setVisibleQuestions] = useState(()=>initialReviewDraft?.visibleQuestions||10);
   const [favoriteQuestions, setFavoriteQuestions] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('quiz_favorite_questions') || '[]')); } catch { return new Set(); }
@@ -226,6 +239,14 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     document.addEventListener('mousedown',closeOnOutsideClick);
     return()=>document.removeEventListener('mousedown',closeOnOutsideClick);
   },[openFilterId]);
+
+  useEffect(()=>{
+    const media=window.matchMedia('(max-width: 1199px)');
+    const sync=()=>setCompactReadingView(media.matches);
+    sync();
+    media.addEventListener('change',sync);
+    return()=>media.removeEventListener('change',sync);
+  },[]);
   const [reviewGoal,setReviewGoal]=useState(()=>initialReviewDraft?.reviewGoal||10);
   const activeAnswers=mode==='session'?cycleAnswers:answers;
   const [reportedQuestions, setReportedQuestions] = useState<Set<string>>(() => {
@@ -750,12 +771,15 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
             const isAnnulled = q.correct === 'Anulada';
             const isCorrect = !isAnnulled && userAnswer === q.correct;
             const savedNote = noteForQuestion(q.id);
+            const questionId=String(q.id);
+            const passageIsVisible=passageVisibility[questionId]??!compactReadingView;
+            const displayedQuestion=presentQuestionText(q.text);
 
             return (
               <div
                 key={q.id}
                 id={`q-card-${q.id}`}
-                className={`bg-white rounded-xl shadow-xs border transition-all overflow-hidden ${
+                className={`question-card ${isAnnulled?'is-annulled':isAnswered?(isCorrect?'is-correct':'is-wrong'):''} bg-white rounded-xl shadow-xs border transition-all overflow-hidden ${
                   isAnnulled
                     ? 'border-amber-200 bg-amber-50/20'
                     : isAnswered
@@ -766,16 +790,19 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
                 }`}
               >
                 {/* Header info */}
-                <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-bold text-slate-400">Questão {index + 1} de {filteredQuestions.length}</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
-                      {mode==='session'&&studyContext?studyContext.topicTitle:q.category}
-                    </span>
-                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-                      {questionExamBoard(q)}
-                    </span>
-                    {q.passageId && <span className="passage-available">Texto de apoio</span>}
+                <div className="question-card-header px-4 py-3 bg-slate-50 border-b border-slate-100">
+                  <div className="question-card-identity">
+                    <span className="question-number" aria-hidden="true">{String(index+1).padStart(2,'0')}</span>
+                    <div className="question-card-heading">
+                      <span className="question-position">Questão {index + 1} de {filteredQuestions.length}</span>
+                      <div className="question-card-tags">
+                        <span className="question-discipline">
+                          {mode==='session'&&studyContext?studyContext.topicTitle:q.category}
+                        </span>
+                        <span className="question-board">{questionExamBoard(q)}</span>
+                        {q.passageId && <span className="passage-available"><BookOpenText aria-hidden="true"/>Com texto</span>}
+                      </div>
+                    </div>
                   </div>
                   <div className="question-card-actions">
                     {q.reference && <span className="question-reference text-[10px] text-slate-400 font-mono">{q.reference}</span>}
@@ -800,30 +827,51 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
 
                 {/* The passage is part of the question and must remain visible while answering. */}
                 {q.passageId && q.passageContent && (
-                  <div className="question-passage px-5 py-4 border-b border-slate-100 text-xs leading-relaxed text-slate-600">
-                    <div className="question-passage-title font-bold flex items-center gap-1 mb-1.5">
-                      <Info className="w-3.5 h-3.5" />
-                      <span>{q.passageTitle || 'Texto de apoio'}</span>
+                  <section className={`question-passage ${passageIsVisible?'is-expanded':''}`} aria-labelledby={`passage-title-${q.id}`}>
+                    <header className="question-passage-header">
+                      <span className="question-passage-icon" aria-hidden="true"><BookOpenText/></span>
+                      <div>
+                        <span>Texto de apoio</span>
+                        <strong id={`passage-title-${q.id}`}>{q.passageTitle || 'Leitura para responder ao item'}</strong>
+                        <small>{passageReadingTime(q.passageContent)} min de leitura</small>
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={passageIsVisible?'Recolher texto de apoio':'Ler texto de apoio'}
+                        aria-expanded={passageIsVisible}
+                        aria-controls={`passage-content-${q.id}`}
+                        onClick={()=>setPassageVisibility(current=>({...current,[questionId]:!passageIsVisible}))}
+                      >
+                        <span>{passageIsVisible?'Recolher':'Ler texto'}</span>
+                        {passageIsVisible?<ChevronUp aria-hidden="true"/>:<ChevronDown aria-hidden="true"/>}
+                      </button>
+                    </header>
+                    {passageIsVisible&&<div id={`passage-content-${q.id}`} className="question-passage-reader">
+                      <div className="question-passage-content whitespace-pre-wrap">
+                        {q.passageContent}
+                      </div>
                     </div>
-                    <div className="question-passage-content whitespace-pre-wrap">
-                      {q.passageContent}
-                    </div>
-                  </div>
+                    }
+                  </section>
                 )}
 
                 {/* Question Text */}
-                <div className="p-5 space-y-4">
-                  <p className="text-slate-800 text-sm leading-relaxed font-medium">{q.text}</p>
+                <div className="question-card-body p-5 space-y-4">
+                  <section className="question-stem-panel" aria-labelledby={`question-stem-${q.id}`}>
+                    <div className="question-stem-kicker"><CircleHelp aria-hidden="true"/><span>{q.options?.length?'Escolha a alternativa correta':'Julgue o item a seguir'}</span></div>
+                    <p id={`question-stem-${q.id}`} className="question-stem">{displayedQuestion}</p>
+                  </section>
                   {savedNote&&<aside className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 text-xs leading-5 text-slate-700"><span className="mb-1 flex items-center gap-1.5 font-extrabold text-indigo-700"><NotebookPen className="h-3.5 w-3.5"/>Sua anotação</span><p className="whitespace-pre-wrap">{savedNote.note}</p></aside>}
 
                   {/* Actions (Buttons for answering) */}
-                  <div className="space-y-3">
+                  <div className="question-answer-zone space-y-3">
+                    {!isAnnulled&&<p className="question-answer-label">Sua resposta</p>}
                     {isAnnulled ? (
                       <span className="px-4 py-2 rounded-lg text-sm font-bold border border-amber-200 bg-amber-50 text-amber-800">
                         Questão anulada
                       </span>
                     ) : q.options?.length ? (
-                      <div className="grid gap-2" role="radiogroup" aria-label={`Alternativas da questão ${index + 1}`}>
+                      <div className="question-options grid gap-2" role="radiogroup" aria-label={`Alternativas da questão ${index + 1}`}>
                         {q.options.map(option => {
                           const selected=userAnswer===option.label;
                           const optionIsCorrect=q.correct===option.label;
@@ -833,7 +881,7 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
                             role="radio"
                             aria-checked={selected}
                             onClick={()=>handleAnswer(q.id,option.label)}
-                            className={`w-full p-3 rounded-xl border text-left text-sm transition flex items-start gap-3 ${
+                            className={`question-option w-full p-3 rounded-xl border text-left text-sm transition flex items-start gap-3 ${
                               selected
                                 ? optionIsCorrect
                                   ? 'bg-emerald-50 border-emerald-400 text-emerald-900'
@@ -850,11 +898,12 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
                         })}
                       </div>
                     ) : (
-                      <div className="flex items-center gap-3">
+                      <div className="question-binary-options flex items-center gap-3" role="group" aria-label={`Resposta da questão ${index+1}`}>
                     <button
+                      type="button"
                       id={`btn-certo-${q.id}`}
                       onClick={() => handleAnswer(q.id, 'Certo')}
-                      className={`px-5 py-2 rounded-lg text-sm font-bold border transition-all flex items-center gap-2 cursor-pointer ${
+                      className={`question-binary-button px-5 py-2 rounded-lg text-sm font-bold border transition-all flex items-center gap-2 cursor-pointer ${
                         userAnswer === 'Certo'
                           ? q.correct === 'Certo'
                             ? 'bg-emerald-600 border-emerald-600 text-white'
@@ -866,9 +915,10 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
                       Certo
                     </button>
                     <button
+                      type="button"
                       id={`btn-errado-${q.id}`}
                       onClick={() => handleAnswer(q.id, 'Errado')}
-                      className={`px-5 py-2 rounded-lg text-sm font-bold border transition-all flex items-center gap-2 cursor-pointer ${
+                      className={`question-binary-button px-5 py-2 rounded-lg text-sm font-bold border transition-all flex items-center gap-2 cursor-pointer ${
                         userAnswer === 'Errado'
                           ? q.correct === 'Errado'
                             ? 'bg-emerald-600 border-emerald-600 text-white'
@@ -884,7 +934,7 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
 
                     {/* Quick indicator icon */}
                     {(isAnswered || isAnnulled) && (
-                      <div className="flex items-center gap-1.5 text-xs font-bold">
+                      <div className="question-result-indicator flex items-center gap-1.5 text-xs font-bold" aria-live="polite">
                         {isAnnulled ? (
                           <span className="text-amber-700 flex items-center gap-1">
                             <AlertCircle className="w-4 h-4" /> Anulada
@@ -904,22 +954,28 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
 
                   {/* Educational Feedback Section */}
                   {(isAnswered || isAnnulled) && (
-                    <div className={`p-4 rounded-xl border text-xs leading-relaxed space-y-1 transition-all ${
+                    <div className={`question-feedback p-4 rounded-xl border text-xs leading-relaxed space-y-1 transition-all ${
                       isAnnulled
                         ? 'bg-amber-50 text-amber-800 border-amber-100'
                         : isCorrect 
                         ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
                         : 'bg-rose-50 text-rose-800 border-rose-100'
                     }`}>
-                      <div className="flex items-center gap-1.5 font-bold mb-1">
+                      <div className="question-feedback-heading flex items-center gap-1.5 font-bold mb-1">
                         <Info className="w-4 h-4 shrink-0" />
-                        <span>EXPLICAÇÃO E MINI REVISÃO:</span>
+                        <span>
+                          {isAnnulled
+                            ? 'QUESTÃO ANULADA — ENTENDA O MOTIVO:'
+                            : isCorrect
+                              ? 'VOCÊ ACERTOU — ENTENDA O MOTIVO:'
+                              : 'VOCÊ ERROU — ENTENDA O MOTIVO:'}
+                        </span>
                         <span className="ml-1 px-1.5 py-0.5 rounded bg-black/5 font-mono text-[10px]">
                           Gabarito: {q.correct}
                         </span>
                       </div>
-                      <p>{q.explanation}</p>
-                      {q.topic && <p className="pt-2 text-[11px] font-semibold opacity-80">Para revisar: {q.topic}.</p>}
+                      <p className="question-feedback-copy">{q.explanation}</p>
+                      {q.topic && <p className="question-feedback-topic pt-2 text-[11px] font-semibold opacity-80">Assunto cobrado: {q.topic}.</p>}
                     </div>
                   )}
                 </div>

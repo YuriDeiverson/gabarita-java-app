@@ -222,7 +222,7 @@ public class QuestionController {
     }
 
     private String portugueseTopic(String text){
-      if(matches(text,"reescrit","substituicao de palavra","substituicao do trecho","reorganizacao","preserva.{0,30}sentido"))
+      if(matches(text,"reescrit","substitui","substituicao","supress","insercao","retirada","reorganizacao","preserva.{0,30}sentido","mantid.{0,30}(sentido|correcao)"))
         return "6. Reescrita de frases e parágrafos do texto";
       if(matches(text,"ortograf","acentu","hifen","grafia"))
         return "3. Domínio da ortografia oficial";

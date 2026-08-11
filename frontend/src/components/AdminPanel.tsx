@@ -4124,6 +4124,8 @@ export default function AdminPanel({
                 )}
                 <Field label="Comentário/gabarito explicado" wide>
                   <textarea
+                    required
+                    maxLength={4000}
                     rows={5}
                     className={inputClass}
                     value={questionForm.explanation}
@@ -4133,6 +4135,7 @@ export default function AdminPanel({
                         explanation: e.target.value,
                       }))
                     }
+                    placeholder="Explique o ponto decisivo do enunciado, a regra aplicável e por que a alternativa está certa ou errada."
                   />
                 </Field>
                 <FormActions
