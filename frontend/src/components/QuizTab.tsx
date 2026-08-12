@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { QuestionAnswer, Question } from '../types';
-import { CatalogContest, QuestionNote, catalogApi, questionsApi, quizProgressApi } from '../services/api';
+import { DetailedQuestionGuide, QuestionNote, QuestionTaxonomyDiscipline, SharedStudySubject, catalogApi, questionsApi, quizProgressApi } from '../services/api';
 import { CheckCircle2, XCircle, Filter, Info, Bookmark, Flag, Target, ChevronDown, LoaderCircle, NotebookPen, Save, Trash2, X, BookOpenText } from 'lucide-react';
 import { ActiveStudyContext, normalizeStudySubjectTitle, normalizeStudyText, questionRelevance } from '../studyContext';
 import { filterQuestionsByBoards, questionBoardsFromConfig, questionExamBoard } from '../questionBanks';
@@ -86,54 +86,7 @@ const writeGuidedReviewDraft=(key:string|null,draft:Omit<GuidedReviewDraft,'upda
   catch(error){console.warn('Não foi possível salvar o progresso local da revisão.',error);}
 };
 
-type CurriculumTopic = { title?: unknown; subtopics?: unknown };
-
 const topicKey=(value:string)=>normalizeStudySubjectTitle(value);
-
-const isPrimaryCurriculumTopic=(value:string)=>{
-  const trimmed=value.trim();
-  // "4.1" and "II.3" are details of a subject and must not be selectable here.
-  return !/^\s*(?:\d+|[IVXLCDM]+)\s*[.)]\s*\d+/i.test(trimmed);
-};
-
-const categoryMatchesCurriculum=(category:string,title:string)=>{
-  const normalizedCategory=normalizeStudyText(category);
-  const normalizedTitle=normalizeStudyText(title);
-  if(normalizedCategory.includes(normalizedTitle)||normalizedTitle.includes(normalizedCategory))return true;
-  if(normalizedCategory==='portugues')return /lingua portuguesa|portugues/.test(normalizedTitle);
-  if(normalizedCategory==='ti basica')return /informatica|tecnologia da informacao/.test(normalizedTitle);
-  if(normalizedCategory==='conhecimentos de alagoas')return /alagoas/.test(normalizedTitle);
-  if(normalizedCategory==='etica e compliance')return /etica/.test(normalizedTitle);
-  return false;
-};
-
-const curriculumTopicsForCourse=(catalog:CatalogContest[],courseId:string)=>{
-  const topicsByCategory:Record<string,string[]>={};
-  const roles=catalog.flatMap(contest=>contest.roles).filter(role=>role.courseId===courseId);
-  roles.forEach(role=>{
-    const topics=Array.isArray(role.curriculum?.topics)?role.curriculum.topics as CurriculumTopic[]:[];
-    topics.forEach(subject=>{
-      const title=String(subject.title||'').trim();
-      const subtopics=Array.isArray(subject.subtopics)?subject.subtopics.map(String):[];
-      if(!title||subtopics.length===0)return;
-      const primaryTopics=subtopics.filter(isPrimaryCurriculumTopic);
-      if(primaryTopics.length===0)return;
-      const titleKey=normalizeStudyText(title);
-      topicsByCategory[titleKey]=[...(topicsByCategory[titleKey]||[]),...primaryTopics];
-      // O currículo descreve a disciplina como "Língua Portuguesa", enquanto
-      // as questões podem registrá-la simplesmente como "Português".
-      const knownCategories=['Português','TI Básica','Ética e Compliance','Conhecimentos de Alagoas','Língua Inglesa','Conhecimentos Específicos','Conhecimentos Específicos - Jornalismo','Conhecimentos Específicos - Técnico em Enfermagem'];
-      knownCategories.filter(category=>categoryMatchesCurriculum(category,title)).forEach(category=>{
-        const key=normalizeStudyText(category);
-        topicsByCategory[key]=[...(topicsByCategory[key]||[]),...primaryTopics];
-      });
-    });
-  });
-  return Object.fromEntries(Object.entries(topicsByCategory).map(([category,topics])=>[
-    category,
-    Array.from(new Map(topics.map(topic=>[topicKey(topic),topic])).values()),
-  ]));
-};
 
 const questionMatchesTopic=(question:Question,selectedTopic:string)=>{
   const selected=topicKey(selectedTopic);
@@ -156,7 +109,7 @@ const categoryLabel=(category:string)=>{
 };
 const questionCategoryGroup=(question:Question)=>{
   const area=String(question.area||'').trim();
-  if(area==='Conhecimentos Gerais'||area==='Conhecimentos Específicos')return area;
+  if(area)return area;
   return categoryGroup(String(question.category));
 };
 
@@ -167,6 +120,167 @@ const presentQuestionText=(value:string)=>{
   text=text.replace(/[ \t]+([,.;:!?])/g,'$1').replace(/[ \t]{2,}/g,' ');
   if(text&&!/[.!?…:;](?:["'”’`)}\]])*$/u.test(text))text+=text.endsWith('—')?'':'.';
   return text;
+};
+
+const answerCorrection=(question:Question,userAnswer?:QuestionAnswer)=>{
+  const selectedOption=question.options?.find(option=>option.label===userAnswer);
+  const correctOption=question.options?.find(option=>option.label===question.correct);
+  const isAnnulled=question.correct==='Anulada';
+  if(isAnnulled)return'Esta questão foi anulada. Ela não deve contar como acerto nem como erro.';
+  if(!userAnswer)return'';
+  if(question.options?.length)return userAnswer===question.correct
+    ?`Você marcou ${question.correct}${correctOption?` — “${correctOption.text}”`:''}. Essa é a alternativa correta.`
+    :`Você marcou ${userAnswer}${selectedOption?` — “${selectedOption.text}”`:''}. O gabarito é ${question.correct}${correctOption?` — “${correctOption.text}”`:''}. Agora veja exatamente qual regra torna a sua escolha errada.`;
+  return userAnswer===question.correct
+    ?`Você marcou ${userAnswer}, que é o gabarito correto.`
+    :`Você marcou ${userAnswer}, mas o item deve ser julgado como ${question.correct}. A explicação abaixo mostra qual parte do enunciado muda o resultado.`;
+};
+
+type SubjectLessonPart={kind:'heading'|'paragraph'|'point';text:string};
+const subjectLessonCache=new Map<string,SharedStudySubject>();
+const subjectLessonRequests=new Map<string,Promise<SharedStudySubject>>();
+const questionGuideCache=new Map<string,DetailedQuestionGuide>();
+const questionGuideRequests=new Map<string,Promise<DetailedQuestionGuide>>();
+
+const loadSubjectLesson=(subjectId:string)=>{
+  const cached=subjectLessonCache.get(subjectId);
+  if(cached)return Promise.resolve(cached);
+  const pending=subjectLessonRequests.get(subjectId);
+  if(pending)return pending;
+  const request=catalogApi.studySubject(subjectId).then(subject=>{
+    subjectLessonCache.set(subjectId,subject);
+    subjectLessonRequests.delete(subjectId);
+    return subject;
+  }).catch(error=>{
+    subjectLessonRequests.delete(subjectId);
+    throw error;
+  });
+  subjectLessonRequests.set(subjectId,request);
+  return request;
+};
+
+const loadQuestionGuide=(questionId:string)=>{
+  const cached=questionGuideCache.get(questionId);
+  if(cached)return Promise.resolve(cached);
+  const pending=questionGuideRequests.get(questionId);
+  if(pending)return pending;
+  const request=questionsApi.guide(questionId).then(guide=>{
+    questionGuideCache.set(questionId,guide);questionGuideRequests.delete(questionId);return guide;
+  }).catch(error=>{questionGuideRequests.delete(questionId);throw error;});
+  questionGuideRequests.set(questionId,request);return request;
+};
+
+const subjectLessonParts=(html:string):SubjectLessonPart[]=>{
+  if(!html.trim()||typeof DOMParser==='undefined')return[];
+  const document=new DOMParser().parseFromString(html,'text/html');
+  const parts:SubjectLessonPart[]=[];
+  Array.from(document.body.children).forEach(element=>{
+    const tag=element.tagName.toLowerCase();
+    const text=String(element.textContent||'').replace(/\s+/g,' ').trim();
+    if(/^h[1-6]$/.test(tag)&&text)parts.push({kind:'heading',text});
+    else if(tag==='p'&&text)parts.push({kind:'paragraph',text});
+    else if(tag==='ul'||tag==='ol')Array.from(element.children).forEach(item=>{
+      const point=String(item.textContent||'').replace(/\s+/g,' ').trim();
+      if(point)parts.push({kind:'point',text:point});
+    });
+  });
+  return parts;
+};
+
+const DetailedFeedbackModal=({question,userAnswer,onClose}:{question:Question;userAnswer?:QuestionAnswer;onClose:()=>void})=>{
+  const subjectId=String(question.studySubjectId||'');
+  const questionId=String(question.id);
+  const [lesson,setLesson]=useState<SharedStudySubject|undefined>(()=>subjectLessonCache.get(subjectId));
+  const [guide,setGuide]=useState<DetailedQuestionGuide|undefined>(()=>questionGuideCache.get(questionId));
+  const [loading,setLoading]=useState(Boolean(subjectId&&!lesson));
+  const [guideLoading,setGuideLoading]=useState(!guide);
+  useEffect(()=>{
+    if(!subjectId){setLoading(false);return;}
+    let cancelled=false;setLoading(true);
+    void loadSubjectLesson(subjectId).then(subject=>{if(!cancelled)setLesson(subject);})
+      .catch(error=>console.warn('Explicação completa do assunto indisponível.',error))
+      .finally(()=>{if(!cancelled)setLoading(false);});
+    return()=>{cancelled=true;};
+  },[subjectId]);
+  useEffect(()=>{
+    let cancelled=false;setGuideLoading(true);
+    void loadQuestionGuide(questionId).then(value=>{if(!cancelled)setGuide(value);})
+      .catch(error=>console.warn('Correção completa da questão indisponível.',error))
+      .finally(()=>{if(!cancelled)setGuideLoading(false);});
+    return()=>{cancelled=true;};
+  },[questionId]);
+  useEffect(()=>{
+    const closeOnEscape=(event:KeyboardEvent)=>{if(event.key==='Escape')onClose();};
+    document.addEventListener('keydown',closeOnEscape);
+    return()=>document.removeEventListener('keydown',closeOnEscape);
+  },[onClose]);
+  const parts=subjectLessonParts(lesson?.content||'');
+  const topic=String(guide?.detailedTopic||question.detailedTopic||question.topic||lesson?.title||question.category).trim();
+  const concept=String(guide?.conceptExplanation||question.conceptExplanation||'').trim();
+  const introduction=String(lesson?.studyObjective||'').trim();
+  const evidence=String(guide?.decisiveEvidence||question.decisiveEvidence||'').trim();
+  const analysis=String(guide?.answerAnalysis||question.answerAnalysis||'').trim();
+  const examTrap=String(guide?.examTrap||question.examTrap||'').trim();
+  const keyPoints=Array.from(new Set([
+    ...(guide?.fixationTips||[]),
+    ...(question.fixationTips||[]),
+    ...(lesson?.reviewSummary||[]),
+    ...(lesson?.keyTakeaways||[]),
+  ].map(String).map(point=>point.trim()).filter(Boolean))).slice(0,5);
+  const answerTone=question.correct==='Certo'?'is-certo':question.correct==='Errado'?'is-errado':'is-annulled';
+  const comparisonHeaders=guide?.comparisonHeaders||question.comparisonHeaders||{
+    criterion:'Ponto analisado',left:'Explicação ou evidência',right:'Conclusão',
+  };
+  const comparisonRows=guide?.comparisonRows||question.comparisonRows||[];
+  return <div className="detailed-feedback-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)onClose();}}>
+    <article className="detailed-feedback-modal" role="dialog" aria-modal="true" aria-labelledby={`detailed-feedback-title-${question.id}`}>
+      <header className="detailed-feedback-header">
+        <div><span>Correção completa</span><h2 id={`detailed-feedback-title-${question.id}`}>Entenda e não erre novamente</h2></div>
+        <button type="button" onClick={onClose} aria-label="Fechar correção completa"><X aria-hidden="true"/></button>
+      </header>
+      <div className="detailed-feedback-content">
+        <section className={`detailed-feedback-answer ${answerTone}`}>
+          <span>1. Gabarito</span>
+          <strong>{question.correct}</strong>
+          {userAnswer&&question.correct!=='Anulada'&&<p>{answerCorrection(question,userAnswer)}</p>}
+        </section>
+        <section className="detailed-feedback-section">
+          <span className="detailed-feedback-number">2</span><div><small>Assunto cobrado</small><h3>{topic}</h3></div>
+        </section>
+        <section className="detailed-feedback-section">
+          <span className="detailed-feedback-number">3</span><div className="detailed-feedback-body"><small>Explicação do conceito</small>
+            {(loading||guideLoading)&&!concept&&<div className="question-subject-loading"><LoaderCircle aria-hidden="true"/> Carregando a explicação…</div>}
+            {concept&&concept.split(/\n{2,}/).map((paragraph,index)=><p key={index}>{paragraph}</p>)}
+            {!concept&&!loading&&!guideLoading&&introduction&&<p className="detailed-feedback-introduction">{introduction}</p>}
+            {!concept&&!loading&&!guideLoading&&parts.length>0&&<div className="question-subject-lesson">
+              {parts.map((part,index)=>part.kind==='heading'
+                ?<h4 key={`${part.kind}-${index}`}>{part.text}</h4>
+                :part.kind==='point'?<p className="question-subject-point" key={`${part.kind}-${index}`}>{part.text}</p>
+                :<p key={`${part.kind}-${index}`}>{part.text}</p>)}
+            </div>}
+            {!concept&&!loading&&!guideLoading&&!introduction&&parts.length===0&&<p>A explicação completa deste conceito está em revisão.</p>}
+          </div>
+        </section>
+        <section className="detailed-feedback-section">
+          <span className="detailed-feedback-number">4</span><div className="detailed-feedback-body"><small>{question.correct==='Anulada'?'Entenda a anulação':`Por que está ${question.correct}?`}</small>
+            {guideLoading&&!evidence&&!analysis&&!examTrap&&<div className="question-subject-loading"><LoaderCircle aria-hidden="true"/> Carregando a análise completa…</div>}
+            {evidence&&<blockquote className="detailed-feedback-evidence"><strong>Trecho ou regra decisiva</strong><p>{evidence}</p></blockquote>}
+            {analysis&&<div className="detailed-feedback-reasoning"><strong>Raciocínio passo a passo</strong>{analysis.split(/\n{2,}/).map((paragraph,index)=><p key={index}>{paragraph}</p>)}</div>}
+            {examTrap&&<aside className="detailed-feedback-trap"><strong>Pegadinha da banca</strong><p>{examTrap}</p></aside>}
+            {!guideLoading&&!evidence&&!analysis&&!examTrap&&<p>A análise aprofundada desta questão ainda não foi cadastrada. O comentário curto não será repetido como se fosse uma correção completa.</p>}
+          </div>
+        </section>
+        <section className="detailed-feedback-section detailed-feedback-fixation">
+          <span className="detailed-feedback-number">5</span><div className="detailed-feedback-body"><small>Resumo para não errar nas próximas provas</small>
+            {comparisonRows.length>0&&<div className="detailed-feedback-table-wrap"><table><thead><tr><th>{comparisonHeaders.criterion}</th><th>{comparisonHeaders.left}</th><th>{comparisonHeaders.right}</th></tr></thead><tbody>{comparisonRows.map((row,index)=><tr key={`${row.criterion}-${index}`}><th>{row.criterion}</th><td>{row.left}</td><td>{row.right}</td></tr>)}</tbody></table></div>}
+            {keyPoints.length>0&&<ul>{keyPoints.map(point=><li key={point}>{point}</li>)}</ul>}
+            {comparisonRows.length===0&&keyPoints.length===0&&<p>Volte ao trecho decisivo do enunciado e explique a regra correta com suas próprias palavras antes de seguir.</p>}
+          </div>
+        </section>
+      </div>
+      <footer><button type="button" onClick={onClose}>Entendi a questão</button></footer>
+    </article>
+  </div>;
 };
 
 const passageReadingTime=(content:string)=>Math.max(1,Math.ceil(content.trim().split(/\s+/).filter(Boolean).length/210));
@@ -188,6 +302,7 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
   },[]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [questionsError, setQuestionsError] = useState('');
+  const [detailedFeedback,setDetailedFeedback]=useState<{question:Question;userAnswer?:QuestionAnswer}|null>(null);
 
   const [answers, setAnswers] = useState<{ [key: string]: QuestionAnswer }>(() => {
     const saved = localStorage.getItem('quiz_answers');
@@ -209,7 +324,7 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
   const [excludeAnnulled,setExcludeAnnulled]=useState(false);
   const [excludeOutdated,setExcludeOutdated]=useState(false);
   const [excludeInedit,setExcludeInedit]=useState(false);
-  const [curriculumTopics,setCurriculumTopics]=useState<Record<string,string[]>>({});
+  const [questionTaxonomy,setQuestionTaxonomy]=useState<QuestionTaxonomyDiscipline[]>([]);
   const [mobileFiltersOpen,setMobileFiltersOpen]=useState(false);
   const [advancedFiltersOpen,setAdvancedFiltersOpen]=useState(false);
   const [openFilterId,setOpenFilterId]=useState<string|null>(null);
@@ -271,6 +386,13 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     return()=>{document.body.style.overflow=previousOverflow;};
   },[noteDraft]);
 
+  useEffect(()=>{
+    if(!detailedFeedback)return;
+    const previousOverflow=document.body.style.overflow;
+    document.body.style.overflow='hidden';
+    return()=>{document.body.style.overflow=previousOverflow;};
+  },[detailedFeedback]);
+
   useEffect(() => {
     const courseId = localStorage.getItem('active_course');
     if (mode==='session'&&!courseId) {
@@ -278,8 +400,11 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
       return;
     }
     let cancelled=false;
-    const cacheKey=mode==='all'?'questions:all':`questions:course:${courseId}`;
-    void readQuestionCache(cacheKey).then(cachedQuestions=>{
+    // v5 invalida classificações anteriores à separação de História.
+    const cacheKey=mode==='all'?'questions:v5:all':`questions:v5:course:${courseId}`;
+    setQuestionsError('');
+    const cachedRequest=readQuestionCache(cacheKey);
+    void cachedRequest.then(cachedQuestions=>{
       if(cancelled||cachedQuestions.length===0)return;
       const visible=mode==='all'?cachedQuestions:filterQuestionsByBoards(cachedQuestions,selectedQuestionBoards);
       setQuestions(current=>current.length>0?current:visible);
@@ -291,22 +416,29 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
       setQuestions(visible);
       setQuestionsError(visible.length ? '' : mode==='all'?'Ainda não há questões cadastradas.':'Ainda não há questões cadastradas para este curso.');
       void writeQuestionCache(cacheKey,remoteQuestions);
-    }).catch(cause => {
+    }).catch(async cause => {
+      const cachedQuestions=await cachedRequest;
       if(cancelled)return;
+      // Em retomadas no celular, mantenha a cópia local utilizável se a
+      // atualização remota estiver temporariamente indisponível.
+      if(cachedQuestions.length>0){
+        const visible=mode==='all'?cachedQuestions:filterQuestionsByBoards(cachedQuestions,selectedQuestionBoards);
+        setQuestions(current=>current.length>0?current:visible);
+        setQuestionsError('');
+        return;
+      }
       setQuestionsError(cause instanceof Error ? cause.message : 'Erro ao carregar as questões. Tente novamente mais tarde.');
     });
     return()=>{cancelled=true;};
   }, [mode,selectedQuestionBoards,currentCourseId]);
 
   useEffect(()=>{
-    const courseId=localStorage.getItem('active_course');
-    if(!courseId)return;
     let cancelled=false;
-    catalogApi.contests(true).then(catalog=>{
-      if(!cancelled)setCurriculumTopics(curriculumTopicsForCourse(catalog,courseId));
-    }).catch(error=>console.warn('Assuntos do edital indisponíveis; exibindo apenas os assuntos já cadastrados nas questões.',error));
+    questionsApi.taxonomy(mode==='session'?currentCourseId:'').then(taxonomy=>{
+      if(!cancelled)setQuestionTaxonomy(taxonomy);
+    }).catch(error=>console.warn('Taxonomia de questões indisponível.',error));
     return()=>{cancelled=true;};
-  },[currentCourseId]);
+  },[currentCourseId,mode]);
 
   useEffect(()=>{
     if(mode!=='session')return;
@@ -487,16 +619,18 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
 
   const availableTopics=useMemo(()=>{
     if(categoryFilters.length===0)return [];
-    const fromCurriculum=categoryFilters.flatMap(category=>curriculumTopics[normalizeStudyText(category)]||[]);
-    if(mode!=='all'&&fromCurriculum.length>0)return Array.from(new Map(fromCurriculum.map(topic=>[topicKey(topic),topic])).values());
-    return Array.from(new Map(scopedQuestions
-      .filter(question=>categoryFilters.includes(String(question.category))&&question.topic&&topicKey(question.topic)!==topicKey(String(question.category))&&isPrimaryCurriculumTopic(question.topic))
-      .map(question=>[topicKey(question.topic||''),question.topic||'']))
-      .values());
-  },[categoryFilters,curriculumTopics,scopedQuestions,mode]);
+    const fromTaxonomy=questionTaxonomy.filter(discipline=>categoryFilters.includes(discipline.name))
+      .flatMap(discipline=>discipline.topics).filter(topic=>topic.count>0)
+      .map(topic=>({value:topic.name,label:topic.name,count:topic.count}));
+    if(fromTaxonomy.length>0)return fromTaxonomy;
+    const counts=new Map<string,number>();
+    scopedQuestions.filter(question=>categoryFilters.includes(String(question.category))&&question.topic)
+      .forEach(question=>counts.set(question.topic!,1+(counts.get(question.topic!)||0)));
+    return [...counts.entries()].map(([value,count])=>({value,label:value,count}));
+  },[categoryFilters,questionTaxonomy,scopedQuestions]);
 
   useEffect(()=>{
-    setTopicFilters(current=>current.filter(selected=>availableTopics.some(topic=>topicKey(topic)===topicKey(selected))));
+    setTopicFilters(current=>current.filter(selected=>availableTopics.some(topic=>topicKey(topic.value)===topicKey(selected))));
   },[availableTopics]);
 
   const filterOptions=useMemo(()=>{
@@ -709,8 +843,8 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
 
       {/* Question Filters Row */}
       <button type="button" className="quiz-mobile-filter-trigger" onClick={toggleMobileFilters} aria-expanded={mobileFiltersOpen} aria-controls="question-bank-filters"><span><Filter/>Filtrar questões</span><span>{activeFilterCount?`${activeFilterCount} ativos`:'Ver todos'}<ChevronDown/></span></button>
-      {mobileFiltersOpen&&<button type="button" className="quiz-filter-sheet-backdrop" aria-label="Fechar filtros" onClick={closeMobileFilters}/>}
-      <div ref={filterPanelRef} id="question-bank-filters" className={`quiz-filters ${mobileFiltersOpen?'is-mobile-open':''} space-y-3 bg-white p-4 rounded-xl shadow-sm border border-slate-100`}>
+      {(()=>{
+        const filterPanel=<div ref={filterPanelRef} id="question-bank-filters" className={`quiz-filters ${mobileFiltersOpen?'is-mobile-open':''} space-y-3 bg-white p-4 rounded-xl shadow-sm border border-slate-100`}>
         <div className="quiz-filter-heading flex flex-wrap items-center justify-between gap-2 text-sm font-bold text-slate-700">
           <div><span><Filter className="w-4 h-4" />{mode==='session'?'Questões da sessão':'Encontre a questão certa'}</span><p>Refine o banco por conteúdo, prova ou desempenho.</p></div>
           <div className="flex items-center gap-2">
@@ -747,12 +881,14 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
                 <MultiFilter id="activity-area" label="Área de atuação" options={filterOptions.activityAreas} selected={activityAreaFilters} onChange={setActivityAreaFilters} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todas"/>
                 <MultiFilter id="modality" label="Modalidade" options={['Certo ou errado','Múltipla escolha']} selected={modalityFilters} onChange={setModalityFilters} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todas"/>
                 <MultiFilter id="difficulty" label="Dificuldade" options={['Fácil','Média','Difícil','Muito difícil']} selected={difficultyFilters} onChange={setDifficultyFilters} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todas"/>
-                <div className="col-span-full mt-1 border-t border-slate-100 pt-2 text-slate-600">
-                  <p className="mb-1.5 font-bold">Excluir do resultado</p>
-                  <label className="mr-3 inline-flex items-center gap-1.5"><input type="checkbox" checked={excludeOutdated} onChange={event=>setExcludeOutdated(event.target.checked)}/>Desatualizadas</label>
-                  <label className="mr-3 inline-flex items-center gap-1.5"><input type="checkbox" checked={excludeAnnulled} onChange={event=>setExcludeAnnulled(event.target.checked)}/>Anuladas</label>
-                  <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={excludeInedit} onChange={event=>setExcludeInedit(event.target.checked)}/>Inéditas e simulados</label>
-                </div>
+                <fieldset className="quiz-filter-exclusions quiz-filter-exclusions-desktop col-span-full mt-1 border-t border-slate-100 pt-2 text-slate-600">
+                  <legend>Excluir do resultado</legend>
+                  <div className="quiz-filter-exclusion-options">
+                    <label><input type="checkbox" checked={excludeOutdated} onChange={event=>setExcludeOutdated(event.target.checked)}/><span>Desatualizadas</span></label>
+                    <label><input type="checkbox" checked={excludeAnnulled} onChange={event=>setExcludeAnnulled(event.target.checked)}/><span>Anuladas</span></label>
+                    <label><input type="checkbox" checked={excludeInedit} onChange={event=>setExcludeInedit(event.target.checked)}/><span>Inéditas e simulados</span></label>
+                  </div>
+                </fieldset>
               </div>
             </details>
             <button type="button" onClick={resetFilters} className="quiz-filter-reset rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100">Limpar todos os filtros</button>
@@ -762,7 +898,11 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
           <button type="button" onClick={resetFilters}>Limpar</button>
           <button type="button" onClick={closeMobileFilters}>Filtrar</button>
         </footer>}
-      </div>
+        </div>;
+        return mobileFiltersOpen
+          ?createPortal(<><button type="button" className="quiz-filter-sheet-backdrop" aria-label="Fechar filtros" onClick={closeMobileFilters}/>{filterPanel}</>,document.body)
+          :filterPanel;
+      })()}
 
       {/* Questions List */}
       <div className="questions-list space-y-4">
@@ -938,8 +1078,10 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
                           Gabarito · {q.correct}
                         </span>
                       </div>
-                      <p className="question-feedback-copy">{q.explanation}</p>
-                      {q.topic && <p className="question-feedback-topic pt-2 text-[11px] font-semibold opacity-80">Assunto cobrado: {q.topic}.</p>}
+                      <p className="question-feedback-copy">{q.explanation||'A explicação desta questão ainda está em revisão.'}</p>
+                      <button type="button" className="question-detailed-feedback-button" onClick={()=>setDetailedFeedback({question:q,userAnswer})} aria-haspopup="dialog">
+                        <BookOpenText aria-hidden="true"/><span><small>Assunto cobrado</small>{q.detailedTopic||q.topic||q.category}</span><ChevronDown aria-hidden="true"/>
+                      </button>
                     </section>
                   )}
                   </div>
@@ -951,6 +1093,8 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
       </div>
 
       {mode==='session'&&stats.answeredCount>=reviewGoal&&<div className="sticky bottom-20 md:bottom-4 z-20 flex justify-center"><button type="button" onClick={completeReview} className="min-h-12 px-7 rounded-full bg-emerald-600 text-white text-sm font-extrabold shadow-lg shadow-emerald-900/20">Concluir revisão e ver resultado</button></div>}
+
+      {detailedFeedback&&createPortal(<DetailedFeedbackModal question={detailedFeedback.question} userAnswer={detailedFeedback.userAnswer} onClose={()=>setDetailedFeedback(null)}/>,document.body)}
 
       {noteDraft&&createPortal(<div className="question-note-modal-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget&&!noteBusy)setNoteDraft(null);}}>
         <section className="question-note-modal w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="question-note-title">

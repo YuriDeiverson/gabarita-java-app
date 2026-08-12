@@ -19,9 +19,15 @@ public class AdminContentController {
 
     public record PassageRequest(@NotBlank String title,@NotBlank String content,String source){}
     public record OptionRequest(@NotBlank String label,@NotBlank String text){}
-    public record QuestionRequest(String courseId,@NotBlank String category,String topic,@NotBlank String board,
+    public record ComparisonRowRequest(@NotBlank String criterion,@NotBlank String left,@NotBlank String right){}
+    public record ComparisonHeadersRequest(@NotBlank String criterion,@NotBlank String left,@NotBlank String right){}
+    public record QuestionRequest(String courseId,@NotBlank String category,@NotBlank String topic,@NotBlank String board,
       @NotBlank String type,@NotBlank String text,@NotBlank String correct,@NotBlank @Size(max=4000) String explanation,String reference,
       String passageId,String passageTitle,String passageContent,String passageSource,
+      @Size(max=240) String detailedTopic,@Size(max=8000) String conceptExplanation,@Size(max=5000) String decisiveEvidence,
+      @Size(max=8000) String answerAnalysis,@Size(max=5000) String examTrap,
+      @Size(max=12) List<@Size(max=600) String> fixationTips,@Valid ComparisonHeadersRequest comparisonHeaders,
+      @Size(max=12) List<@Valid ComparisonRowRequest> comparisonRows,
       List<@Valid OptionRequest> options,String status){}
     public record QuestionBatchRequest(@NotEmpty @Size(max=500) List<@Valid QuestionRequest> questions){}
     public record ReportReviewRequest(@Pattern(regexp="RESOLVED|DISMISSED") String status,String adminNote){}
@@ -50,16 +56,21 @@ public class AdminContentController {
         String search=text(query);String course=text(courseId);String normalizedArea=text(area);int offset=(page-1)*pageSize;
         String sql="""
           SELECT q.id,q.board,q.type,q.statement,q.explanation,q.status,q.correct_answer #>> '{}' correct,
+            q.detailed_topic,q.concept_explanation,q.decisive_evidence,q.answer_analysis,q.exam_trap,
+            q.fixation_tips::text fixation_tips_json,q.comparison_headers::text comparison_headers_json,
+            q.comparison_rows::text comparison_rows_json,
             q.passage_id,q.metadata::text metadata_json,p.title passage_title,
+            s.id::text subject_id,s.name category,t.id::text topic_id,t.name topic,
             COALESCE(NULLIF(:course,''),(SELECT MIN(qc.course_id) FROM question_courses qc WHERE qc.question_id=q.id),'') course_id,
             COALESCE((SELECT jsonb_agg(jsonb_build_object('label',qo.label,'text',qo.content) ORDER BY qo.position)
               FROM question_options qo WHERE qo.question_id=q.id),'[]'::jsonb)::text options_json,
             (SELECT COUNT(*) FROM question_reports qr WHERE qr.question_id=q.id AND qr.status='PENDING') pending_reports
           FROM questions q LEFT JOIN passages p ON p.id=q.passage_id
+          LEFT JOIN subjects s ON s.id=q.subject_id LEFT JOIN topics t ON t.id=q.topic_id
           WHERE (:course='' OR EXISTS(SELECT 1 FROM question_courses qc WHERE qc.question_id=q.id AND qc.course_id=:course))
-            AND (:area='' OR q.metadata->>'category'=:area)
+            AND (:area='' OR s.name=:area)
             AND (:search='' OR q.statement ILIKE :pattern OR q.id::text ILIKE :pattern OR q.board ILIKE :pattern
-              OR q.metadata->>'category' ILIKE :pattern OR q.metadata->>'topic' ILIKE :pattern
+              OR s.name ILIKE :pattern OR t.name ILIKE :pattern
               OR q.metadata->>'reference' ILIKE :pattern)
           ORDER BY pending_reports DESC,q.updated_at DESC,q.created_at DESC LIMIT :pageSize OFFSET :offset
           """;
@@ -70,16 +81,17 @@ public class AdminContentController {
         int total=jdbc.sql("""
           SELECT COUNT(*) FROM questions q
           WHERE (:course='' OR EXISTS(SELECT 1 FROM question_courses qc WHERE qc.question_id=q.id AND qc.course_id=:course))
-            AND (:area='' OR q.metadata->>'category'=:area)
+            AND (:area='' OR EXISTS(SELECT 1 FROM subjects filter_subject WHERE filter_subject.id=q.subject_id AND filter_subject.name=:area))
             AND (:search='' OR q.statement ILIKE :pattern OR q.id::text ILIKE :pattern OR q.board ILIKE :pattern
-              OR q.metadata->>'category' ILIKE :pattern OR q.metadata->>'topic' ILIKE :pattern
+              OR EXISTS(SELECT 1 FROM subjects search_subject WHERE search_subject.id=q.subject_id AND search_subject.name ILIKE :pattern)
+              OR EXISTS(SELECT 1 FROM topics search_topic WHERE search_topic.id=q.topic_id AND search_topic.name ILIKE :pattern)
               OR q.metadata->>'reference' ILIKE :pattern)
           """).param("course",course).param("area",normalizedArea).param("search",search).param("pattern","%"+search+"%")
           .query(Integer.class).single();
         var areaRows=jdbc.sql("""
-          SELECT DISTINCT BTRIM(q.metadata->>'category') area FROM questions q
+          SELECT DISTINCT s.name area FROM questions q JOIN subjects s ON s.id=q.subject_id
           WHERE (:course='' OR EXISTS(SELECT 1 FROM question_courses qc WHERE qc.question_id=q.id AND qc.course_id=:course))
-            AND COALESCE(BTRIM(metadata->>'category'),'')<>'' ORDER BY area
+            AND s.active ORDER BY area
           """).param("course",course).query().listOfRows();
         var areas=areaRows.stream().map(row->String.valueOf(row.get("area"))).toList();
         int totalPages=total==0?0:(int)Math.ceil(total/(double)pageSize);
@@ -137,9 +149,15 @@ public class AdminContentController {
 
     private UUID saveQuestion(UUID id,QuestionRequest r,boolean update){
         validateQuestion(r);
-        String answer;String metadata;
-        try{answer=json.writeValueAsString(r.correct().trim());metadata=json.writeValueAsString(Map.of(
-                "category",r.category().trim(),"topic",fallback(r.topic(),r.category()),"reference",text(r.reference())));}
+        validateDetailedGuide(r);
+        TaxonomySelection taxonomy=resolveTaxonomy(r.category(),r.topic());
+        String answer;String metadata;String fixationTips;String comparisonHeaders;String comparisonRows;
+        try{answer=json.writeValueAsString(r.correct().trim());var metadataValues=new LinkedHashMap<String,Object>();
+            metadataValues.put("category",taxonomy.subjectName());metadataValues.put("topic",taxonomy.topicName());
+            metadataValues.put("reference",text(r.reference()));metadata=json.writeValueAsString(metadataValues);
+            fixationTips=json.writeValueAsString(cleanPoints(r.fixationTips()));
+            comparisonHeaders=json.writeValueAsString(cleanComparisonHeaders(r.comparisonHeaders()));
+            comparisonRows=json.writeValueAsString(cleanComparisonRows(r.comparisonRows()));}
         catch(Exception error){throw new IllegalArgumentException("Questão inválida");}
         String status="Anulada".equalsIgnoreCase(r.correct())?"ANNULLED":fallback(r.status(),"ACTIVE").toUpperCase(Locale.ROOT);
         if(!update){
@@ -153,18 +171,30 @@ public class AdminContentController {
         if(update){
             int changed=jdbc.sql("""
               UPDATE questions SET board=:board,type=:type,statement=:statement,explanation=:explanation,status=:status,
-                correct_answer=CAST(:answer AS jsonb),metadata=CAST(:metadata AS jsonb),passage_id=:passage,updated_at=now() WHERE id=:id
+                correct_answer=CAST(:answer AS jsonb),metadata=CAST(:metadata AS jsonb),passage_id=:passage,
+                subject_id=:subjectId,topic_id=:topicId,
+                detailed_topic=:detailedTopic,concept_explanation=:concept,decisive_evidence=:evidence,
+                answer_analysis=:analysis,exam_trap=:trap,fixation_tips=CAST(:fixationTips AS jsonb),
+                comparison_headers=CAST(:comparisonHeaders AS jsonb),comparison_rows=CAST(:comparisonRows AS jsonb),updated_at=now() WHERE id=:id
               """).param("board",r.board().trim()).param("type",questionType(r)).param("statement",r.text().trim())
               .param("explanation",text(r.explanation())).param("status",status).param("answer",answer).param("metadata",metadata)
-              .param("passage",passageId,Types.OTHER).param("id",id).update();
+              .param("subjectId",taxonomy.subjectId()).param("topicId",taxonomy.topicId())
+              .param("passage",passageId,Types.OTHER).param("detailedTopic",text(r.detailedTopic())).param("concept",text(r.conceptExplanation()))
+              .param("evidence",text(r.decisiveEvidence())).param("analysis",text(r.answerAnalysis())).param("trap",text(r.examTrap()))
+              .param("fixationTips",fixationTips).param("comparisonHeaders",comparisonHeaders).param("comparisonRows",comparisonRows).param("id",id).update();
             if(changed==0)throw new NoSuchElementException("Questão não encontrada");
             jdbc.sql("DELETE FROM question_options WHERE question_id=:id").param("id",id).update();
         }else jdbc.sql("""
-              INSERT INTO questions(id,board,type,statement,explanation,status,correct_answer,metadata,passage_id)
-              VALUES(:id,:board,:type,:statement,:explanation,:status,CAST(:answer AS jsonb),CAST(:metadata AS jsonb),:passage)
+              INSERT INTO questions(id,board,type,statement,explanation,status,correct_answer,metadata,passage_id,subject_id,topic_id,
+                detailed_topic,concept_explanation,decisive_evidence,answer_analysis,exam_trap,fixation_tips,comparison_headers,comparison_rows)
+              VALUES(:id,:board,:type,:statement,:explanation,:status,CAST(:answer AS jsonb),CAST(:metadata AS jsonb),:passage,:subjectId,:topicId,
+                :detailedTopic,:concept,:evidence,:analysis,:trap,CAST(:fixationTips AS jsonb),CAST(:comparisonHeaders AS jsonb),CAST(:comparisonRows AS jsonb))
               """).param("id",id).param("board",r.board().trim()).param("type",questionType(r)).param("statement",r.text().trim())
               .param("explanation",text(r.explanation())).param("status",status).param("answer",answer).param("metadata",metadata)
-              .param("passage",passageId,Types.OTHER).update();
+              .param("subjectId",taxonomy.subjectId()).param("topicId",taxonomy.topicId())
+              .param("passage",passageId,Types.OTHER).param("detailedTopic",text(r.detailedTopic())).param("concept",text(r.conceptExplanation()))
+              .param("evidence",text(r.decisiveEvidence())).param("analysis",text(r.answerAnalysis())).param("trap",text(r.examTrap()))
+              .param("fixationTips",fixationTips).param("comparisonHeaders",comparisonHeaders).param("comparisonRows",comparisonRows).update();
         int position=0;if(r.options()!=null)for(var option:r.options())jdbc.sql("""
           INSERT INTO question_options(id,question_id,label,content,position) VALUES(gen_random_uuid(),:question,:label,:content,:position)
           """).param("question",id).param("label",option.label().trim().toUpperCase(Locale.ROOT)).param("content",option.text().trim()).param("position",position++).update();
@@ -177,6 +207,20 @@ public class AdminContentController {
       jdbc.sql("""
         INSERT INTO question_courses(question_id,course_id) VALUES(:question,:course) ON CONFLICT DO NOTHING
         """).param("question",questionId).param("course",normalized).update();
+    }
+
+    private record TaxonomySelection(UUID subjectId,UUID topicId,String subjectName,String topicName){}
+    private TaxonomySelection resolveTaxonomy(String category,String topic){
+      var rows=jdbc.sql("""
+        SELECT s.id subject_id,t.id topic_id,s.name subject_name,t.name topic_name
+        FROM subjects s JOIN topics t ON t.subject_id=s.id
+        WHERE s.exam_id IS NULL AND s.active AND t.active
+          AND lower(btrim(s.name))=lower(btrim(:category)) AND lower(btrim(t.name))=lower(btrim(:topic))
+        LIMIT 1
+        """).param("category",category).param("topic",topic).query().listOfRows();
+      if(rows.isEmpty())throw new IllegalArgumentException("Selecione um assunto pertencente à disciplina informada");
+      var row=rows.getFirst();return new TaxonomySelection((UUID)row.get("subject_id"),(UUID)row.get("topic_id"),
+        String.valueOf(row.get("subject_name")),String.valueOf(row.get("topic_name")));
     }
 
     private UUID resolvePassage(QuestionRequest r){
@@ -196,6 +240,17 @@ public class AdminContentController {
     }
 
     private String questionType(QuestionRequest r){return r.options()!=null&&!r.options().isEmpty()?"MULTIPLE_CHOICE":r.type().trim().toUpperCase(Locale.ROOT);}
+    private void validateDetailedGuide(QuestionRequest r){
+        String status="Anulada".equalsIgnoreCase(r.correct())?"ANNULLED":fallback(r.status(),"ACTIVE").toUpperCase(Locale.ROOT);
+        if(!Set.of("ACTIVE","ANNULLED").contains(status))return;
+        if(text(r.detailedTopic()).length()<8)throw new IllegalArgumentException("Informe o assunto exato do gabarito completo");
+        if(text(r.conceptExplanation()).length()<180)throw new IllegalArgumentException("A explicação do conceito deve ter pelo menos 180 caracteres");
+        if(text(r.decisiveEvidence()).length()<40)throw new IllegalArgumentException("Informe o trecho ou a regra decisiva da questão");
+        if(text(r.answerAnalysis()).length()<300)throw new IllegalArgumentException("A análise passo a passo deve ter pelo menos 300 caracteres");
+        if(text(r.examTrap()).length()<80)throw new IllegalArgumentException("Explique a pegadinha da banca com pelo menos 80 caracteres");
+        if(cleanPoints(r.fixationTips()).size()<3)throw new IllegalArgumentException("Informe ao menos três dicas de fixação");
+        if(cleanComparisonRows(r.comparisonRows()).size()<3)throw new IllegalArgumentException("Informe ao menos três linhas no quadro-resumo");
+    }
     private void validateQuestion(QuestionRequest r){String type=r.type().trim().toUpperCase(Locale.ROOT);String correct=r.correct().trim();
         if("Anulada".equalsIgnoreCase(correct))return;
         if("TRUE_FALSE".equals(type)){if(!Set.of("Certo","Errado").contains(correct))throw new IllegalArgumentException("Questões de certo ou errado devem usar o gabarito Certo ou Errado");return;}
@@ -204,22 +259,42 @@ public class AdminContentController {
         if(r.options().stream().noneMatch(option->option.label().equalsIgnoreCase(correct)))throw new IllegalArgumentException("O gabarito deve corresponder à letra de uma alternativa");}
     private Map<String,Object> questionById(UUID id){var row=jdbc.sql("""
       SELECT q.id,q.board,q.type,q.statement,q.explanation,q.status,q.correct_answer #>> '{}' correct,
+        q.detailed_topic,q.concept_explanation,q.decisive_evidence,q.answer_analysis,q.exam_trap,
+        q.fixation_tips::text fixation_tips_json,q.comparison_headers::text comparison_headers_json,
+        q.comparison_rows::text comparison_rows_json,
         q.passage_id,q.metadata::text metadata_json,p.title passage_title,
+        s.id::text subject_id,s.name category,t.id::text topic_id,t.name topic,
         COALESCE((SELECT MIN(qc.course_id) FROM question_courses qc WHERE qc.question_id=q.id),'') course_id,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('label',qo.label,'text',qo.content) ORDER BY qo.position)
           FROM question_options qo WHERE qo.question_id=q.id),'[]'::jsonb)::text options_json
-      FROM questions q LEFT JOIN passages p ON p.id=q.passage_id WHERE q.id=:id
+      FROM questions q LEFT JOIN passages p ON p.id=q.passage_id
+      LEFT JOIN subjects s ON s.id=q.subject_id LEFT JOIN topics t ON t.id=q.topic_id WHERE q.id=:id
       """).param("id",id).query().listOfRows().stream().findFirst().orElseThrow(()->new NoSuchElementException("Questão não encontrada"));return question(row);}
     @SuppressWarnings("unchecked") private Map<String,Object> question(Map<String,Object> row){
         Map<String,Object> metadata=Map.of();try{metadata=json.readValue(String.valueOf(row.get("metadata_json")),Map.class);}catch(Exception ignored){}
         UUID id=(UUID)row.get("id");List<Map<String,Object>> options=List.of();
         try{options=json.readValue(String.valueOf(row.get("options_json")),List.class);}catch(Exception ignored){}
         var item=new LinkedHashMap<String,Object>();item.put("id",id.toString());item.put("courseId",row.getOrDefault("course_id",""));
-        item.put("category",metadata.getOrDefault("category","Geral"));item.put("topic",metadata.getOrDefault("topic",metadata.getOrDefault("category","Geral")));
+        item.put("subjectId",row.getOrDefault("subject_id",""));item.put("topicId",row.getOrDefault("topic_id",""));
+        item.put("category",row.get("category")!=null?row.get("category"):metadata.getOrDefault("category","Geral"));
+        item.put("topic",row.get("topic")!=null?row.get("topic"):metadata.getOrDefault("topic",metadata.getOrDefault("category","Geral")));
         item.put("board",row.get("board"));item.put("type",row.get("type"));item.put("text",row.get("statement"));item.put("correct",row.get("correct"));
         item.put("explanation",row.get("explanation"));item.put("reference",metadata.getOrDefault("reference",""));item.put("status",row.get("status"));
+        item.put("detailedTopic",row.getOrDefault("detailed_topic",""));item.put("conceptExplanation",row.getOrDefault("concept_explanation",""));
+        item.put("decisiveEvidence",row.getOrDefault("decisive_evidence",""));item.put("answerAnalysis",row.getOrDefault("answer_analysis",""));
+        item.put("examTrap",row.getOrDefault("exam_trap",""));
+        try{item.put("fixationTips",json.readTree(String.valueOf(row.getOrDefault("fixation_tips_json","[]"))));}catch(Exception ignored){item.put("fixationTips",List.of());}
+        try{item.put("comparisonHeaders",json.readTree(String.valueOf(row.getOrDefault("comparison_headers_json","{}"))));}catch(Exception ignored){item.put("comparisonHeaders",Map.of());}
+        try{item.put("comparisonRows",json.readTree(String.valueOf(row.getOrDefault("comparison_rows_json","[]"))));}catch(Exception ignored){item.put("comparisonRows",List.of());}
         item.put("pendingReports",row.getOrDefault("pending_reports",0));
         item.put("passageId",row.get("passage_id")==null?null:String.valueOf(row.get("passage_id")));item.put("passageTitle",row.get("passage_title"));item.put("options",options);return item;
+    }
+    private List<String> cleanPoints(List<String> values){return values==null?List.of():values.stream().map(this::text).filter(value->!value.isBlank()).toList();}
+    private Map<String,String> cleanComparisonHeaders(ComparisonHeadersRequest headers){
+      if(headers==null)return Map.of();return Map.of("criterion",headers.criterion().trim(),"left",headers.left().trim(),"right",headers.right().trim());
+    }
+    private List<Map<String,String>> cleanComparisonRows(List<ComparisonRowRequest> rows){
+      if(rows==null)return List.of();return rows.stream().map(row->Map.of("criterion",row.criterion().trim(),"left",row.left().trim(),"right",row.right().trim())).toList();
     }
     private String text(String value){return value==null?"":value.trim();}private String fallback(String value,String fallback){String text=text(value);return text.isBlank()?fallback:text;}
 }

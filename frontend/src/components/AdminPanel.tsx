@@ -42,9 +42,11 @@ import {
   AdminQuestionReport,
   CatalogContest,
   CatalogRole,
+  QuestionTaxonomyDiscipline,
   SharedStudySubject,
   adminApi,
   catalogApi,
+  questionsApi,
 } from "../services/api";
 import {
   normalizeStudySubjectTitle,
@@ -377,6 +379,14 @@ const emptyQuestion = {
   text: "",
   correct: "",
   explanation: "",
+  detailedTopic: "",
+  conceptExplanation: "",
+  decisiveEvidence: "",
+  answerAnalysis: "",
+  examTrap: "",
+  fixationTips: "",
+  comparisonHeaders: "",
+  comparisonRows: "",
   reference: "",
   passageId: "",
   status: "ACTIVE",
@@ -395,7 +405,15 @@ const questionBatchTemplate = JSON.stringify(
         { label: "A", text: "Primeira alternativa" },
         { label: "B", text: "Segunda alternativa" },
       ],
-      explanation: "Comentário do gabarito",
+      explanation: "Explique, com palavras simples, qual detalhe decide a questão, por que a resposta errada parece possível e qual é a regra correta. Use um exemplo curto.",
+      detailedTopic: "Interpretação de textos — inferência",
+      conceptExplanation: "Explique o conceito desde o começo, com linguagem direta e um exemplo cotidiano.",
+      decisiveEvidence: "Transcreva o trecho do texto ou a regra que decide a questão.",
+      answerAnalysis: "Mostre como o enunciado aplica o conceito e explique por que as demais leituras não funcionam.",
+      examTrap: "Explique qual troca de sentido, exagero ou confusão a banca tentou provocar.",
+      fixationTips: ["Dica curta para reconhecer esse assunto", "Pegadinha que costuma aparecer em prova"],
+      comparisonHeaders: { criterion: "Ponto analisado", left: "Evidência", right: "Validação" },
+      comparisonRows: [{ criterion: "Ponto comparado", left: "Situação A", right: "Situação B" }],
       reference: "Banca — Órgão — Ano",
       status: "ACTIVE",
       passageTitle: "Título do texto de apoio",
@@ -408,7 +426,14 @@ const questionBatchTemplate = JSON.stringify(
       type: "TRUE_FALSE",
       text: "Enunciado da segunda questão",
       correct: "Certo",
-      explanation: "Comentário do gabarito",
+      explanation: "Explique, com palavras simples, qual detalhe decide a questão, por que o item está errado e como lembrar da regra. Use um exemplo curto.",
+      detailedTopic: "Atos administrativos — atributo cobrado",
+      conceptExplanation: "Explique a regra central em linguagem simples e dê um exemplo.",
+      decisiveEvidence: "Indique a regra, dispositivo ou expressão que decide o julgamento.",
+      answerAnalysis: "Aponte exatamente qual palavra torna o item certo ou errado e a pegadinha usada pela banca.",
+      examTrap: "Mostre por que a redação parece correta e onde está o erro.",
+      fixationTips: ["Regra que deve ser lembrada", "Exceção que não pode ser confundida"],
+      comparisonHeaders: { criterion: "Ponto analisado", left: "Regra", right: "Conclusão" },
       reference: "Banca — Órgão — Ano",
       status: "ACTIVE",
     },
@@ -454,7 +479,17 @@ const questionBatchFields = [
   {
     name: "explanation",
     description:
-      "Comentário ou justificativa exibida na correção da questão. É opcional.",
+      "Explicação obrigatória em linguagem simples: apresente o ponto decisivo, mostre por que o erro está errado, ensine a regra correta e dê um exemplo curto.",
+  },
+  {
+    name: "detailedTopic / conceptExplanation / decisiveEvidence / answerAnalysis / examTrap",
+    description:
+      "Campos da correção completa: tema exato, explicação teórica e análise detalhada do item.",
+  },
+  {
+    name: "fixationTips / comparisonHeaders / comparisonRows",
+    description:
+      "Resumo para provas futuras. fixationTips é uma lista; comparisonRows usa objetos com criterion, left e right.",
   },
   {
     name: "reference",
@@ -548,6 +583,7 @@ export default function AdminPanel({
     useState<Set<string>>(() => new Set());
   const [passages, setPassages] = useState<AdminPassage[]>([]);
   const [questions, setQuestions] = useState<AdminQuestion[]>([]);
+  const [questionTaxonomy, setQuestionTaxonomy] = useState<QuestionTaxonomyDiscipline[]>([]);
   const [loading, setLoading] = useState(true);
   const [questionsLoading, setQuestionsLoading] = useState(false);
   const [reportsLoading, setReportsLoading] = useState(false);
@@ -604,6 +640,14 @@ export default function AdminPanel({
   const [questionBatchJson, setQuestionBatchJson] = useState("");
   const [questionBatchImporterOpen, setQuestionBatchImporterOpen] =
     useState(false);
+  const questionTaxonomyAreas = useMemo(
+    () => Array.from(new Set(questionTaxonomy.map((discipline) => discipline.area))),
+    [questionTaxonomy],
+  );
+  const questionTopicOptions = useMemo(
+    () => questionTaxonomy.find((discipline) => discipline.name === questionForm.category)?.topics || [],
+    [questionForm.category, questionTaxonomy],
+  );
   const weightedCurriculumDisciplines = curriculumDisciplines.filter((item) =>
     item.title.trim(),
   );
@@ -616,16 +660,18 @@ export default function AdminPanel({
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
-    const [catalogResult, passagesResult, libraryResult] = await Promise.allSettled([
+    const [catalogResult, passagesResult, libraryResult, taxonomyResult] = await Promise.allSettled([
       adminApi.catalog(),
       adminApi.passages(),
       catalogApi.studyLibrary(),
+      questionsApi.taxonomy('',true),
     ]);
     if (catalogResult.status === "fulfilled") setContests(catalogResult.value);
     if (passagesResult.status === "fulfilled")
       setPassages(passagesResult.value);
     if (libraryResult.status === "fulfilled")
       setSharedStudyLibrary(libraryResult.value);
+    if (taxonomyResult.status === "fulfilled") setQuestionTaxonomy(taxonomyResult.value);
     const coreError =
       catalogResult.status === "rejected"
         ? catalogResult.reason
@@ -1700,12 +1746,26 @@ export default function AdminPanel({
         return { label: label.trim(), text: parts.join("|").trim() };
       })
       .filter((option) => option.label && option.text);
+  const parseFixationTips = (value: string) =>
+    value.split("\n").map((line) => line.trim()).filter(Boolean);
+  const parseComparisonRows = (value: string) =>
+    value.split("\n").map((line) => {
+      const [criterion, left, right] = line.split("|").map((part) => part.trim());
+      return { criterion, left, right };
+    }).filter((row) => row.criterion && row.left && row.right);
+  const parseComparisonHeaders = (value: string) => {
+    const [criterion, left, right] = value.split("|").map((part) => part.trim());
+    return criterion && left && right ? { criterion, left, right } : undefined;
+  };
   const submitQuestion = (event: FormEvent) => {
     event.preventDefault();
     const payload = {
       ...questionForm,
       passageId: questionForm.passageId || null,
       options: parseOptions(questionForm.options),
+      fixationTips: parseFixationTips(questionForm.fixationTips),
+      comparisonHeaders: parseComparisonHeaders(questionForm.comparisonHeaders),
+      comparisonRows: parseComparisonRows(questionForm.comparisonRows),
     };
     const nextQuestion = editingQuestion
       ? emptyQuestion
@@ -1815,6 +1875,14 @@ export default function AdminPanel({
       text: item.text,
       correct: item.correct,
       explanation: item.explanation || "",
+      detailedTopic: item.detailedTopic || "",
+      conceptExplanation: item.conceptExplanation || "",
+      decisiveEvidence: item.decisiveEvidence || "",
+      answerAnalysis: item.answerAnalysis || "",
+      examTrap: item.examTrap || "",
+      fixationTips: (item.fixationTips || []).join("\n"),
+      comparisonHeaders: item.comparisonHeaders ? `${item.comparisonHeaders.criterion} | ${item.comparisonHeaders.left} | ${item.comparisonHeaders.right}` : "",
+      comparisonRows: (item.comparisonRows || []).map((row) => `${row.criterion} | ${row.left} | ${row.right}`).join("\n"),
       reference: item.reference || "",
       passageId: item.passageId || "",
       status: item.status || "ACTIVE",
@@ -3978,7 +4046,7 @@ export default function AdminPanel({
                   />
                 </Field>
                 <Field label="Disciplina">
-                  <input
+                  <select
                     required
                     className={inputClass}
                     value={questionForm.category}
@@ -3989,16 +4057,36 @@ export default function AdminPanel({
                         topic: "",
                       }))
                     }
-                  />
+                  >
+                    <option value="">Selecione a disciplina</option>
+                    {questionTaxonomyAreas.map((area) => (
+                      <optgroup key={area} label={area}>
+                        {questionTaxonomy.filter((discipline) => discipline.area === area).map((discipline) => (
+                          <option key={discipline.id} value={discipline.name}>
+                            {discipline.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
                 </Field>
                 <Field label="Assunto">
-                  <input
+                  <select
+                    required
+                    disabled={!questionForm.category}
                     className={inputClass}
                     value={questionForm.topic}
                     onChange={(e) =>
                       setQuestionForm((v) => ({ ...v, topic: e.target.value }))
                     }
-                  />
+                  >
+                    <option value="">{questionForm.category ? "Selecione o assunto" : "Escolha a disciplina primeiro"}</option>
+                    {questionTopicOptions.map((topic) => (
+                      <option key={topic.id} value={topic.name}>
+                        {topic.name}{topic.count ? ` (${topic.count} questões)` : ""}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
                 <Field label="Tipo">
                   <select
@@ -4019,6 +4107,16 @@ export default function AdminPanel({
                   >
                     <option value="MULTIPLE_CHOICE">Múltipla escolha</option>
                     <option value="TRUE_FALSE">Certo ou errado</option>
+                  </select>
+                </Field>
+                <Field label="Situação editorial">
+                  <select
+                    className={inputClass}
+                    value={questionForm.status}
+                    onChange={(e) => setQuestionForm((v) => ({ ...v, status: e.target.value }))}
+                  >
+                    <option value="ACTIVE">Publicada</option>
+                    <option value="DRAFT">Rascunho</option>
                   </select>
                 </Field>
                 <Field label="Resposta correta">
@@ -4122,11 +4220,11 @@ export default function AdminPanel({
                     />
                   </Field>
                 )}
-                <Field label="Comentário/gabarito explicado" wide>
+                <Field label="Por que a resposta está certa ou errada?" wide>
                   <textarea
                     required
                     maxLength={4000}
-                    rows={5}
+                    rows={8}
                     className={inputClass}
                     value={questionForm.explanation}
                     onChange={(e) =>
@@ -4135,7 +4233,99 @@ export default function AdminPanel({
                         explanation: e.target.value,
                       }))
                     }
-                    placeholder="Explique o ponto decisivo do enunciado, a regra aplicável e por que a alternativa está certa ou errada."
+                    placeholder="Escreva como se ensinasse uma criança: 1) diga a ideia principal sem palavras difíceis; 2) mostre exatamente qual pedaço da resposta está errado; 3) explique a regra correta; 4) dê um exemplo simples; 5) termine com uma frase curta para lembrar."
+                  />
+                  <span className="mt-1.5 block text-[11px] leading-5 text-slate-500">
+                    Este é o comentário curto que continua aparecendo no card depois da resposta.
+                  </span>
+                </Field>
+                <div className="col-span-full mt-2 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4">
+                  <strong className="text-sm font-black text-indigo-950">Correção completa — aberta pelo botão “Assunto cobrado”</strong>
+                  <p className="mt-1 text-xs leading-5 text-indigo-700">Preencha como um material de estudo para concursos: explique o conceito, analise a questão e deixe uma forma simples de fixar.</p>
+                </div>
+                <Field label="Assunto exato cobrado" wide>
+                  <input
+                    required={questionForm.status === "ACTIVE"}
+                    maxLength={240}
+                    className={inputClass}
+                    value={questionForm.detailedTopic}
+                    onChange={(e) => setQuestionForm((v) => ({ ...v, detailedTopic: e.target.value }))}
+                    placeholder="Ex.: Segurança da Informação — Malwares: Vírus × Worms"
+                  />
+                </Field>
+                <Field label="Explicação do conceito" wide>
+                  <textarea
+                    required={questionForm.status === "ACTIVE"}
+                    minLength={questionForm.status === "ACTIVE" ? 180 : undefined}
+                    maxLength={8000}
+                    rows={8}
+                    className={inputClass}
+                    value={questionForm.conceptExplanation}
+                    onChange={(e) => setQuestionForm((v) => ({ ...v, conceptExplanation: e.target.value }))}
+                    placeholder="Ensine o conceito do zero, com palavras simples, comparação fácil e exemplo prático. Evite apenas repetir o enunciado."
+                  />
+                </Field>
+                <Field label="Trecho ou regra decisiva" wide>
+                  <textarea
+                    required={questionForm.status === "ACTIVE"}
+                    minLength={questionForm.status === "ACTIVE" ? 40 : undefined}
+                    maxLength={5000}
+                    rows={5}
+                    className={inputClass}
+                    value={questionForm.decisiveEvidence}
+                    onChange={(e) => setQuestionForm((v) => ({ ...v, decisiveEvidence: e.target.value }))}
+                    placeholder="Transcreva a passagem do texto, dispositivo legal, fórmula ou regra técnica que comprova o gabarito."
+                  />
+                </Field>
+                <Field label="Análise completa — por que está certo ou errado?" wide>
+                  <textarea
+                    required={questionForm.status === "ACTIVE"}
+                    minLength={questionForm.status === "ACTIVE" ? 300 : undefined}
+                    maxLength={8000}
+                    rows={8}
+                    className={inputClass}
+                    value={questionForm.answerAnalysis}
+                    onChange={(e) => setQuestionForm((v) => ({ ...v, answerAnalysis: e.target.value }))}
+                    placeholder="Aponte os trechos decisivos, aplique a regra, explique a conclusão e destaque a pegadinha da banca, se houver."
+                  />
+                </Field>
+                <Field label="Pegadinha da banca" wide>
+                  <textarea
+                    required={questionForm.status === "ACTIVE"}
+                    minLength={questionForm.status === "ACTIVE" ? 80 : undefined}
+                    maxLength={5000}
+                    rows={5}
+                    className={inputClass}
+                    value={questionForm.examTrap}
+                    onChange={(e) => setQuestionForm((v) => ({ ...v, examTrap: e.target.value }))}
+                    placeholder="Explique por que o item parece convincente e qual generalização, inversão, exceção omitida ou troca conceitual conduz ao erro."
+                  />
+                </Field>
+                <Field label="Dicas de fixação — uma por linha" wide>
+                  <textarea
+                    required={questionForm.status === "ACTIVE"}
+                    rows={5}
+                    className={inputClass}
+                    value={questionForm.fixationTips}
+                    onChange={(e) => setQuestionForm((v) => ({ ...v, fixationTips: e.target.value }))}
+                    placeholder="Vírus precisa de arquivo hospedeiro e normalmente de execução humana.\nWorm é autônomo e se espalha pela rede.\nPegadinha: ambos são malwares, mas não se propagam do mesmo modo."
+                  />
+                </Field>
+                <Field label="Tabela comparativa — Critério | Conceito 1 | Conceito 2" wide>
+                  <input
+                    required={questionForm.status === "ACTIVE"}
+                    className={`${inputClass} font-mono`}
+                    value={questionForm.comparisonHeaders}
+                    onChange={(e) => setQuestionForm((v) => ({ ...v, comparisonHeaders: e.target.value }))}
+                    placeholder="Cabeçalhos: Termo no item | Trecho equivalente no texto | Validação"
+                  />
+                  <textarea
+                    required={questionForm.status === "ACTIVE"}
+                    rows={5}
+                    className={`${inputClass} font-mono`}
+                    value={questionForm.comparisonRows}
+                    onChange={(e) => setQuestionForm((v) => ({ ...v, comparisonRows: e.target.value }))}
+                    placeholder="Hospedeiro | Vírus: precisa | Worm: não precisa\nAção humana | Vírus: normalmente exige | Worm: não exige\nPropagação | Vírus: arquivos e mídias | Worm: redes"
                   />
                 </Field>
                 <FormActions

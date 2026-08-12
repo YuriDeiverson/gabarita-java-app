@@ -6,16 +6,17 @@ const nativeFetch=globalThis.fetch.bind(globalThis);
 const GENERIC_LOAD_ERROR = 'Erro ao carregar. Tente novamente mais tarde.';
 const GENERIC_ACTION_ERROR = 'Não foi possível concluir a operação. Tente novamente mais tarde.';
 const REQUEST_TIMEOUT_MS = 15_000;
+const QUESTION_BANK_TIMEOUT_MS = 45_000;
 const RETRYABLE_HTTP_STATUSES = new Set([408, 429, 502, 503, 504]);
 const wait = (milliseconds: number) =>
   new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 
-const requestOnce = async (input: RequestInfo | URL, init: RequestInit): Promise<Response> => {
+const requestOnce = async (input: RequestInfo | URL, init: RequestInit, timeoutMs: number): Promise<Response> => {
   const controller = new AbortController();
   const onAbort = () => controller.abort();
   if (init.signal?.aborted) controller.abort();
   else init.signal?.addEventListener('abort', onAbort, { once: true });
-  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     return await nativeFetch(input, { ...init, signal: controller.signal });
@@ -25,7 +26,9 @@ const requestOnce = async (input: RequestInfo | URL, init: RequestInit): Promise
   }
 };
 
-const fetch=async(input:RequestInfo|URL,init:RequestInit={}):Promise<Response>=>{
+const isAbortError=(error:unknown)=>error instanceof Error&&error.name==='AbortError';
+
+const fetch=async(input:RequestInfo|URL,init:RequestInit={},timeoutMs=REQUEST_TIMEOUT_MS):Promise<Response>=>{
   try {
     const session = await getValidSession();
     const headers=new Headers(init.headers);
@@ -35,15 +38,17 @@ const fetch=async(input:RequestInfo|URL,init:RequestInit={}):Promise<Response>=>
     const retrySafe = method === 'GET' || method === 'HEAD';
     let response: Response;
     try {
-      response=await requestOnce(input,requestInit);
+      response=await requestOnce(input,requestInit,timeoutMs);
     } catch (error) {
-      if (!retrySafe || init.signal?.aborted) throw error;
+      // Um timeout já consumiu toda a janela da operação. Repeti-la imediatamente
+      // duplica a carga no servidor e prolonga o erro percebido pelo usuário.
+      if (!retrySafe || init.signal?.aborted || isAbortError(error)) throw error;
       await wait(400);
-      response=await requestOnce(input,requestInit);
+      response=await requestOnce(input,requestInit,timeoutMs);
     }
     if(retrySafe&&RETRYABLE_HTTP_STATUSES.has(response.status)){
       await wait(400);
-      response=await requestOnce(input,requestInit);
+      response=await requestOnce(input,requestInit,timeoutMs);
     }
     if(response.status===401&&session){
       const renewedSession=await getValidSession({
@@ -52,7 +57,7 @@ const fetch=async(input:RequestInfo|URL,init:RequestInit={}):Promise<Response>=>
       });
       if(renewedSession){
         headers.set('Authorization',`Bearer ${renewedSession.access_token}`);
-        response=await requestOnce(input,{...init,headers});
+        response=await requestOnce(input,{...init,headers},timeoutMs);
       }
     }
     return response;
@@ -442,15 +447,46 @@ export interface QuestionNote {
   updated_at?: string;
 }
 
+export interface DetailedQuestionGuide {
+  detailedTopic?:string;
+  conceptExplanation?:string;
+  decisiveEvidence?:string;
+  answerAnalysis?:string;
+  examTrap?:string;
+  fixationTips?:string[];
+  comparisonHeaders?:{criterion:string;left:string;right:string};
+  comparisonRows?:Array<{criterion:string;left:string;right:string}>;
+}
+
+export interface QuestionTaxonomyTopic {
+  id:string;
+  slug:string;
+  name:string;
+  count:number;
+}
+
+export interface QuestionTaxonomyDiscipline {
+  id:string;
+  slug:string;
+  name:string;
+  area:string;
+  count:number;
+  topics:QuestionTaxonomyTopic[];
+}
+
 export const questionsApi = {
+  taxonomy: (courseId='',includeEmpty=false) => {
+    const params=new URLSearchParams();if(courseId)params.set('courseId',courseId);if(includeEmpty)params.set('includeEmpty','true');
+    return jsonRequest<QuestionTaxonomyDiscipline[]>(`/questions/taxonomy${params.size?`?${params}`:''}`);
+  },
   all: async (): Promise<import('../types').Question[]> => {
-    const response = await fetch(`${API_BASE_URL}/questions/all`);
+    const response = await fetch(`${API_BASE_URL}/questions/all`,{},QUESTION_BANK_TIMEOUT_MS);
     if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
     const rows = await response.json();
     return rows.map(questionFromApiRow);
   },
   forCourse: async (courseId: string): Promise<import('../types').Question[]> => {
-    const response = await fetch(`${API_BASE_URL}/questions/course/${encodeURIComponent(courseId)}`);
+    const response = await fetch(`${API_BASE_URL}/questions/course/${encodeURIComponent(courseId)}`,{},QUESTION_BANK_TIMEOUT_MS);
     if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
     const rows = await response.json();
     return rows.map(questionFromApiRow);
@@ -471,6 +507,7 @@ export const questionsApi = {
     const params=new URLSearchParams({questionId,courseId});
     return jsonRequest<void>(`/questions/notes?${params}`, {method:'DELETE'});
   },
+  guide: (questionId:string) => jsonRequest<DetailedQuestionGuide>(`/questions/${encodeURIComponent(questionId)}/guide`),
 };
 
 const arrayFromApi=(value:unknown):string[]=>{
@@ -487,7 +524,10 @@ const questionFromApiRow=(row:any):import('../types').Question=>{
   return { id: row.id, category: row.category, area: row.area, board: row.board || row.exam_board,
     topic: row.topic || row.category, text: row.text,
     options: Array.isArray(options) ? options : undefined,
-    correct: row.correct_option || row.correct, explanation: row.explanation, reference: row.reference,
+    correct: row.correct_option || row.correct, explanation: row.explanation,
+    detailedTopic: row.detailed_topic,
+    subjectId: row.subject_id, studySubjectId: row.study_subject_id, topicId: row.topic_id,
+    reference: row.reference,
     passageId: row.passage_id, passageTitle: row.passage_title, passageContent: row.passage_content,
     year: row.year == null ? undefined : Number(row.year), difficulty: row.difficulty == null ? undefined : Number(row.difficulty),
     courseIds: arrayFromApi(row.course_ids), roles: arrayFromApi(row.roles),
@@ -626,8 +666,11 @@ export interface SharedStudySubject {
 
 export interface AdminPassage { id: string; title: string; content: string; source?: string; }
 export interface AdminQuestion {
-  id: string; courseId: string; category: string; topic: string; board: string; type: string; text: string;
+  id: string; courseId: string; subjectId?:string; topicId?:string; category: string; topic: string; board: string; type: string; text: string;
   correct: string; explanation?: string; reference?: string; status?: string; passageId?: string | null;
+  detailedTopic?: string; conceptExplanation?: string; decisiveEvidence?:string; answerAnalysis?: string; examTrap?:string; fixationTips?: string[];
+  comparisonHeaders?: {criterion:string;left:string;right:string};
+  comparisonRows?: Array<{criterion:string;left:string;right:string}>;
   passageTitle?: string; pendingReports?: number; options: Array<{ label: string; text: string }>;
 }
 export interface AdminQuestionPage {
@@ -649,6 +692,7 @@ export const catalogApi = {
   contest: (id:string) => jsonRequest<CatalogContest>(`/catalog/contests/${encodeURIComponent(id)}`),
   contestNoticePdf: (id:string) => fileRequest<Blob>(`/catalog/contests/${id}/notice-pdf`, undefined, 'blob'),
   studyLibrary: () => jsonRequest<SharedStudySubject[]>('/catalog/study-library'),
+  studySubject: (id:string) => jsonRequest<SharedStudySubject>(`/catalog/study-library/${encodeURIComponent(id)}`),
 };
 
 export const adminApi = {

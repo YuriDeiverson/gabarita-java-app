@@ -66,6 +66,24 @@ public class CatalogController {
             item.put("updatedAt",row.get("updated_at"));result.add(item);}return result;
     }
 
+    @GetMapping("/study-library/{id}")
+    public Map<String,Object> studySubject(@PathVariable UUID id){
+        var rows=jdbc.sql("""
+          SELECT id::text id,canonical_key,title,discipline,study_group,study_objective,review_summary::text review_summary_json,
+            base_content,key_takeaways::text key_takeaways_json,content_blocks::text content_blocks_json,updated_at
+          FROM shared_study_subjects WHERE id=:id
+          """).param("id",id).query().listOfRows();
+        if(rows.isEmpty())throw new NoSuchElementException("Assunto não encontrado");
+        var row=rows.getFirst();var item=new LinkedHashMap<String,Object>();
+        item.put("id",row.get("id"));item.put("canonicalKey",row.get("canonical_key"));item.put("title",row.get("title"));
+        item.put("discipline",row.get("discipline"));item.put("studyGroup",row.get("study_group"));
+        item.put("studyObjective",row.get("study_objective"));item.put("content",row.get("base_content"));
+        try{item.put("keyTakeaways",json.readTree(String.valueOf(row.get("key_takeaways_json"))));}catch(Exception ignored){item.put("keyTakeaways",List.of());}
+        try{item.put("reviewSummary",json.readTree(String.valueOf(row.get("review_summary_json"))));}catch(Exception ignored){item.put("reviewSummary",List.of());}
+        try{item.put("contentBlocks",json.readTree(String.valueOf(row.get("content_blocks_json"))));}catch(Exception ignored){item.put("contentBlocks",List.of());}
+        item.put("updatedAt",row.get("updated_at"));return item;
+    }
+
     List<Map<String,Object>> catalog(boolean includeInactive,boolean includeCurriculum){
         var contests=jdbc.sql("""
           SELECT id,code,label,acronym,organization,description,board,exam_date,status,state,area,education,

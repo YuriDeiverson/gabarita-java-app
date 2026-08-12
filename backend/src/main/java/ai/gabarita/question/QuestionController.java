@@ -38,16 +38,47 @@ public class QuestionController {
       return questions(courseId);
     }
 
+    @GetMapping("/taxonomy")
+    public List<Map<String,Object>> taxonomy(@RequestParam(defaultValue="") String courseId,
+      @RequestParam(defaultValue="false") boolean includeEmpty){
+      var rows=jdbc.sql("""
+        SELECT s.id::text subject_id,s.slug subject_slug,s.name subject_name,s.area,
+          t.id::text topic_id,t.slug topic_slug,t.name topic_name,
+          COUNT(q.id) FILTER (WHERE q.status IN('ACTIVE','ANNULLED')) question_count
+        FROM subjects s JOIN topics t ON t.subject_id=s.id AND t.active
+        LEFT JOIN questions q ON q.subject_id=s.id AND q.topic_id=t.id
+          AND (:course='' OR EXISTS(SELECT 1 FROM question_courses qc WHERE qc.question_id=q.id AND qc.course_id=:course))
+        WHERE s.exam_id IS NULL AND s.active
+        GROUP BY s.id,s.slug,s.name,s.area,s.position,t.id,t.slug,t.name,t.position
+        HAVING :includeEmpty OR COUNT(q.id) FILTER (WHERE q.status IN('ACTIVE','ANNULLED'))>0
+        ORDER BY s.area,s.position,s.name,t.position,t.name
+        """).param("course",courseId.trim()).param("includeEmpty",includeEmpty).query().listOfRows();
+      var disciplines=new LinkedHashMap<String,Map<String,Object>>();
+      for(var row:rows){String id=String.valueOf(row.get("subject_id"));
+        var discipline=disciplines.computeIfAbsent(id,key->{var item=new LinkedHashMap<String,Object>();
+          item.put("id",key);item.put("slug",row.get("subject_slug"));item.put("name",row.get("subject_name"));
+          item.put("area",row.get("area"));item.put("count",0L);item.put("topics",new ArrayList<Map<String,Object>>());return item;});
+        long count=((Number)row.get("question_count")).longValue();
+        discipline.put("count",((Number)discipline.get("count")).longValue()+count);
+        @SuppressWarnings("unchecked") var topics=(List<Map<String,Object>>)discipline.get("topics");
+        topics.add(Map.of("id",String.valueOf(row.get("topic_id")),"slug",String.valueOf(row.get("topic_slug")),
+          "name",String.valueOf(row.get("topic_name")),"count",count));
+      }
+      return new ArrayList<>(disciplines.values());
+    }
+
     private List<Map<String,Object>> questions(String courseId) {
       try {
       var questions=jdbc.sql("""
-        SELECT q.id::text id,COALESCE(q.metadata->>'category',s.name,'Geral') category,
-        COALESCE(NULLIF(q.metadata->>'area',''),CASE WHEN COALESCE(q.metadata->>'category',s.name,'') LIKE 'Conhecimentos Específicos%' THEN 'Conhecimentos Específicos' ELSE 'Conhecimentos Gerais' END) area,
-        COALESCE(NULLIF(q.metadata->>'topic',''),q.metadata->>'category',s.name,'Geral') topic,q.statement text,
+        SELECT q.id::text id,COALESCE(s.name,q.metadata->>'category','Geral') category,
+        COALESCE(s.area,NULLIF(q.metadata->>'area',''),'Outros') area,
+        COALESCE(t.name,NULLIF(q.metadata->>'topic',''),s.name,'Geral') topic,
+        s.id::text subject_id,t.id::text topic_id,q.statement text,
         q.board,q.type,q.difficulty,
         COALESCE(q.exam_year,NULLIF(substring(COALESCE(q.metadata->>'reference','') FROM '19[0-9]{2}|20[0-9]{2}'),'')::integer) AS "year",
         CASE WHEN q.status='ANNULLED' THEN 'Anulada' ELSE q.correct_answer #>> '{}' END correct,
         COALESCE(q.explanation,'') explanation,COALESCE(q.metadata->>'reference',q.board,'') reference,
+        q.detailed_topic,
         COALESCE(q.passage_id::text,NULLIF(q.metadata->>'passageId','')) passage_id,
         p.title passage_title,p.content passage_content,
         EXISTS(SELECT 1 FROM question_reports report WHERE report.question_id=q.id AND report.reason='OUTDATED'
@@ -76,7 +107,7 @@ public class QuestionController {
         COALESCE((SELECT jsonb_agg(jsonb_build_object('label',qo.label,'text',qo.content) ORDER BY qo.position)
           FROM question_options qo WHERE qo.question_id=q.id),'[]'::jsonb)::text options
         FROM questions q
-        LEFT JOIN subjects s ON s.id=q.subject_id LEFT JOIN passages p ON p.id=q.passage_id
+        LEFT JOIN subjects s ON s.id=q.subject_id LEFT JOIN topics t ON t.id=q.topic_id LEFT JOIN passages p ON p.id=q.passage_id
         WHERE (:course='' OR EXISTS(SELECT 1 FROM question_courses course WHERE course.question_id=q.id AND course.course_id=:course))
           AND q.status IN('ACTIVE','ANNULLED') ORDER BY q.created_at,q.id
         """).param("course",courseId).query().listOfRows();
@@ -84,6 +115,7 @@ public class QuestionController {
       // main subject while they are read, so the new filter works immediately
       // without changing manually curated topic metadata.
       questions.forEach(this::inferLegacyTopic);
+      attachSubjectGuidance(questions);
       return questions;
       } catch (RuntimeException error) {
         // A listagem global não pode ficar indisponível se algum dado opcional
@@ -98,12 +130,14 @@ public class QuestionController {
       String scope=courseId.isBlank()?"":" JOIN question_courses course ON course.question_id=q.id ";
       String condition=courseId.isBlank()?"":" AND course.course_id=:course ";
       String sql="""
-        SELECT q.id::text id,COALESCE(q.metadata->>'category',s.name,'Geral') category,
-        COALESCE(NULLIF(q.metadata->>'area',''),CASE WHEN COALESCE(q.metadata->>'category',s.name,'') LIKE 'Conhecimentos Específicos%' THEN 'Conhecimentos Específicos' ELSE 'Conhecimentos Gerais' END) area,
-        COALESCE(NULLIF(q.metadata->>'topic',''),q.metadata->>'category',s.name,'Geral') topic,q.statement text,
+        SELECT q.id::text id,COALESCE(s.name,q.metadata->>'category','Geral') category,
+        COALESCE(s.area,NULLIF(q.metadata->>'area',''),'Outros') area,
+        COALESCE(t.name,NULLIF(q.metadata->>'topic',''),s.name,'Geral') topic,
+        s.id::text subject_id,t.id::text topic_id,q.statement text,
         q.board,q.type,q.difficulty,q.exam_year AS "year",
         CASE WHEN q.status='ANNULLED' THEN 'Anulada' ELSE q.correct_answer #>> '{}' END correct,
         COALESCE(q.explanation,'') explanation,COALESCE(q.metadata->>'reference',q.board,'') reference,
+        q.detailed_topic,
         COALESCE(q.passage_id::text,NULLIF(q.metadata->>'passageId','')) passage_id,
         p.title passage_title,p.content passage_content,
         '[]'::text course_ids,'[]'::text roles,'[]'::text education_levels,
@@ -112,14 +146,34 @@ public class QuestionController {
           FROM question_options qo WHERE qo.question_id=q.id),'[]'::jsonb)::text options
         FROM questions q
         """+scope+"""
-        LEFT JOIN subjects s ON s.id=q.subject_id LEFT JOIN passages p ON p.id=q.passage_id
+        LEFT JOIN subjects s ON s.id=q.subject_id LEFT JOIN topics t ON t.id=q.topic_id LEFT JOIN passages p ON p.id=q.passage_id
         WHERE q.status IN('ACTIVE','ANNULLED')
         """+condition+" ORDER BY q.created_at,q.id";
       var query=jdbc.sql(sql);
       if(!courseId.isBlank())query=query.param("course",courseId);
       var questions=query.query().listOfRows();
       questions.forEach(this::inferLegacyTopic);
+      attachSubjectGuidance(questions);
       return questions;
+    }
+
+    @GetMapping("/{questionId}/guide")
+    public Map<String,Object> detailedGuide(@PathVariable UUID questionId){
+      var rows=jdbc.sql("""
+        SELECT detailed_topic,concept_explanation,decisive_evidence,answer_analysis,exam_trap,
+          fixation_tips::text fixation_tips_json,comparison_headers::text comparison_headers_json,
+          comparison_rows::text comparison_rows_json
+        FROM questions WHERE id=:id AND status IN('ACTIVE','ANNULLED')
+        """).param("id",questionId).query().listOfRows();
+      if(rows.isEmpty())throw new NoSuchElementException("Questão não encontrada");
+      var row=rows.getFirst();var guide=new LinkedHashMap<String,Object>();
+      guide.put("detailedTopic",row.get("detailed_topic"));guide.put("conceptExplanation",row.get("concept_explanation"));
+      guide.put("decisiveEvidence",row.get("decisive_evidence"));guide.put("answerAnalysis",row.get("answer_analysis"));
+      guide.put("examTrap",row.get("exam_trap"));
+      try{guide.put("fixationTips",json.readTree(String.valueOf(row.get("fixation_tips_json"))));}catch(Exception ignored){guide.put("fixationTips",List.of());}
+      try{guide.put("comparisonHeaders",json.readTree(String.valueOf(row.get("comparison_headers_json"))));}catch(Exception ignored){guide.put("comparisonHeaders",Map.of());}
+      try{guide.put("comparisonRows",json.readTree(String.valueOf(row.get("comparison_rows_json"))));}catch(Exception ignored){guide.put("comparisonRows",List.of());}
+      return guide;
     }
     @PostMapping("/import/legacy") @Transactional public Map<String,Object> importLegacy(@RequestParam String courseId,@RequestBody List<LegacyQuestion> questions){
       currentUser.requireAdmin();
@@ -130,7 +184,9 @@ public class QuestionController {
           .param("course",courseId).param("legacy",legacyId).query(UUID.class).list();
         String answer;try{answer=json.writeValueAsString(q.correct());}catch(Exception e){throw new IllegalArgumentException("Gabarito inválido");}
         String metadata;try{metadata=json.writeValueAsString(Map.of("category",q.category(),"topic",q.topic()==null||q.topic().isBlank()?q.category():q.topic(),"reference",q.reference()==null?"":q.reference(),"passageId",q.passageId()==null?"":q.passageId()));}catch(Exception e){throw new IllegalArgumentException("Metadados inválidos");}
-        String status="Anulada".equalsIgnoreCase(q.correct())?"ANNULLED":"ACTIVE";
+        // O formato legado não contém o guia aprofundado obrigatório. Novas
+        // importações entram como rascunho até a revisão editorial.
+        String status="DRAFT";
         if(existing.isEmpty()){
           var sameStatement=jdbc.sql("""
             SELECT id FROM questions WHERE md5(regexp_replace(lower(statement),'[^[:alnum:]]','','g'))
@@ -143,8 +199,8 @@ public class QuestionController {
           }else{questionId=sameStatement.getFirst();linked++;}
           attachCourse(questionId,courseId,legacyId);
         }else{
-          jdbc.sql("UPDATE questions SET statement=:text,explanation=:explanation,status=:status,correct_answer=CAST(:answer AS jsonb),metadata=CAST(:metadata AS jsonb),updated_at=now() WHERE id=:id")
-            .param("text",q.text()).param("explanation",q.explanation()).param("status",status).param("answer",answer).param("metadata",metadata).param("id",existing.getFirst()).update();updated++;
+          jdbc.sql("UPDATE questions SET statement=:text,explanation=:explanation,correct_answer=CAST(:answer AS jsonb),metadata=CAST(:metadata AS jsonb),updated_at=now() WHERE id=:id")
+            .param("text",q.text()).param("explanation",q.explanation()).param("answer",answer).param("metadata",metadata).param("id",existing.getFirst()).update();updated++;
         }
       }
       return Map.of("imported",imported,"linked",linked,"updated",updated,"total",questions.size());
@@ -207,6 +263,50 @@ public class QuestionController {
     private String reportReason(String value){String reason=value.trim().toUpperCase(Locale.ROOT);
       if(!Set.of("ANSWER","STATEMENT","EXPLANATION","OUTDATED","OTHER").contains(reason))throw new IllegalArgumentException("Motivo de sinalização inválido");return reason;}
     private String text(String value){return value==null?"":value.trim();}
+
+    private record SubjectGuidance(String id,String titleKey,String disciplineKey){}
+
+    private void attachSubjectGuidance(List<Map<String,Object>> questions){
+      try{
+        var subjectRows=jdbc.sql("""
+          SELECT id::text id,title,discipline FROM shared_study_subjects
+          """).query().listOfRows();
+        var subjects=new ArrayList<SubjectGuidance>(subjectRows.size());
+        for(var subject:subjectRows){
+          String titleKey=subjectKey(String.valueOf(subject.getOrDefault("title","")));
+          if(!titleKey.isBlank())subjects.add(new SubjectGuidance(String.valueOf(subject.get("id")),titleKey,
+            subjectKey(String.valueOf(subject.getOrDefault("discipline","")))));
+        }
+        // Muitas questões compartilham a mesma disciplina e o mesmo assunto.
+        // Resolva cada combinação uma única vez em vez de repetir a normalização
+        // de centenas de materiais para cada questão do banco.
+        var resolvedSubjects=new HashMap<String,Optional<String>>();
+        for(var question:questions){
+          String topicKey=subjectKey(String.valueOf(question.getOrDefault("topic","")));
+          String categoryKey=subjectKey(String.valueOf(question.getOrDefault("category","")));
+          if(topicKey.isBlank())continue;
+          String resolutionKey=categoryKey+'\u0000'+topicKey;
+          Optional<String> cached=resolvedSubjects.get(resolutionKey);
+          if(cached!=null){cached.ifPresent(id->question.put("study_subject_id",id));continue;}
+          SubjectGuidance best=null;int bestScore=0;
+          for(var subject:subjects){
+            int score=subject.titleKey().equals(topicKey)?100:
+              subject.titleKey().length()>8&&(subject.titleKey().contains(topicKey)||topicKey.contains(subject.titleKey()))?60:0;
+            if(score==0)continue;
+            String disciplineKey=subject.disciplineKey();
+            if(!categoryKey.isBlank()&&(disciplineKey.equals(categoryKey)||disciplineKey.contains(categoryKey)||categoryKey.contains(disciplineKey)))score+=15;
+            if(score>bestScore){best=subject;bestScore=score;}
+          }
+          Optional<String> resolved=best==null?Optional.empty():Optional.of(best.id());
+          resolvedSubjects.put(resolutionKey,resolved);
+          resolved.ifPresent(id->question.put("study_subject_id",id));
+        }
+      }catch(RuntimeException error){
+        log.warn("Orientações dos assuntos indisponíveis; mantendo os gabaritos específicos.",error);
+      }
+    }
+
+    private String subjectKey(String value){return normalized(value).replaceFirst("^(?:\\d+\\s+)+","");}
 
     private void inferLegacyTopic(Map<String,Object> question){
       String category=text(String.valueOf(question.getOrDefault("category","")));

@@ -55,6 +55,17 @@ export interface Question {
   options?: { label: QuestionChoice; text: string }[];
   correct: QuestionAnswer | 'Anulada';
   explanation: string;
+  detailedTopic?: string;
+  conceptExplanation?: string;
+  decisiveEvidence?: string;
+  answerAnalysis?: string;
+  examTrap?: string;
+  fixationTips?: string[];
+  comparisonHeaders?: { criterion: string; left: string; right: string };
+  comparisonRows?: Array<{ criterion: string; left: string; right: string }>;
+  subjectId?: string;
+  studySubjectId?: string;
+  topicId?: string;
   reference?: string; // e.g., "CEBRASPE - TRT 8 - 2022"
   passageId?: string; // e.g., "capitalismo-vigilancia"
   passageTitle?: string;
