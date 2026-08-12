@@ -7,6 +7,7 @@ import {
 import { supabase } from './supabase';
 
 const ACCESS_TOKEN_REFRESH_MARGIN_MS = 60_000;
+const REFRESH_RETRY_DELAYS_MS = [250, 750];
 
 let refreshInFlight: Promise<Session | null> | null = null;
 let localSignOutInFlight: Promise<void> | null = null;
@@ -26,6 +27,26 @@ const discardInvalidSession = async () => {
 const isTemporaryRefreshFailure = (error: AuthError) =>
   isAuthRetryableFetchError(error) || isAuthRefreshDiscardedError(error);
 
+const wait = (milliseconds: number) =>
+  new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
+
+const refreshPersistedSession = async (): Promise<Session | null> => {
+  for (let attempt = 0; ; attempt += 1) {
+    const { data, error } = await supabase.auth.refreshSession();
+
+    if (!error) return data.session;
+    if (!isTemporaryRefreshFailure(error)) {
+      await discardInvalidSession();
+      return null;
+    }
+    if (attempt >= REFRESH_RETRY_DELAYS_MS.length) throw error;
+
+    // Mobile browsers often resume before the network interface is ready.
+    // A short bounded retry avoids treating that transition as a logout.
+    await wait(REFRESH_RETRY_DELAYS_MS[attempt]);
+  }
+};
+
 const renewSession = async (rejectedAccessToken?: string): Promise<Session | null> => {
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
@@ -43,22 +64,12 @@ const renewSession = async (rejectedAccessToken?: string): Promise<Session | nul
         }
       }
 
-      const { data, error } = await supabase.auth.refreshSession();
-
-      if (error) {
-        if (!isTemporaryRefreshFailure(error)) {
-          await discardInvalidSession();
-          return null;
-        }
-        throw error;
-      }
-
-      if (!data.session) {
+      const refreshedSession = await refreshPersistedSession();
+      if (!refreshedSession) {
         await discardInvalidSession();
         return null;
       }
-
-      return data.session;
+      return refreshedSession;
     })().finally(() => {
       refreshInFlight = null;
     });

@@ -34,11 +34,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isSupabaseConfigured) { setLoading(false); return; }
     let active = true;
-    getValidSession().then(nextSession => {
+    void (async () => {
+      // Restore the persisted session first so a slow mobile reconnection does
+      // not unnecessarily hold the entire application on the login screen.
+      const { data, error } = await supabase.auth.getSession();
       if (!active) return;
-      if (nextSession?.user.id) isolateUserStorage(nextSession.user.id);
-      setSession(nextSession); setLoading(false);
-    }).catch(() => { if (active) setLoading(false); });
+      if (error) { setLoading(false); return; }
+
+      const persistedSession = data.session;
+      if (persistedSession?.user.id) isolateUserStorage(persistedSession.user.id);
+      setSession(persistedSession);
+      setLoading(false);
+      if (!persistedSession) return;
+
+      try {
+        const nextSession = await getValidSession();
+        if (active) setSession(nextSession);
+      } catch {
+        // A temporary refresh failure must not discard a known session. API
+        // requests will retry renewal when connectivity is available again.
+      }
+    })();
     const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (event === 'SIGNED_OUT') {
         clearApplicationStorage();
@@ -48,13 +64,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(nextSession); setLoading(false);
     });
     const refreshAfterReturning = () => {
-      if (document.visibilityState === 'visible') void getValidSession().catch(() => {});
+      if (document.visibilityState !== 'visible') return;
+      void getValidSession()
+        .then(nextSession => { if (active) setSession(nextSession); })
+        .catch(() => {});
     };
     window.addEventListener('focus', refreshAfterReturning);
+    window.addEventListener('online', refreshAfterReturning);
     document.addEventListener('visibilitychange', refreshAfterReturning);
     return () => {
       active=false; listener.subscription.unsubscribe();
       window.removeEventListener('focus', refreshAfterReturning);
+      window.removeEventListener('online', refreshAfterReturning);
       document.removeEventListener('visibilitychange', refreshAfterReturning);
     };
   }, []);

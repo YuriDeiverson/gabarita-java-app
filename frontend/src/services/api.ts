@@ -5,19 +5,46 @@ export const API_BASE_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/
 const nativeFetch=globalThis.fetch.bind(globalThis);
 const GENERIC_LOAD_ERROR = 'Erro ao carregar. Tente novamente mais tarde.';
 const GENERIC_ACTION_ERROR = 'Não foi possível concluir a operação. Tente novamente mais tarde.';
-const fetch=async(input:RequestInfo|URL,init:RequestInit={}):Promise<Response>=>{
+const REQUEST_TIMEOUT_MS = 15_000;
+const RETRYABLE_HTTP_STATUSES = new Set([408, 429, 502, 503, 504]);
+const wait = (milliseconds: number) =>
+  new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
+
+const requestOnce = async (input: RequestInfo | URL, init: RequestInit): Promise<Response> => {
   const controller = new AbortController();
   const onAbort = () => controller.abort();
-  init.signal?.addEventListener('abort', onAbort, { once: true });
-  const timeout = window.setTimeout(() => {
-    controller.abort();
-  }, 20_000);
+  if (init.signal?.aborted) controller.abort();
+  else init.signal?.addEventListener('abort', onAbort, { once: true });
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
+  try {
+    return await nativeFetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+    init.signal?.removeEventListener('abort', onAbort);
+  }
+};
+
+const fetch=async(input:RequestInfo|URL,init:RequestInit={}):Promise<Response>=>{
   try {
     const session = await getValidSession();
     const headers=new Headers(init.headers);
     if(session?.access_token)headers.set('Authorization',`Bearer ${session.access_token}`);
-    let response=await nativeFetch(input,{...init,headers,signal:controller.signal});
+    const requestInit = { ...init, headers };
+    const method = String(init.method || 'GET').toUpperCase();
+    const retrySafe = method === 'GET' || method === 'HEAD';
+    let response: Response;
+    try {
+      response=await requestOnce(input,requestInit);
+    } catch (error) {
+      if (!retrySafe || init.signal?.aborted) throw error;
+      await wait(400);
+      response=await requestOnce(input,requestInit);
+    }
+    if(retrySafe&&RETRYABLE_HTTP_STATUSES.has(response.status)){
+      await wait(400);
+      response=await requestOnce(input,requestInit);
+    }
     if(response.status===401&&session){
       const renewedSession=await getValidSession({
         forceRefresh:true,
@@ -25,16 +52,13 @@ const fetch=async(input:RequestInfo|URL,init:RequestInit={}):Promise<Response>=>
       });
       if(renewedSession){
         headers.set('Authorization',`Bearer ${renewedSession.access_token}`);
-        response=await nativeFetch(input,{...init,headers,signal:controller.signal});
+        response=await requestOnce(input,{...init,headers});
       }
     }
     return response;
   } catch {
     // Não exponha falhas de rede, timeout ou detalhes de serviços ao usuário.
     throw new Error(GENERIC_LOAD_ERROR);
-  } finally {
-    window.clearTimeout(timeout);
-    init.signal?.removeEventListener('abort', onAbort);
   }
 };
 
@@ -502,22 +526,11 @@ export const analyticsApi = {
 };
 
 const jsonRequest = async <T>(path: string, options?: RequestInit): Promise<T> => {
-  const controller = new AbortController();
-  let timeout = 0;
   try {
-    const response = await Promise.race([
-      fetch(`${API_BASE_URL}${path}`, {
-        ...options,
-        signal: options?.signal || controller.signal,
-        headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
-      }),
-      new Promise<Response>((_, reject) => {
-        timeout = window.setTimeout(() => {
-          controller.abort();
-          reject(new Error(GENERIC_LOAD_ERROR));
-        }, 20_000);
-      }),
-    ]);
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
+    });
     if (!response.ok) throw new Error(await getApiErrorMessage(response, GENERIC_ACTION_ERROR));
     if (response.status === 204) return undefined as T;
     return response.json();
@@ -526,8 +539,6 @@ const jsonRequest = async <T>(path: string, options?: RequestInit): Promise<T> =
       throw error;
     }
     throw new Error(GENERIC_LOAD_ERROR);
-  } finally {
-    window.clearTimeout(timeout);
   }
 };
 
@@ -536,18 +547,8 @@ const fileRequest = async <T extends Blob | Record<string, unknown> | void>(
   options?: RequestInit,
   responseType: 'blob' | 'json' | 'none' = 'json',
 ): Promise<T> => {
-  const controller = new AbortController();
-  let timeout = 0;
   try {
-    const response = await Promise.race([
-      fetch(`${API_BASE_URL}${path}`, { ...options, signal: options?.signal || controller.signal }),
-      new Promise<Response>((_, reject) => {
-        timeout = window.setTimeout(() => {
-          controller.abort();
-          reject(new Error(GENERIC_LOAD_ERROR));
-        }, 20_000);
-      }),
-    ]);
+    const response = await fetch(`${API_BASE_URL}${path}`, options);
     if (!response.ok) throw new Error(await getApiErrorMessage(response, GENERIC_ACTION_ERROR));
     if (responseType === 'none' || response.status === 204) return undefined as T;
     if (responseType === 'blob') return response.blob() as Promise<T>;
@@ -557,8 +558,6 @@ const fileRequest = async <T extends Blob | Record<string, unknown> | void>(
       throw error;
     }
     throw new Error(GENERIC_LOAD_ERROR);
-  } finally {
-    window.clearTimeout(timeout);
   }
 };
 

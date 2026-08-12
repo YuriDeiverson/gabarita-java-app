@@ -53,7 +53,6 @@ export default function QuestionBankTab({
   const [error, setError] = useState("");
   const [summary, setSummary] = useState("");
   const autoPauseKey = useRef("");
-  const activeSessionLoaded = useRef(false);
 
   const planId = (() => {
     try {
@@ -87,17 +86,12 @@ export default function QuestionBankTab({
           : "Timer indisponível.",
       );
     } finally {
-      activeSessionLoaded.current = true;
       setTimerLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadActive();
-  }, [loadActive]);
-
-  useEffect(() => {
-    if (visible && activeSessionLoaded.current) void loadActive();
+    if (visible) void loadActive();
   }, [loadActive, visible]);
 
   useEffect(() => {

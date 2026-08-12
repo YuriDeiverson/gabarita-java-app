@@ -2163,3 +2163,27 @@ body { overflow-x: clip; overscroll-behavior-x: none; }
   #quiz-tab-container .quiz-heading h2 { font-size: 16px; line-height: 1.5 !important; }
   #quiz-tab-container .quiz-kpi > span { padding-right: 12px; line-height: 1.45 !important; }
 }
+
+/* Keep every practice KPI inside the overview card at narrow widths. */
+#quiz-tab-container .quiz-overview,
+#quiz-tab-container .quiz-performance-panel,
+#quiz-tab-container .quiz-stats {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+#quiz-tab-container .quiz-performance-panel {
+  overflow: hidden !important;
+}
+#quiz-tab-container .quiz-kpi {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden !important;
+}
+#quiz-tab-container .quiz-kpi > span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  hyphens: auto;
+}

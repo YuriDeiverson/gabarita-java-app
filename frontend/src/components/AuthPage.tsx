@@ -1,9 +1,22 @@
 import { FormEvent, useState } from 'react';
 import { BookOpenCheck, Eye, EyeOff, LockKeyhole, Mail, Sparkles, UserRound } from 'lucide-react';
+import { isAuthRetryableFetchError, type AuthError } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '../auth/supabase';
 
 const authenticationErrorMessage = (cause: unknown) => {
-  if (cause instanceof Error && cause.message.trim()) return cause.message;
+  const error = cause as Partial<AuthError> | undefined;
+  const code = String(error?.code || '').toLowerCase();
+  const message = String(error?.message || '').trim();
+  if (code === 'invalid_credentials' || /invalid login credentials/i.test(message)) {
+    return 'E-mail ou senha incorretos.';
+  }
+  if (
+    (cause instanceof Error && isAuthRetryableFetchError(cause as AuthError)) ||
+    /failed to fetch|network|timeout|timed out/i.test(message)
+  ) {
+    return 'Não foi possível conectar agora. Confira sua internet e tente novamente.';
+  }
+  if (message) return message;
   if (cause && typeof cause === 'object') {
     const record = cause as Record<string, unknown>;
     for (const key of ['message', 'error_description', 'details', 'hint']) {
@@ -14,6 +27,21 @@ const authenticationErrorMessage = (cause: unknown) => {
     }
   }
   return 'Não foi possível concluir o cadastro. Verifique se o e-mail ainda existe e tente novamente.';
+};
+
+const wait = (milliseconds: number) =>
+  new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
+
+const signInWithRetry = async (email: string, password: string) => {
+  for (let attempt = 0; ; attempt += 1) {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (!error) return;
+    if (attempt === 0 && isAuthRetryableFetchError(error)) {
+      await wait(500);
+      continue;
+    }
+    throw error;
+  }
 };
 
 export default function AuthPage() {
@@ -33,8 +61,7 @@ export default function AuthPage() {
     setBusy(true);
     try{
       if(mode==='login'){
-        const {error:authError}=await supabase.auth.signInWithPassword({email:email.trim(),password});
-        if(authError)throw authError;
+        await signInWithRetry(email.trim(), password);
       }else{
         if(name.trim().length<2)throw new Error('Informe seu nome.');
         const {data,error:authError}=await supabase.auth.signUp({email:email.trim(),password,

@@ -33,9 +33,27 @@ interface Preparation {
 }
 
 const weekdayLabels: Record<number, string> = { 0: 'domingo', 1: 'segunda', 2: 'terça', 3: 'quarta', 4: 'quinta', 5: 'sexta', 6: 'sábado' };
+const CATALOG_CACHE_KEY = 'career_catalog_cache_v1';
 const formatDate = (value?: string) => value ? value.split('-').reverse().join('/') : 'A definir';
 const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const remainingDays = (examDate: string) => Math.max(0, Math.ceil((new Date(`${examDate}T00:00:00`).getTime() - Date.now()) / 86_400_000));
+
+const loadCatalogCache = (): CareerContest[] => {
+  try {
+    const cached = JSON.parse(localStorage.getItem(CATALOG_CACHE_KEY) || '[]');
+    return Array.isArray(cached) ? cached : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveCatalogCache = (contests: CareerContest[]) => {
+  try {
+    localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify(contests));
+  } catch {
+    // Storage can be unavailable in private browsing; fresh data still renders.
+  }
+};
 
 const planSettings = (plan: StudyPlan) => {
   try {
@@ -78,7 +96,7 @@ export default function CareerTab({
   const [error, setError] = useState('');
   const [preparationVersion, setPreparationVersion] = useState(0);
   const [remotePlans, setRemotePlans] = useState<StudyPlan[]>([]);
-  const [remoteContests, setRemoteContests] = useState<CareerContest[]>([]);
+  const [remoteContests, setRemoteContests] = useState<CareerContest[]>(loadCatalogCache);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [openingContestId, setOpeningContestId] = useState('');
@@ -102,8 +120,17 @@ export default function CareerTab({
       .catch(() => { if (!cancelled) setError('Suas preparações não puderam ser carregadas agora.'); })
       .finally(() => { if (!cancelled) setLoadingPlans(false); });
     catalogApi.contests()
-      .then(catalog => { if (!cancelled) setRemoteContests(catalog as CareerContest[]); })
-      .catch(() => { if (!cancelled) setError('Não foi possível carregar o catálogo de concursos. Tente novamente mais tarde.'); })
+      .then(catalog => {
+        if (cancelled) return;
+        const contests = catalog as CareerContest[];
+        setRemoteContests(contests);
+        saveCatalogCache(contests);
+      })
+      .catch(() => {
+        if (!cancelled) setError(remoteContests.length
+          ? 'Não foi possível atualizar o catálogo agora. Exibindo a última versão carregada.'
+          : 'Não foi possível carregar o catálogo de concursos. Tente novamente mais tarde.');
+      })
       .finally(() => { if (!cancelled) setLoadingCatalog(false); });
     return () => { cancelled = true; };
   }, [preparationVersion]);

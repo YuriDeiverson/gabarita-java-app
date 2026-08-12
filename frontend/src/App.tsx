@@ -1,15 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import StudyTab from "./components/StudyTab";
+import { lazy, Suspense, useState, useEffect, useCallback, useRef } from "react";
 import QuizTab, { GuidedReviewResult } from "./components/QuizTab";
-import ScheduleTab from "./components/ScheduleTab";
-import PerformanceTab from "./components/PerformanceTab";
 import StudyDashboard from "./components/StudyDashboard";
 import QuestionBankTab from "./components/QuestionBankTab";
-import QuestionNotesTab from "./components/QuestionNotesTab";
-import CareerTab from "./components/CareerTab";
-import PlanManager from "./components/PlanManager";
-import AdminPanel, { AdminSection } from "./components/AdminPanel";
-import InitialStudySetup from "./components/InitialStudySetup";
+import type { AdminSection } from "./components/AdminPanel";
 import {
   StudyPreferences,
   loadStudyPreferences,
@@ -63,6 +56,15 @@ import {
   ChevronDown,
   NotebookPen,
 } from "lucide-react";
+
+const StudyTab = lazy(() => import("./components/StudyTab"));
+const ScheduleTab = lazy(() => import("./components/ScheduleTab"));
+const PerformanceTab = lazy(() => import("./components/PerformanceTab"));
+const QuestionNotesTab = lazy(() => import("./components/QuestionNotesTab"));
+const CareerTab = lazy(() => import("./components/CareerTab"));
+const PlanManager = lazy(() => import("./components/PlanManager"));
+const AdminPanel = lazy(() => import("./components/AdminPanel"));
+const InitialStudySetup = lazy(() => import("./components/InitialStudySetup"));
 
 type AppTab =
   | "home"
@@ -523,18 +525,19 @@ export default function App() {
         if (cancelled) return;
         setServerPlans(plans);
         const activePlan = plans.find(isPrimaryPlan);
-        if (activePlan) hydrateActivePlan(activePlan);
-        else {
+        if (activePlan) {
+          hydrateActivePlan(activePlan);
+          // The active plan is an authoritative server result, but restoring it
+          // must not move the user away from the screen they were using.
+          setHomeMode("dashboard");
+        } else {
           localStorage.setItem("study_plan_deleted", "true");
           ["active_course", "study_config", "active_study_context"].forEach(key => localStorage.removeItem(key));
           setActiveCourse("seplag_informatica");
           setHasPlan(false);
+          setStudyContext(null);
+          setHomeMode(plans.length > 0 ? "plans" : "dashboard");
         }
-
-        setStudyContext(null);
-        localStorage.removeItem("active_study_context");
-        setActiveTab("home");
-        setHomeMode(plans.length === 1 && activePlan ? "dashboard" : plans.length > 0 ? "plans" : "dashboard");
       })
       .catch(() => {
         if (cancelled) return;
@@ -2123,6 +2126,12 @@ export default function App() {
 
         {/* Tab Content Rendering */}
         <div className="app-content min-w-0 flex-grow transition-all duration-300">
+          <Suspense fallback={(
+            <section className="mx-auto flex min-h-64 max-w-4xl items-center justify-center gap-3 text-slate-500" role="status">
+              <RefreshCw className="h-5 w-5 animate-spin" aria-hidden="true" />
+              <span>Carregando esta tela…</span>
+            </section>
+          )}>
           {activeTab === "home" && plansBootstrapping && (
             <section className="mx-auto flex min-h-64 max-w-4xl items-center justify-center gap-3 text-slate-500" role="status">
               <RefreshCw className="h-5 w-5 animate-spin" aria-hidden="true" />
@@ -2280,6 +2289,7 @@ export default function App() {
               onSectionChange={setAdminSection}
             />
           )}
+          </Suspense>
         </div>
         {contextRail}
       </main>

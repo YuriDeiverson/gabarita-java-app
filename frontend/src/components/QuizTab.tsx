@@ -5,6 +5,7 @@ import { CatalogContest, QuestionNote, catalogApi, questionsApi, quizProgressApi
 import { CheckCircle2, XCircle, Filter, Info, Bookmark, Flag, Target, ChevronDown, LoaderCircle, NotebookPen, Save, Trash2, X, BookOpenText } from 'lucide-react';
 import { ActiveStudyContext, normalizeStudySubjectTitle, normalizeStudyText, questionRelevance } from '../studyContext';
 import { filterQuestionsByBoards, questionBoardsFromConfig, questionExamBoard } from '../questionBanks';
+import { readQuestionCache, writeQuestionCache } from '../questionCache';
 
 interface QuizTabProps {
   mode?: 'session'|'all';
@@ -276,15 +277,25 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
       setQuestionsError('Nenhum curso ativo foi selecionado.');
       return;
     }
+    let cancelled=false;
+    const cacheKey=mode==='all'?'questions:all':`questions:course:${courseId}`;
+    void readQuestionCache(cacheKey).then(cachedQuestions=>{
+      if(cancelled||cachedQuestions.length===0)return;
+      const visible=mode==='all'?cachedQuestions:filterQuestionsByBoards(cachedQuestions,selectedQuestionBoards);
+      setQuestions(current=>current.length>0?current:visible);
+    });
     const request=mode==='all'?questionsApi.all():questionsApi.forCourse(courseId!);
     request.then(remoteQuestions => {
+      if(cancelled)return;
       const visible=mode==='all'?remoteQuestions:filterQuestionsByBoards(remoteQuestions, selectedQuestionBoards);
       setQuestions(visible);
       setQuestionsError(visible.length ? '' : mode==='all'?'Ainda não há questões cadastradas.':'Ainda não há questões cadastradas para este curso.');
+      void writeQuestionCache(cacheKey,remoteQuestions);
     }).catch(cause => {
-      setQuestions([]);
+      if(cancelled)return;
       setQuestionsError(cause instanceof Error ? cause.message : 'Erro ao carregar as questões. Tente novamente mais tarde.');
     });
+    return()=>{cancelled=true;};
   }, [mode,selectedQuestionBoards,currentCourseId]);
 
   useEffect(()=>{
