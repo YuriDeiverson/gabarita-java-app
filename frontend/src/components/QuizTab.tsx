@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { QuestionAnswer, Question } from '../types';
 import { CatalogContest, QuestionNote, catalogApi, questionsApi, quizProgressApi } from '../services/api';
-import { CheckCircle2, XCircle, Filter, Sparkles, AlertCircle, Info, Bookmark, Flag, Target, ChevronDown, ChevronUp, LoaderCircle, NotebookPen, Save, Trash2, X, BookOpenText, CircleHelp } from 'lucide-react';
+import { CheckCircle2, XCircle, Filter, Info, Bookmark, Flag, Target, ChevronDown, LoaderCircle, NotebookPen, Save, Trash2, X, BookOpenText } from 'lucide-react';
 import { ActiveStudyContext, normalizeStudySubjectTitle, normalizeStudyText, questionRelevance } from '../studyContext';
 import { filterQuestionsByBoards, questionBoardsFromConfig, questionExamBoard } from '../questionBanks';
 
@@ -213,8 +213,6 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
   const [advancedFiltersOpen,setAdvancedFiltersOpen]=useState(false);
   const [openFilterId,setOpenFilterId]=useState<string|null>(null);
   const filterPanelRef=useRef<HTMLDivElement>(null);
-  const [compactReadingView,setCompactReadingView]=useState(()=>typeof window!=='undefined'&&window.matchMedia('(max-width: 1199px)').matches);
-  const [passageVisibility,setPassageVisibility]=useState<Record<string,boolean>>({});
   const [visibleQuestions, setVisibleQuestions] = useState(()=>initialReviewDraft?.visibleQuestions||10);
   const [favoriteQuestions, setFavoriteQuestions] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('quiz_favorite_questions') || '[]')); } catch { return new Set(); }
@@ -240,13 +238,6 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     return()=>document.removeEventListener('mousedown',closeOnOutsideClick);
   },[openFilterId]);
 
-  useEffect(()=>{
-    const media=window.matchMedia('(max-width: 1199px)');
-    const sync=()=>setCompactReadingView(media.matches);
-    sync();
-    media.addEventListener('change',sync);
-    return()=>media.removeEventListener('change',sync);
-  },[]);
   const [reviewGoal,setReviewGoal]=useState(()=>initialReviewDraft?.reviewGoal||10);
   const activeAnswers=mode==='session'?cycleAnswers:answers;
   const [reportedQuestions, setReportedQuestions] = useState<Set<string>>(() => {
@@ -682,15 +673,19 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
     <div id="quiz-tab-container" className="quiz-layout space-y-7">
       {mode==='session'&&studyContext&&<div className="session-context-banner"><Target aria-hidden="true"/><div><span>REVISÃO DO ASSUNTO ATUAL</span><strong>{studyContext.topicTitle}</strong><p>{studyContext.subjectName} · meta de {reviewGoal} questões</p></div></div>}
       <div className="quiz-overview quiz-overview-compact">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-5">
-          {mode==='session'&&<div className="quiz-heading">
-            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Sparkles className="w-5 h-5 text-amber-500"/>Revisão da sessão</h2>
-          </div>}
+        <div className="quiz-performance-panel bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-5">
+          <div className="quiz-heading">
+            <div>
+              <span>{mode==='session'?'Revisão em andamento':'Seu desempenho'}</span>
+              <h2>{mode==='session'?'Revisão da sessão':'Visão geral da prática'}</h2>
+            </div>
+            <p>{stats.answeredCount?`${stats.answeredCount} ${stats.answeredCount===1?'questão respondida':'questões respondidas'} neste banco`:'Comece pela primeira questão e acompanhe sua evolução aqui.'}</p>
+          </div>
           <div className="quiz-stats grid grid-cols-2 md:grid-cols-4 gap-3" aria-label={`Pontuação calculada para ${selectedQuestionBoards.join(' e ') || selectedExamBoard}`}>
-            <div className="bg-slate-50 p-3 rounded-lg text-center"><span className="text-xs text-slate-500 block">Pontuação</span><strong className="text-xl font-bold text-slate-800">{currentScore}</strong></div>
-            <div className="bg-emerald-50 p-3 rounded-lg text-center"><span className="text-xs text-emerald-800 font-bold">Acertos</span><strong className="text-xl font-bold text-emerald-600 block mt-1">{stats.correctCount}</strong></div>
-            <div className="bg-rose-50 p-3 rounded-lg text-center"><span className="font-bold text-rose-800 text-xs">Erros</span><strong className="text-rose-600 block mt-1 text-xl font-bold">{stats.incorrectCount}</strong></div>
-            <div className="bg-slate-50 p-3 rounded-lg text-center"><span className="font-bold text-slate-800 text-xs">Aproveitamento</span><strong className="text-slate-900 block mt-1 text-xl font-bold">{currentAccuracy}%</strong></div>
+            <article className="quiz-kpi is-score"><span>Pontuação</span><strong>{currentScore}</strong><small>saldo atual</small></article>
+            <article className="quiz-kpi is-correct"><span>Acertos</span><strong>{stats.correctCount}</strong><small>respostas certas</small></article>
+            <article className="quiz-kpi is-wrong"><span>Erros</span><strong>{stats.incorrectCount}</strong><small>pontos a revisar</small></article>
+            <article className="quiz-kpi is-accuracy"><span>Aproveitamento</span><strong>{currentAccuracy}%</strong><small>taxa de acerto</small></article>
           </div>
         </div>
       </div>
@@ -702,21 +697,21 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
       </section>}
 
       {/* Question Filters Row */}
-      <button type="button" className="quiz-mobile-filter-trigger" onClick={toggleMobileFilters} aria-expanded={mobileFiltersOpen} aria-controls="question-bank-filters"><span><Filter/>Filtros do banco</span><span>{activeFilterCount?`${activeFilterCount} ativos`:'Todos'}<ChevronDown/></span></button>
+      <button type="button" className="quiz-mobile-filter-trigger" onClick={toggleMobileFilters} aria-expanded={mobileFiltersOpen} aria-controls="question-bank-filters"><span><Filter/>Filtrar questões</span><span>{activeFilterCount?`${activeFilterCount} ativos`:'Ver todos'}<ChevronDown/></span></button>
       {mobileFiltersOpen&&<button type="button" className="quiz-filter-sheet-backdrop" aria-label="Fechar filtros" onClick={closeMobileFilters}/>}
       <div ref={filterPanelRef} id="question-bank-filters" className={`quiz-filters ${mobileFiltersOpen?'is-mobile-open':''} space-y-3 bg-white p-4 rounded-xl shadow-sm border border-slate-100`}>
-        <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-bold text-slate-700">
-          <span className="flex items-center gap-2"><Filter className="w-4 h-4 text-slate-400" />{mode==='session'?'Questões da sessão':'Filtros do banco'}</span>
+        <div className="quiz-filter-heading flex flex-wrap items-center justify-between gap-2 text-sm font-bold text-slate-700">
+          <div><span><Filter className="w-4 h-4" />{mode==='session'?'Questões da sessão':'Encontre a questão certa'}</span><p>Refine o banco por conteúdo, prova ou desempenho.</p></div>
           <div className="flex items-center gap-2">
-            {mode==='all'&&<span className="text-xs font-medium text-slate-400">{filteredQuestions.length} {filteredQuestions.length===1?'questão encontrada':'questões encontradas'}</span>}
+            {mode==='all'&&<span className="quiz-filter-result">{filteredQuestions.length} {filteredQuestions.length===1?'resultado':'resultados'}</span>}
             <button type="button" className="quiz-filter-sheet-close" onClick={closeMobileFilters}>Fechar <X aria-hidden="true"/></button>
           </div>
         </div>
 
         <div className="quiz-filter-scroll-content grid grid-cols-1 gap-3">
           {mode==='all'&&<>
-            <section className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
-              <p className="mb-2 text-[11px] font-extrabold uppercase tracking-wide text-indigo-700">Conteúdo</p>
+            <section className="quiz-filter-group is-content rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
+              <p className="quiz-filter-group-label mb-2 text-[11px] font-extrabold uppercase tracking-wide text-indigo-700">Conteúdo</p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 <MultiFilter id="category-group" label="Área" options={filterOptions.categoryGroups} selected={categoryGroupFilters} onChange={values=>{setCategoryGroupFilters(values);setCategoryFilters([]);setTopicFilters([]);}} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todas"/>
                 <MultiFilter id="category" label="Disciplina" options={filterOptions.categories} selected={categoryFilters} onChange={values=>{setCategoryFilters(values);setTopicFilters([]);}} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todas"/>
@@ -724,8 +719,8 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
               </div>
 
             </section>
-            <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <p className="mb-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-600">Prova e desempenho</p>
+            <section className="quiz-filter-group is-performance rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="quiz-filter-group-label mb-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-600">Prova e desempenho</p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 <MultiFilter id="question-status" label="Minhas questões" options={['Resolvidas','Não resolvidas','Acertei','Errei','Anuladas']} selected={statusFilters} onChange={setStatusFilters} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todas"/>
                 <MultiFilter id="board" label="Banca" options={filterOptions.boards} selected={boardFilters} onChange={setBoardFilters} openFilterId={openFilterId} onOpenFilterChange={setOpenFilterId} emptyLabel="Todas"/>
@@ -771,12 +766,10 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
             const isAnnulled = q.correct === 'Anulada';
             const isCorrect = !isAnnulled && userAnswer === q.correct;
             const savedNote = noteForQuestion(q.id);
-            const questionId=String(q.id);
-            const passageIsVisible=passageVisibility[questionId]??!compactReadingView;
             const displayedQuestion=presentQuestionText(q.text);
 
             return (
-              <div
+              <article
                 key={q.id}
                 id={`q-card-${q.id}`}
                 className={`question-card ${isAnnulled?'is-annulled':isAnswered?(isCorrect?'is-correct':'is-wrong'):''} bg-white rounded-xl shadow-xs border transition-all overflow-hidden ${
@@ -789,23 +782,22 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
                     : 'border-slate-200 hover:border-slate-300'
                 }`}
               >
-                {/* Header info */}
-                <div className="question-card-header px-4 py-3 bg-slate-50 border-b border-slate-100">
+                <header className="question-card-header px-4 py-3 bg-slate-50 border-b border-slate-100">
+                  <div className="question-card-index" aria-label={`Questão ${index + 1} de ${filteredQuestions.length}`}>
+                    <span>Questão</span>
+                    <strong>{String(index + 1).padStart(2,'0')}</strong>
+                    <small>de {filteredQuestions.length}</small>
+                  </div>
                   <div className="question-card-identity">
-                    <span className="question-number" aria-hidden="true">{String(index+1).padStart(2,'0')}</span>
-                    <div className="question-card-heading">
-                      <span className="question-position">Questão {index + 1} de {filteredQuestions.length}</span>
-                      <div className="question-card-tags">
-                        <span className="question-discipline">
-                          {mode==='session'&&studyContext?studyContext.topicTitle:q.category}
-                        </span>
-                        <span className="question-board">{questionExamBoard(q)}</span>
-                        {q.passageId && <span className="passage-available"><BookOpenText aria-hidden="true"/>Com texto</span>}
-                      </div>
+                    <div className="question-card-tags">
+                      <span className="question-discipline">
+                        {mode==='session'&&studyContext?studyContext.topicTitle:q.category}
+                      </span>
+                      <span className="question-board">{questionExamBoard(q)}{q.year?` · ${q.year}`:''}</span>
                     </div>
+                    {q.reference && <span className="question-reference">{q.reference}</span>}
                   </div>
                   <div className="question-card-actions">
-                    {q.reference && <span className="question-reference text-[10px] text-slate-400 font-mono">{q.reference}</span>}
                     <button
                       type="button"
                       onClick={() => openNoteEditor(q)}
@@ -823,54 +815,40 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
                       title={reportedQuestions.has(String(q.id)) ? 'Questão já sinalizada — clique para atualizar' : 'Sinalizar problema na questão'}
                     ><Flag aria-hidden="true" /></button>
                   </div>
-                </div>
+                </header>
 
-                {/* The passage is part of the question and must remain visible while answering. */}
-                {q.passageId && q.passageContent && (
-                  <section className={`question-passage ${passageIsVisible?'is-expanded':''}`} aria-labelledby={`passage-title-${q.id}`}>
-                    <header className="question-passage-header">
-                      <span className="question-passage-icon" aria-hidden="true"><BookOpenText/></span>
-                      <div>
-                        <span>Texto de apoio</span>
-                        <strong id={`passage-title-${q.id}`}>{q.passageTitle || 'Leitura para responder ao item'}</strong>
+                <div className="question-card-content">
+                  {/* The passage is part of the question and must remain visible while answering. */}
+                  {q.passageContent && (
+                    <section className="question-passage" aria-labelledby={`passage-title-${q.id}`}>
+                      <header className="question-passage-header">
+                        <span className="question-passage-icon" aria-hidden="true"><BookOpenText/></span>
+                        <div>
+                          <span>Texto de apoio</span>
+                          <strong id={`passage-title-${q.id}`}>{q.passageTitle || 'Leitura para responder ao item'}</strong>
+                        </div>
                         <small>{passageReadingTime(q.passageContent)} min de leitura</small>
+                      </header>
+                      <div id={`passage-content-${q.id}`} className="question-passage-reader">
+                        <div className="question-passage-content whitespace-pre-wrap">
+                          {q.passageContent}
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        aria-label={passageIsVisible?'Recolher texto de apoio':'Ler texto de apoio'}
-                        aria-expanded={passageIsVisible}
-                        aria-controls={`passage-content-${q.id}`}
-                        onClick={()=>setPassageVisibility(current=>({...current,[questionId]:!passageIsVisible}))}
-                      >
-                        <span>{passageIsVisible?'Recolher':'Ler texto'}</span>
-                        {passageIsVisible?<ChevronUp aria-hidden="true"/>:<ChevronDown aria-hidden="true"/>}
-                      </button>
-                    </header>
-                    {passageIsVisible&&<div id={`passage-content-${q.id}`} className="question-passage-reader">
-                      <div className="question-passage-content whitespace-pre-wrap">
-                        {q.passageContent}
-                      </div>
-                    </div>
-                    }
-                  </section>
-                )}
+                    </section>
+                  )}
 
-                {/* Question Text */}
-                <div className="question-card-body p-5 space-y-4">
-                  <section className="question-stem-panel" aria-labelledby={`question-stem-${q.id}`}>
-                    <div className="question-stem-kicker"><CircleHelp aria-hidden="true"/><span>{q.options?.length?'Escolha a alternativa correta':'Julgue o item a seguir'}</span></div>
-                    <p id={`question-stem-${q.id}`} className="question-stem">{displayedQuestion}</p>
-                  </section>
-                  {savedNote&&<aside className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 text-xs leading-5 text-slate-700"><span className="mb-1 flex items-center gap-1.5 font-extrabold text-indigo-700"><NotebookPen className="h-3.5 w-3.5"/>Sua anotação</span><p className="whitespace-pre-wrap">{savedNote.note}</p></aside>}
+                  {/* Question Text */}
+                  <div className="question-card-body p-5 space-y-4">
+                    <section className="question-stem-panel" aria-labelledby={`question-stem-${q.id}`}>
+                      <div className="question-stem-kicker"><span>{q.options?.length?'Escolha a alternativa correta':'Julgue o item a seguir'}</span></div>
+                      <p id={`question-stem-${q.id}`} className="question-stem">{displayedQuestion}</p>
+                    </section>
+                  {savedNote&&<aside className="question-note-inline"><span><NotebookPen aria-hidden="true"/>Sua anotação</span><p className="whitespace-pre-wrap">{savedNote.note}</p></aside>}
 
                   {/* Actions (Buttons for answering) */}
-                  <div className="question-answer-zone space-y-3">
-                    {!isAnnulled&&<p className="question-answer-label">Sua resposta</p>}
-                    {isAnnulled ? (
-                      <span className="px-4 py-2 rounded-lg text-sm font-bold border border-amber-200 bg-amber-50 text-amber-800">
-                        Questão anulada
-                      </span>
-                    ) : q.options?.length ? (
+                  {!isAnnulled&&<div className="question-answer-zone space-y-3">
+                    <div className="question-answer-heading"><p className="question-answer-label">Sua resposta</p><span>Selecione uma opção</span></div>
+                    {q.options?.length ? (
                       <div className="question-options grid gap-2" role="radiogroup" aria-label={`Alternativas da questão ${index + 1}`}>
                         {q.options.map(option => {
                           const selected=userAnswer===option.label;
@@ -931,55 +909,31 @@ export default function QuizTab({mode='session',studyContext,onQuestionAnswered,
                     </button>
                       </div>
                     )}
-
-                    {/* Quick indicator icon */}
-                    {(isAnswered || isAnnulled) && (
-                      <div className="question-result-indicator flex items-center gap-1.5 text-xs font-bold" aria-live="polite">
-                        {isAnnulled ? (
-                          <span className="text-amber-700 flex items-center gap-1">
-                            <AlertCircle className="w-4 h-4" /> Anulada
-                          </span>
-                        ) : isCorrect ? (
-                          <span className="text-emerald-600 flex items-center gap-1">
-                            <CheckCircle2 className="w-4 h-4" /> Gabaritou!
-                          </span>
-                        ) : (
-                          <span className="text-rose-600 flex items-center gap-1">
-                            <XCircle className="w-4 h-4" /> Incorreto
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  </div>}
 
                   {/* Educational Feedback Section */}
                   {(isAnswered || isAnnulled) && (
-                    <div className={`question-feedback p-4 rounded-xl border text-xs leading-relaxed space-y-1 transition-all ${
-                      isAnnulled
-                        ? 'bg-amber-50 text-amber-800 border-amber-100'
-                        : isCorrect 
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
-                        : 'bg-rose-50 text-rose-800 border-rose-100'
-                    }`}>
+                    <section className={`question-feedback ${isAnnulled?'is-annulled':isCorrect?'is-correct':'is-wrong'}`} aria-live="polite">
                       <div className="question-feedback-heading flex items-center gap-1.5 font-bold mb-1">
                         <Info className="w-4 h-4 shrink-0" />
                         <span>
                           {isAnnulled
-                            ? 'QUESTÃO ANULADA — ENTENDA O MOTIVO:'
+                            ? 'Questão anulada'
                             : isCorrect
-                              ? 'VOCÊ ACERTOU — ENTENDA O MOTIVO:'
-                              : 'VOCÊ ERROU — ENTENDA O MOTIVO:'}
+                              ? 'Resposta correta'
+                              : 'Resposta incorreta'}
                         </span>
-                        <span className="ml-1 px-1.5 py-0.5 rounded bg-black/5 font-mono text-[10px]">
-                          Gabarito: {q.correct}
+                        <span className="question-answer-key">
+                          Gabarito · {q.correct}
                         </span>
                       </div>
                       <p className="question-feedback-copy">{q.explanation}</p>
                       {q.topic && <p className="question-feedback-topic pt-2 text-[11px] font-semibold opacity-80">Assunto cobrado: {q.topic}.</p>}
-                    </div>
+                    </section>
                   )}
+                  </div>
                 </div>
-              </div>
+              </article>
             );
           })
         )}

@@ -11,7 +11,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class StudySessionService {
-    private static final Duration PAUSE_AUTO_CLOSE_AFTER = Duration.ofMinutes(12);
     private final JdbcClient jdbc;
     private final EngagementService engagement;
     private final StudyBootstrapService bootstrap;
@@ -194,9 +193,6 @@ public class StudySessionService {
         var session = one(userId, id);
         if ("RUNNING".equals(session.get("status"))) return session;
         requireStatus(session, "PAUSED");
-        if (pauseExceeded(session, PAUSE_AUTO_CLOSE_AFTER)) {
-            return closeExpiredPause(userId, session);
-        }
         jdbc.sql("""
             UPDATE session_pauses SET ended_at=now() WHERE id=(SELECT id FROM session_pauses WHERE session_id=:s AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1)
             """).param("s", id).update();
@@ -310,37 +306,9 @@ public class StudySessionService {
     }
 
     @Transactional
-    public int cancelForInactivity(UUID userId) {
-        var sessions = jdbc.sql("SELECT id FROM study_sessions WHERE user_id=:u AND status IN('RUNNING','PAUSED') FOR UPDATE")
-                .param("u", userId).query(UUID.class).list();
-        for (UUID id : sessions) cancel(userId, id, "Sessão encerrada após 12 horas de inatividade.");
-        return sessions.size();
-    }
-
-    @Transactional
     public Map<String,Object> activeOrEmpty(UUID userId) {
         var active = active(userId);
-        if (active != null && "PAUSED".equals(active.get("status")) && pauseExceeded(active, PAUSE_AUTO_CLOSE_AFTER)) {
-            closeExpiredPause(userId, active);
-            return Map.of();
-        }
         return active == null ? Map.of() : active;
-    }
-
-    private Map<String,Object> closeExpiredPause(UUID userId, Map<String,Object> session) {
-        UUID id = (UUID) session.get("id");
-        String notes = "Sessão encerrada automaticamente após 12 minutos em pausa.";
-        if ("QUESTIONS".equals(session.get("session_kind"))) {
-            finishQuestionPractice(userId, id, notes);
-        } else {
-            cancel(userId, id, notes);
-        }
-        return one(userId, id);
-    }
-
-    private boolean pauseExceeded(Map<String,Object> session, Duration limit) {
-        if (session.get("paused_at") == null) return false;
-        return !Duration.between(instant(session.get("paused_at")), Instant.now()).minus(limit).isNegative();
     }
 
     public Map<String,Object> one(UUID userId, UUID id) {

@@ -431,36 +431,28 @@ export default function QuestionBankTab({
             </div>
           )}
           <div className="question-pomodoro-body">
-            <div className="question-pomodoro-time">
-              <Clock3 />
-              <strong>{clock(timerDisplay)}</strong>
-              <span>{timerStatus}</span>
+            <div className="question-pomodoro-intro">
+              <span className="question-pomodoro-intro-icon"><Clock3 /></span>
+              <div>
+                <strong>Timer de foco</strong>
+                <span>Escolha o ritmo da sua sessão</span>
+              </div>
             </div>
-            <div className="question-pomodoro-actions">
-              <select
-                aria-label="Modo do timer de questões"
-                value={timerMode}
-                onChange={(event) =>
-                  setTimerMode(event.target.value as QuestionTimerMode)
-                }
-              >
-                <option value="POMODORO_50">50 min + 10 min</option>
-                <option value="POMODORO_25">25 min + 10 min</option>
-                <option value="FREE">Tempo livre</option>
-              </select>
-              <span className="question-pomodoro-preset">
-                {timerMode === "FREE"
-                  ? "Sem limite de tempo"
-                  : `${focusMinutes} min de foco + 10 min de descanso`}
-              </span>
-              <button
+            <div className="question-pomodoro-modes" role="group" aria-label="Duração do timer de questões">
+              <button type="button" className={timerMode==='POMODORO_25'?'is-selected':''} aria-pressed={timerMode==='POMODORO_25'} onClick={()=>setTimerMode('POMODORO_25')}><strong>25</strong><span>min</span></button>
+              <button type="button" className={timerMode==='POMODORO_50'?'is-selected':''} aria-pressed={timerMode==='POMODORO_50'} onClick={()=>setTimerMode('POMODORO_50')}><strong>50</strong><span>min</span></button>
+              <button type="button" className={timerMode==='FREE'?'is-selected':''} aria-pressed={timerMode==='FREE'} onClick={()=>setTimerMode('FREE')}><strong>∞</strong><span>livre</span></button>
+            </div>
+            <button
+                type="button"
+                className="question-pomodoro-launch"
                 disabled={busy || Boolean(blockingSession)}
                 onClick={start}
               >
-                <Play />
-                {timerMode === "FREE" ? "Iniciar sessão" : "Iniciar Pomodoro"}
-              </button>
-            </div>
+                <span className="question-pomodoro-launch-icon"><Play /></span>
+                <span className="question-pomodoro-launch-copy"><small>{timerMode==='FREE'?'Sessão sem limite':`${focusMinutes} min de foco`}</small><strong>{timerMode==='FREE'?'Iniciar livre':clock(timerDisplay)}</strong></span>
+                <span className="question-pomodoro-launch-action">Começar</span>
+            </button>
           </div>
         </section>
       )}
@@ -541,6 +533,7 @@ export default function QuestionBankTab({
             aria-label={`${timerPanelOpen ? "Recolher" : "Abrir"} timer de questões. ${timerStatus}. ${clock(timerDisplay)}`}
           >
             <AlarmClock aria-hidden="true" />
+            <span className="question-floating-alarm-time">{clock(timerDisplay)}</span>
           </button>
         </div>,
           document.body,

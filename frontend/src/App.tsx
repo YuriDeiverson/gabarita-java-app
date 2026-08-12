@@ -187,16 +187,9 @@ export default function App() {
   } | null>(null);
   const [completedBreakBusy, setCompletedBreakBusy] = useState(false);
   const [completedBreakError, setCompletedBreakError] = useState("");
-  const [longPausePrompt, setLongPausePrompt] = useState<{
-    sessionId: string;
-    title: string;
-  } | null>(null);
-  const [longPauseBusy, setLongPauseBusy] = useState(false);
-  const [longPauseError, setLongPauseError] = useState("");
   const breakAlertedRef = useRef("");
   const completedBreakAlertedRef = useRef("");
   const globalAutomaticPauseRef = useRef("");
-  const longPauseAutoClosingRef = useRef("");
   const audioContextRef = useRef<AudioContext | null>(null);
 
   const ensureAudioContext = useCallback(() => {
@@ -1166,104 +1159,6 @@ export default function App() {
       setContextSessionBusy(false);
     }
   };
-
-  const closeLongPausedSession = async (automatic = false) => {
-    if (!activeHeaderSession?.id || longPauseBusy) return;
-    setLongPauseBusy(true);
-    setLongPauseError("");
-    try {
-      if (activeHeaderSession.session_kind === "QUESTIONS") {
-        await dailyStudyApi.finishQuestionPractice(
-          String(activeHeaderSession.id),
-          "Sessão encerrada após pausa prolongada.",
-        );
-      } else {
-        await dailyStudyApi.cancel(
-          String(activeHeaderSession.id),
-          "Sessão encerrada após pausa prolongada.",
-        );
-      }
-      setHeaderStudyData((current) =>
-        current ? { ...current, active_session: {} } : current,
-      );
-      setLongPausePrompt(null);
-      setQuestionDailyTask(null);
-      setDashboardVersion((value) => value + 1);
-    } catch (error) {
-      setLongPauseError(
-        error instanceof Error
-          ? error.message
-          : automatic
-            ? "Não foi possível encerrar a sessão automaticamente."
-            : "Não foi possível encerrar a sessão.",
-      );
-    } finally {
-      setLongPauseBusy(false);
-    }
-  };
-
-  const continueAfterLongPause = async () => {
-    if (!activeHeaderSession?.id || longPauseBusy) return;
-    setLongPauseBusy(true);
-    setLongPauseError("");
-    try {
-      const updated = await dailyStudyApi.resume(String(activeHeaderSession.id));
-      setHeaderStudyData((current) =>
-        current ? { ...current, active_session: updated } : current,
-      );
-      setHeaderTimerLoadedAt(Date.now());
-      setLongPausePrompt(null);
-    } catch (error) {
-      setLongPauseError(
-        error instanceof Error ? error.message : "Não foi possível continuar a sessão.",
-      );
-    } finally {
-      setLongPauseBusy(false);
-    }
-  };
-
-  useEffect(() => {
-    if (
-      !activeHeaderSession?.id ||
-      activeHeaderSession.status !== "PAUSED" ||
-      headerIsBreak ||
-      !activeHeaderSession.paused_at
-    ) {
-      setLongPausePrompt(null);
-      longPauseAutoClosingRef.current = "";
-      return;
-    }
-    const pausedSeconds = Math.max(
-      0,
-      Math.floor((Date.now() - new Date(activeHeaderSession.paused_at).getTime()) / 1_000),
-    );
-    const sessionId = String(activeHeaderSession.id);
-    if (pausedSeconds >= 12 * 60) {
-      if (longPauseAutoClosingRef.current !== sessionId) {
-        longPauseAutoClosingRef.current = sessionId;
-        void closeLongPausedSession(true);
-      }
-      return;
-    }
-    if (pausedSeconds >= 10 * 60) {
-      setLongPausePrompt({
-        sessionId,
-        title: String(
-          activeHeaderSession.topic_title ||
-            activeHeaderSession.context_title ||
-            "Sessão atual",
-        ),
-      });
-    }
-  }, [
-    activeHeaderSession?.context_title,
-    activeHeaderSession?.id,
-    activeHeaderSession?.paused_at,
-    activeHeaderSession?.status,
-    activeHeaderSession?.topic_title,
-    headerIsBreak,
-    headerTimerTick,
-  ]);
 
   const requestNewPlanConfiguration = useCallback(async () => {
     let session = headerStudyData?.active_session?.id
@@ -2552,52 +2447,6 @@ export default function App() {
             <X />
           </button>
         </aside>
-      )}
-
-      {longPausePrompt && (
-        <div className="finish-modal-backdrop" role="presentation">
-          <section
-            className="finish-modal"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="long-pause-title"
-            aria-describedby="long-pause-description"
-          >
-            <span className="finish-icon !bg-amber-50 !text-amber-700">
-              <Clock3 />
-            </span>
-            <h3 id="long-pause-title">Sua sessão está pausada há 10 minutos</h3>
-            <p id="long-pause-description">
-              Deseja continuar “{longPausePrompt.title}”? Para manter a
-              sincronização correta, a sessão será encerrada automaticamente
-              após 2 minutos adicionais de pausa.
-            </p>
-            {longPauseError && (
-              <p role="alert" className="!mb-0 !text-rose-700">
-                {longPauseError}
-              </p>
-            )}
-            <div className="mt-5 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
-              <button
-                type="button"
-                disabled={longPauseBusy}
-                onClick={() => void closeLongPausedSession()}
-                className="min-h-11 px-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-sm font-bold disabled:opacity-50"
-              >
-                {longPauseBusy ? "Encerrando…" : "Encerrar agora"}
-              </button>
-              <button
-                type="button"
-                disabled={longPauseBusy}
-                onClick={() => void continueAfterLongPause()}
-                className="min-h-11 px-4 rounded-xl bg-[var(--accent)] text-white text-sm font-extrabold disabled:opacity-50"
-              >
-                <Play className="inline-block w-4 h-4 mr-1" />
-                Continuar sessão
-              </button>
-            </div>
-          </section>
-        </div>
       )}
 
       {completedBreakPrompt && (

@@ -1,4 +1,4 @@
-import { supabase } from '../auth/supabase';
+import { getValidSession } from '../auth/session';
 
 export const API_BASE_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 
@@ -7,24 +7,26 @@ const GENERIC_LOAD_ERROR = 'Erro ao carregar. Tente novamente mais tarde.';
 const GENERIC_ACTION_ERROR = 'Não foi possível concluir a operação. Tente novamente mais tarde.';
 const fetch=async(input:RequestInfo|URL,init:RequestInit={}):Promise<Response>=>{
   const controller = new AbortController();
-  let timedOut = false;
   const onAbort = () => controller.abort();
   init.signal?.addEventListener('abort', onAbort, { once: true });
   const timeout = window.setTimeout(() => {
-    timedOut = true;
     controller.abort();
   }, 20_000);
 
   try {
-    const {data}=await supabase.auth.getSession();
+    const session = await getValidSession();
     const headers=new Headers(init.headers);
-    if(data.session?.access_token)headers.set('Authorization',`Bearer ${data.session.access_token}`);
+    if(session?.access_token)headers.set('Authorization',`Bearer ${session.access_token}`);
     let response=await nativeFetch(input,{...init,headers,signal:controller.signal});
-    if(response.status===401&&data.session){
-      const refreshed=await supabase.auth.refreshSession();
-      const token=refreshed.data.session?.access_token;
-      if(token&&token!==data.session.access_token){headers.set('Authorization',`Bearer ${token}`);response=await nativeFetch(input,{...init,headers,signal:controller.signal});}
-      if(response.status===401)window.dispatchEvent(new Event('gabarita:unauthorized'));
+    if(response.status===401&&session){
+      const renewedSession=await getValidSession({
+        forceRefresh:true,
+        rejectedAccessToken:session.access_token,
+      });
+      if(renewedSession){
+        headers.set('Authorization',`Bearer ${renewedSession.access_token}`);
+        response=await nativeFetch(input,{...init,headers,signal:controller.signal});
+      }
     }
     return response;
   } catch {
