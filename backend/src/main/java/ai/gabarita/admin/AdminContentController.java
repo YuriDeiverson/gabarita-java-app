@@ -26,6 +26,7 @@ public class AdminContentController {
       String passageId,String passageTitle,String passageContent,String passageSource,
       @Size(max=240) String detailedTopic,@Size(max=8000) String conceptExplanation,@Size(max=5000) String decisiveEvidence,
       @Size(max=8000) String answerAnalysis,@Size(max=5000) String examTrap,
+      @Size(max=3000) String similarQuestionStrategy,
       @Size(max=12) List<@Size(max=600) String> fixationTips,@Valid ComparisonHeadersRequest comparisonHeaders,
       @Size(max=12) List<@Valid ComparisonRowRequest> comparisonRows,
       List<@Valid OptionRequest> options,String status){}
@@ -56,7 +57,7 @@ public class AdminContentController {
         String search=text(query);String course=text(courseId);String normalizedArea=text(area);int offset=(page-1)*pageSize;
         String sql="""
           SELECT q.id,q.board,q.type,q.statement,q.explanation,q.status,q.correct_answer #>> '{}' correct,
-            q.detailed_topic,q.concept_explanation,q.decisive_evidence,q.answer_analysis,q.exam_trap,
+            q.detailed_topic,q.concept_explanation,q.decisive_evidence,q.answer_analysis,q.exam_trap,q.similar_question_strategy,
             q.fixation_tips::text fixation_tips_json,q.comparison_headers::text comparison_headers_json,
             q.comparison_rows::text comparison_rows_json,
             q.passage_id,q.metadata::text metadata_json,p.title passage_title,
@@ -167,6 +168,7 @@ public class AdminContentController {
             """).param("statement",r.text().trim()).query(UUID.class).list();
             if(!existing.isEmpty()){attachCourse(existing.getFirst(),r.courseId());return existing.getFirst();}
         }
+        validateGuideSpecificity(id,r);
         UUID passageId=resolvePassage(r);
         if(update){
             int changed=jdbc.sql("""
@@ -174,26 +176,28 @@ public class AdminContentController {
                 correct_answer=CAST(:answer AS jsonb),metadata=CAST(:metadata AS jsonb),passage_id=:passage,
                 subject_id=:subjectId,topic_id=:topicId,
                 detailed_topic=:detailedTopic,concept_explanation=:concept,decisive_evidence=:evidence,
-                answer_analysis=:analysis,exam_trap=:trap,fixation_tips=CAST(:fixationTips AS jsonb),
+                answer_analysis=:analysis,exam_trap=:trap,similar_question_strategy=:strategy,fixation_tips=CAST(:fixationTips AS jsonb),
                 comparison_headers=CAST(:comparisonHeaders AS jsonb),comparison_rows=CAST(:comparisonRows AS jsonb),updated_at=now() WHERE id=:id
               """).param("board",r.board().trim()).param("type",questionType(r)).param("statement",r.text().trim())
               .param("explanation",text(r.explanation())).param("status",status).param("answer",answer).param("metadata",metadata)
               .param("subjectId",taxonomy.subjectId()).param("topicId",taxonomy.topicId())
               .param("passage",passageId,Types.OTHER).param("detailedTopic",text(r.detailedTopic())).param("concept",text(r.conceptExplanation()))
               .param("evidence",text(r.decisiveEvidence())).param("analysis",text(r.answerAnalysis())).param("trap",text(r.examTrap()))
+              .param("strategy",text(r.similarQuestionStrategy()))
               .param("fixationTips",fixationTips).param("comparisonHeaders",comparisonHeaders).param("comparisonRows",comparisonRows).param("id",id).update();
             if(changed==0)throw new NoSuchElementException("Questão não encontrada");
             jdbc.sql("DELETE FROM question_options WHERE question_id=:id").param("id",id).update();
         }else jdbc.sql("""
               INSERT INTO questions(id,board,type,statement,explanation,status,correct_answer,metadata,passage_id,subject_id,topic_id,
-                detailed_topic,concept_explanation,decisive_evidence,answer_analysis,exam_trap,fixation_tips,comparison_headers,comparison_rows)
+                detailed_topic,concept_explanation,decisive_evidence,answer_analysis,exam_trap,similar_question_strategy,fixation_tips,comparison_headers,comparison_rows)
               VALUES(:id,:board,:type,:statement,:explanation,:status,CAST(:answer AS jsonb),CAST(:metadata AS jsonb),:passage,:subjectId,:topicId,
-                :detailedTopic,:concept,:evidence,:analysis,:trap,CAST(:fixationTips AS jsonb),CAST(:comparisonHeaders AS jsonb),CAST(:comparisonRows AS jsonb))
+                :detailedTopic,:concept,:evidence,:analysis,:trap,:strategy,CAST(:fixationTips AS jsonb),CAST(:comparisonHeaders AS jsonb),CAST(:comparisonRows AS jsonb))
               """).param("id",id).param("board",r.board().trim()).param("type",questionType(r)).param("statement",r.text().trim())
               .param("explanation",text(r.explanation())).param("status",status).param("answer",answer).param("metadata",metadata)
               .param("subjectId",taxonomy.subjectId()).param("topicId",taxonomy.topicId())
               .param("passage",passageId,Types.OTHER).param("detailedTopic",text(r.detailedTopic())).param("concept",text(r.conceptExplanation()))
               .param("evidence",text(r.decisiveEvidence())).param("analysis",text(r.answerAnalysis())).param("trap",text(r.examTrap()))
+              .param("strategy",text(r.similarQuestionStrategy()))
               .param("fixationTips",fixationTips).param("comparisonHeaders",comparisonHeaders).param("comparisonRows",comparisonRows).update();
         int position=0;if(r.options()!=null)for(var option:r.options())jdbc.sql("""
           INSERT INTO question_options(id,question_id,label,content,position) VALUES(gen_random_uuid(),:question,:label,:content,:position)
@@ -243,13 +247,55 @@ public class AdminContentController {
     private void validateDetailedGuide(QuestionRequest r){
         String status="Anulada".equalsIgnoreCase(r.correct())?"ANNULLED":fallback(r.status(),"ACTIVE").toUpperCase(Locale.ROOT);
         if(!Set.of("ACTIVE","ANNULLED").contains(status))return;
+        if(text(r.explanation()).length()<40)throw new IllegalArgumentException("O gabarito resumido deve explicar o motivo da resposta (mínimo de 40 caracteres)");
         if(text(r.detailedTopic()).length()<8)throw new IllegalArgumentException("Informe o assunto exato do gabarito completo");
-        if(text(r.conceptExplanation()).length()<180)throw new IllegalArgumentException("A explicação do conceito deve ter pelo menos 180 caracteres");
         if(text(r.decisiveEvidence()).length()<40)throw new IllegalArgumentException("Informe o trecho ou a regra decisiva da questão");
-        if(text(r.answerAnalysis()).length()<300)throw new IllegalArgumentException("A análise passo a passo deve ter pelo menos 300 caracteres");
-        if(text(r.examTrap()).length()<80)throw new IllegalArgumentException("Explique a pegadinha da banca com pelo menos 80 caracteres");
-        if(cleanPoints(r.fixationTips()).size()<3)throw new IllegalArgumentException("Informe ao menos três dicas de fixação");
-        if(cleanComparisonRows(r.comparisonRows()).size()<3)throw new IllegalArgumentException("Informe ao menos três linhas no quadro-resumo");
+        if(text(r.conceptExplanation()).length()<300)throw new IllegalArgumentException("Ensine a base conceitual necessária para resolver a questão (mínimo de 300 caracteres)");
+        if(text(r.answerAnalysis()).length()<400)throw new IllegalArgumentException("Apresente uma resolução comentada e específica, ligando o conceito ao item (mínimo de 400 caracteres)");
+        if(text(r.examTrap()).length()<120)throw new IllegalArgumentException("Diagnostique por que a questão pode induzir ao erro ou qual distinção a banca testa (mínimo de 120 caracteres)");
+        if(text(r.similarQuestionStrategy()).length()<160)throw new IllegalArgumentException("Ensine um método reutilizável para resolver questões parecidas (mínimo de 160 caracteres)");
+        int fixationCount=cleanPoints(r.fixationTips()).size();
+        if(fixationCount<3||fixationCount>4)throw new IllegalArgumentException("Informe três ou quatro conclusões úteis em Síntese para revisão");
+        int comparisonCount=cleanComparisonRows(r.comparisonRows()).size();
+        if(comparisonCount>0&&comparisonCount<2)throw new IllegalArgumentException("Quando útil, a tabela comparativa deve ter ao menos duas linhas");
+        if(comparisonCount>0&&r.comparisonHeaders()==null)throw new IllegalArgumentException("Informe os cabeçalhos da tabela comparativa");
+        if(comparisonCount==0&&r.comparisonHeaders()!=null)throw new IllegalArgumentException("Remova os cabeçalhos ou informe as linhas da tabela comparativa");
+    }
+    private void validateGuideSpecificity(UUID questionId,QuestionRequest r){
+        String status="Anulada".equalsIgnoreCase(r.correct())?"ANNULLED":fallback(r.status(),"ACTIVE").toUpperCase(Locale.ROOT);
+        if(!Set.of("ACTIVE","ANNULLED").contains(status))return;
+        String analysis=text(r.answerAnalysis()).toLowerCase(Locale.ROOT);
+        String strategy=text(r.similarQuestionStrategy()).toLowerCase(Locale.ROOT);
+        if(!GuideContentQuality.followsHierarchy(r.detailedTopic(),r.category(),r.topic()))
+          throw new IllegalArgumentException("O assunto detalhado deve começar por Disciplina → Assunto catalogado");
+        if(GuideContentQuality.anticipatesAnswer(r.decisiveEvidence()))
+          throw new IllegalArgumentException("O ponto decisivo deve apresentar a regra ou evidência sem antecipar o gabarito");
+        if(GuideContentQuality.usesAutomaticTemplate(analysis)||analysis.startsWith("1. o item afirma")||analysis.startsWith("1. delimite a afirmação"))
+          throw new IllegalArgumentException("Substitua a análise automática por uma explicação específica desta questão");
+        if(List.of("isole a afirmação central","identifique o mecanismo técnico afirmado","localize o trecho cobrado",
+          "separe sujeito, competência, requisito","compare a relação lógica afirmada","traduza os dados para relações").stream().anyMatch(strategy::startsWith))
+          throw new IllegalArgumentException("A estratégia para questões parecidas está genérica; relacione-a ao conceito ou erro deste item");
+        if(GuideContentQuality.repeatsWhole(r.text(),r.decisiveEvidence())||GuideContentQuality.repeatsWhole(r.text(),r.answerAnalysis()))
+          throw new IllegalArgumentException("A correção completa não pode transcrever o enunciado inteiro; destaque apenas o ponto decisivo e desenvolva o ensinamento");
+        if(GuideContentQuality.repeatsWhole(r.explanation(),r.conceptExplanation())||GuideContentQuality.repeatsWhole(r.explanation(),r.answerAnalysis()))
+          throw new IllegalArgumentException("A correção completa deve acrescentar conteúdo novo, não repetir o comentário resumido do card");
+        var tips=cleanPoints(r.fixationTips());
+        if(tips.stream().anyMatch(tip->GuideContentQuality.sameText(tip,r.similarQuestionStrategy())))
+          throw new IllegalArgumentException("A síntese para revisão não pode repetir a estratégia para questões parecidas");
+        ensureUniqueGuideField(questionId,"concept_explanation","base conceitual",r.conceptExplanation());
+        ensureUniqueGuideField(questionId,"answer_analysis","análise da resposta",r.answerAnalysis());
+        ensureUniqueGuideField(questionId,"exam_trap","pegadinha da banca",r.examTrap());
+        ensureUniqueGuideField(questionId,"similar_question_strategy","estratégia para questões parecidas",r.similarQuestionStrategy());
+    }
+    private void ensureUniqueGuideField(UUID questionId,String column,String label,String suppliedValue){
+        String value=text(suppliedValue);if(value.isBlank())return;
+        String safeColumn=switch(column){
+          case "concept_explanation","answer_analysis","exam_trap","similar_question_strategy"->column;
+          default->throw new IllegalArgumentException("Campo de gabarito inválido");
+        };
+        int duplicates=jdbc.sql("SELECT COUNT(*) FROM questions WHERE id<>:id AND status IN ('ACTIVE','ANNULLED') AND btrim("+safeColumn+")=:value")
+          .param("id",questionId).param("value",value).query(Integer.class).single();
+        if(duplicates>0)throw new IllegalArgumentException("A "+label+" repete literalmente o conteúdo de outra questão; escreva uma explicação específica");
     }
     private void validateQuestion(QuestionRequest r){String type=r.type().trim().toUpperCase(Locale.ROOT);String correct=r.correct().trim();
         if("Anulada".equalsIgnoreCase(correct))return;
@@ -259,7 +305,7 @@ public class AdminContentController {
         if(r.options().stream().noneMatch(option->option.label().equalsIgnoreCase(correct)))throw new IllegalArgumentException("O gabarito deve corresponder à letra de uma alternativa");}
     private Map<String,Object> questionById(UUID id){var row=jdbc.sql("""
       SELECT q.id,q.board,q.type,q.statement,q.explanation,q.status,q.correct_answer #>> '{}' correct,
-        q.detailed_topic,q.concept_explanation,q.decisive_evidence,q.answer_analysis,q.exam_trap,
+        q.detailed_topic,q.concept_explanation,q.decisive_evidence,q.answer_analysis,q.exam_trap,q.similar_question_strategy,
         q.fixation_tips::text fixation_tips_json,q.comparison_headers::text comparison_headers_json,
         q.comparison_rows::text comparison_rows_json,
         q.passage_id,q.metadata::text metadata_json,p.title passage_title,
@@ -283,6 +329,7 @@ public class AdminContentController {
         item.put("detailedTopic",row.getOrDefault("detailed_topic",""));item.put("conceptExplanation",row.getOrDefault("concept_explanation",""));
         item.put("decisiveEvidence",row.getOrDefault("decisive_evidence",""));item.put("answerAnalysis",row.getOrDefault("answer_analysis",""));
         item.put("examTrap",row.getOrDefault("exam_trap",""));
+        item.put("similarQuestionStrategy",row.getOrDefault("similar_question_strategy",""));
         try{item.put("fixationTips",json.readTree(String.valueOf(row.getOrDefault("fixation_tips_json","[]"))));}catch(Exception ignored){item.put("fixationTips",List.of());}
         try{item.put("comparisonHeaders",json.readTree(String.valueOf(row.getOrDefault("comparison_headers_json","{}"))));}catch(Exception ignored){item.put("comparisonHeaders",Map.of());}
         try{item.put("comparisonRows",json.readTree(String.valueOf(row.getOrDefault("comparison_rows_json","[]"))));}catch(Exception ignored){item.put("comparisonRows",List.of());}

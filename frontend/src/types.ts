@@ -60,6 +60,7 @@ export interface Question {
   decisiveEvidence?: string;
   answerAnalysis?: string;
   examTrap?: string;
+  similarQuestionStrategy?: string;
   fixationTips?: string[];
   comparisonHeaders?: { criterion: string; left: string; right: string };
   comparisonRows?: Array<{ criterion: string; left: string; right: string }>;

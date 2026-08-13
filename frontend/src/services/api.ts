@@ -453,6 +453,7 @@ export interface DetailedQuestionGuide {
   decisiveEvidence?:string;
   answerAnalysis?:string;
   examTrap?:string;
+  similarQuestionStrategy?:string;
   fixationTips?:string[];
   comparisonHeaders?:{criterion:string;left:string;right:string};
   comparisonRows?:Array<{criterion:string;left:string;right:string}>;
@@ -668,7 +669,7 @@ export interface AdminPassage { id: string; title: string; content: string; sour
 export interface AdminQuestion {
   id: string; courseId: string; subjectId?:string; topicId?:string; category: string; topic: string; board: string; type: string; text: string;
   correct: string; explanation?: string; reference?: string; status?: string; passageId?: string | null;
-  detailedTopic?: string; conceptExplanation?: string; decisiveEvidence?:string; answerAnalysis?: string; examTrap?:string; fixationTips?: string[];
+  detailedTopic?: string; conceptExplanation?: string; decisiveEvidence?:string; answerAnalysis?: string; examTrap?:string; similarQuestionStrategy?:string; fixationTips?: string[];
   comparisonHeaders?: {criterion:string;left:string;right:string};
   comparisonRows?: Array<{criterion:string;left:string;right:string}>;
   passageTitle?: string; pendingReports?: number; options: Array<{ label: string; text: string }>;

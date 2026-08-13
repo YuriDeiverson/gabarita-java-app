@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "detailedTopic",
+    "conceptExplanation",
+    "decisiveEvidence",
+    "answerAnalysis",
+    "examTrap",
+    "similarQuestionStrategy",
+    "fixationTips"
+  ],
+  "properties": {
+    "detailedTopic": { "type": "string", "minLength": 8, "maxLength": 240 },
+    "conceptExplanation": { "type": "string", "minLength": 300, "maxLength": 8000 },
+    "decisiveEvidence": { "type": "string", "minLength": 40, "maxLength": 5000 },
+    "answerAnalysis": { "type": "string", "minLength": 400, "maxLength": 8000 },
+    "examTrap": { "type": "string", "minLength": 120, "maxLength": 5000 },
+    "similarQuestionStrategy": { "type": "string", "minLength": 160, "maxLength": 3000 },
+    "fixationTips": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 4,
+      "items": { "type": "string", "minLength": 35, "maxLength": 600 }
+    }
+  }
+}

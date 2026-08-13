@@ -160,7 +160,7 @@ public class QuestionController {
     @GetMapping("/{questionId}/guide")
     public Map<String,Object> detailedGuide(@PathVariable UUID questionId){
       var rows=jdbc.sql("""
-        SELECT detailed_topic,concept_explanation,decisive_evidence,answer_analysis,exam_trap,
+        SELECT detailed_topic,concept_explanation,decisive_evidence,answer_analysis,exam_trap,similar_question_strategy,
           fixation_tips::text fixation_tips_json,comparison_headers::text comparison_headers_json,
           comparison_rows::text comparison_rows_json
         FROM questions WHERE id=:id AND status IN('ACTIVE','ANNULLED')
@@ -170,6 +170,7 @@ public class QuestionController {
       guide.put("detailedTopic",row.get("detailed_topic"));guide.put("conceptExplanation",row.get("concept_explanation"));
       guide.put("decisiveEvidence",row.get("decisive_evidence"));guide.put("answerAnalysis",row.get("answer_analysis"));
       guide.put("examTrap",row.get("exam_trap"));
+      guide.put("similarQuestionStrategy",row.get("similar_question_strategy"));
       try{guide.put("fixationTips",json.readTree(String.valueOf(row.get("fixation_tips_json"))));}catch(Exception ignored){guide.put("fixationTips",List.of());}
       try{guide.put("comparisonHeaders",json.readTree(String.valueOf(row.get("comparison_headers_json"))));}catch(Exception ignored){guide.put("comparisonHeaders",Map.of());}
       try{guide.put("comparisonRows",json.readTree(String.valueOf(row.get("comparison_rows_json"))));}catch(Exception ignored){guide.put("comparisonRows",List.of());}
