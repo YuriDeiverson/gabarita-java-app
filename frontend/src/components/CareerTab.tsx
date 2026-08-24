@@ -369,7 +369,7 @@ export default function CareerTab({
       )}
 
       {!contest && preparations.length > 0 && (
-        <section className="career-section">
+        <section className="career-section career-preparations-section">
           <div className="career-section-heading">
             <h3>Minhas preparações</h3>
             <p>Continue de onde parou ou gerencie os concursos adicionados.</p>

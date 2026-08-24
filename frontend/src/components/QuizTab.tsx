@@ -2067,14 +2067,14 @@ export default function QuizTab({
 
       {reportDraft && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4"
+          className="question-report-backdrop fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4"
           role="presentation"
           onMouseDown={event => {
             if (event.target === event.currentTarget && !reportBusy) setReportDraft(null);
           }}
         >
           <section
-            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"
+            className="question-report-modal w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"
             role="dialog"
             aria-modal="true"
             aria-labelledby="question-report-title"

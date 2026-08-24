@@ -61,8 +61,8 @@ export default function QuestionNotesTab({ onOpenQuestion }: Props) {
   };
 
   return (
-    <section className="mx-auto w-full max-w-6xl space-y-5 animate-fade-in">
-      <header className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+    <section className="question-notes-page mx-auto w-full max-w-6xl space-y-5 animate-fade-in">
+      <header className="question-notes-hero rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700">
           <NotebookPen className="h-5 w-5" />
         </span>
@@ -86,7 +86,7 @@ export default function QuestionNotesTab({ onOpenQuestion }: Props) {
           <LoaderCircle className="h-6 w-6 animate-spin text-indigo-600" />
         </div>
       ) : notes.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center">
+        <div className="question-notes-empty rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center">
           <BookmarkCheck className="mx-auto h-8 w-8 text-slate-300" />
           <h3 className="mt-3 font-extrabold text-slate-800">
             Nenhuma questão anotada
@@ -96,11 +96,11 @@ export default function QuestionNotesTab({ onOpenQuestion }: Props) {
           </p>
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="question-notes-grid grid gap-4 lg:grid-cols-2">
           {notes.map((note) => (
             <article
               key={note.id}
-              className="flex min-w-0 flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+              className="question-note-card flex min-w-0 flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
             >
               <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-wider text-indigo-600">
                 <span>{note.category || "Questão salva"}</span>
@@ -121,7 +121,7 @@ export default function QuestionNotesTab({ onOpenQuestion }: Props) {
                   {note.note}
                 </p>
               </aside>
-              <div className="mt-auto flex flex-wrap gap-2 pt-5">
+              <div className="question-note-actions mt-auto flex flex-wrap gap-2 pt-5">
                 <button
                   type="button"
                   onClick={() => onOpenQuestion(note)}

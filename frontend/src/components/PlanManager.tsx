@@ -100,21 +100,21 @@ export default function PlanManager({ refreshKey, initialPlans, onActivated, onE
 
   return (
     <section className="plan-manager plan-manager-layout space-y-5" aria-labelledby="server-plans-title">
-      <div>
-        <div>
-          <h3 id="server-plans-title" className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
-            <FolderOpen className="w-5 h-5 text-indigo-600" /> Minhas preparações
-          </h3>
-          <p className="text-sm text-slate-500 mt-1">Seus estudos salvos e prontos para continuar.</p>
+      <header className="plan-manager-header">
+        <span className="plan-manager-header-icon" aria-hidden="true"><FolderOpen /></span>
+        <div className="plan-manager-heading">
+          <span className="plan-manager-eyebrow">Planejamento</span>
+          <h3 id="server-plans-title">Minhas preparações</h3>
+          <p>Seus estudos salvos e prontos para continuar.</p>
         </div>
-      </div>
+      </header>
 
-      {error && <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-700">{error}</div>}
+      {error && <div role="alert" className="plan-manager-error p-3 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-700">{error}</div>}
 
       {loading ? (
-        <div className="min-h-32 flex items-center justify-center gap-2 text-slate-500"><LoaderCircle className="w-5 h-5 animate-spin" /> Carregando planos...</div>
+        <div className="plan-manager-loading min-h-32 flex items-center justify-center gap-2 text-slate-500"><LoaderCircle className="w-5 h-5 animate-spin" /> Carregando preparações…</div>
       ) : plans.length === 0 ? (
-        <div className="p-8 rounded-2xl bg-white border border-dashed border-slate-300 text-center">
+        <div className="plan-manager-empty p-8 rounded-2xl bg-white border border-dashed border-slate-300 text-center">
           <FolderOpen className="w-8 h-8 text-slate-300 mx-auto mb-2" />
           <p className="font-semibold text-slate-700">Nenhum plano salvo no servidor</p>
           <p className="text-sm text-slate-500">Configure um concurso acima para criar seu primeiro plano.</p>
@@ -125,20 +125,21 @@ export default function PlanManager({ refreshKey, initialPlans, onActivated, onE
             const active = Boolean(plan.is_primary || plan.is_active);
             const busy = busyId === plan.id;
             return (
-              <article key={plan.id} className={`plan-row bg-white border rounded-2xl p-4 sm:p-5 ${active ? 'border-indigo-300 ring-1 ring-indigo-100' : 'border-slate-200'}`}>
+              <article key={plan.id} className={`plan-row ${active ? 'is-active' : ''} bg-white border rounded-2xl p-4 sm:p-5 ${active ? 'border-indigo-300 ring-1 ring-indigo-100' : 'border-slate-200'}`}>
                 <div className="plan-summary flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      {active && <span className="inline-flex items-center gap-1 text-xs font-bold rounded-full bg-indigo-100 text-indigo-700 px-2 py-1"><Check className="w-3 h-3" /> Principal</span>}
-                    </div>
-                    <h4 className="font-bold text-slate-900 leading-snug">{plan.title}</h4>
-                    <p className="text-sm text-slate-500 mt-1">{courseLabel(plan)}</p>
+                  <div className="plan-summary-content min-w-0">
+                    {active && <span className="plan-primary-badge inline-flex items-center gap-1 text-xs font-bold rounded-full bg-indigo-100 text-indigo-700 px-2 py-1"><Check className="w-3 h-3" /> Preparação principal</span>}
+                    <h4 className="plan-title font-bold text-slate-900 leading-snug">{plan.title}</h4>
+                    <p className="plan-course text-sm text-slate-500 mt-1">{courseLabel(plan)}</p>
                   </div>
                   {busy && <LoaderCircle className="w-5 h-5 text-indigo-600 animate-spin shrink-0" />}
                 </div>
-                <div className="plan-date flex items-center gap-2 text-sm text-slate-600"><CalendarDays className="w-4 h-4 shrink-0" /> <span>Prova: {examDate(plan)}</span></div>
+                <div className="plan-date flex items-center gap-2 text-sm text-slate-600">
+                  <span className="plan-date-icon" aria-hidden="true"><CalendarDays /></span>
+                  <span className="plan-date-copy"><small>Data da prova</small><strong>{examDate(plan)}</strong></span>
+                </div>
                 <div className="plan-actions">
-                  {!active && <button disabled={busy} onClick={() => activate(plan)} className="plan-action primary"><Play className="w-4 h-4" /> Ativar</button>}
+                  {!active && <button disabled={busy} onClick={() => activate(plan)} className="plan-action plan-action-main primary"><Play className="w-4 h-4" /> Tornar principal</button>}
                   <button disabled={busy} onClick={() => onEdit?.(plan.course_id || plan.courseId || '')} className="plan-action"><Pencil className="w-4 h-4" /> Reconfigurar</button>
                   <button disabled={busy} onClick={() => duplicate(plan)} className="plan-action"><Copy className="w-4 h-4" /> Duplicar</button>
                   <button disabled={busy} onClick={() => showHistory(plan)} className="plan-action"><History className="w-4 h-4" /> Histórico</button>
@@ -151,15 +152,15 @@ export default function PlanManager({ refreshKey, initialPlans, onActivated, onE
       )}
 
       {history && (
-        <div className="fixed inset-0 z-[80] bg-slate-950/50 p-4 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="history-title">
-          <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-2xl max-h-[82vh] overflow-hidden shadow-2xl">
-            <div className="p-5 border-b border-slate-200 flex items-start justify-between gap-4">
+        <div className="plan-history-backdrop fixed inset-0 z-[80] bg-slate-950/50 p-4 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="history-title">
+          <div className="plan-history-modal bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-2xl max-h-[82vh] overflow-hidden shadow-2xl">
+            <div className="plan-history-header p-5 border-b border-slate-200 flex items-start justify-between gap-4">
               <div><h3 id="history-title" className="font-extrabold text-slate-900">Histórico do plano</h3><p className="text-sm text-slate-500 truncate">{historyTitle}</p></div>
               <button onClick={() => setHistory(null)} aria-label="Fechar histórico" className="w-11 h-11 min-h-11 rounded-full flex items-center justify-center bg-slate-100"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-5 overflow-y-auto max-h-[65vh] space-y-3">
+            <div className="plan-history-list p-5 overflow-y-auto max-h-[65vh] space-y-3">
               {history.length === 0 ? <p className="text-sm text-slate-500">Nenhuma alteração registrada.</p> : history.map((entry, index) => (
-                <div key={String(entry.id || index)} className="flex gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                <div key={String(entry.id || index)} className="plan-history-entry flex gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
                   <Clock3 className="w-4 h-4 text-indigo-500 mt-0.5 shrink-0" />
                   <div><p className="text-sm font-semibold text-slate-800">{String(entry.action || 'ALTERAÇÃO')}</p><p className="text-xs text-slate-500 mt-1">Versão {String(entry.version || '—')} • {entry.changed_at ? new Date(String(entry.changed_at)).toLocaleString('pt-BR') : ''}</p></div>
                 </div>

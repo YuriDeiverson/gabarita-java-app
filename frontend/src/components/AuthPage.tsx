@@ -135,10 +135,13 @@ export default function AuthPage() {
       </section>
       <section className="auth-panel">
         <form className="auth-card" onSubmit={submit}>
-          <div>
-            <span className="auth-mobile-logo">
-              <BookOpenCheck />
-            </span>
+          <div className="auth-card-heading">
+            <div className="auth-mobile-brand" aria-label="Gabarita Concursos">
+              <span className="auth-mobile-logo" aria-hidden="true">
+                <BookOpenCheck />
+              </span>
+              <strong>Gabarita Concursos</strong>
+            </div>
             <p className="auth-kicker">BEM-VINDO AO GABARITA</p>
             <h2>{mode === 'login' ? 'Entre para continuar' : 'Crie sua conta'}</h2>
             <p>
