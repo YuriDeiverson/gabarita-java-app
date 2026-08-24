@@ -4,6 +4,7 @@ import {
   Trash2, X, CalendarDays, FolderOpen
 } from 'lucide-react';
 import { StudyPlan, studyPlansApi } from '../services/api';
+import { secureError } from '../security/secureLogger';
 
 interface PlanManagerProps {
   refreshKey?: number;
@@ -42,7 +43,7 @@ export default function PlanManager({ refreshKey, initialPlans, onActivated, onE
     try {
       setPlans(await studyPlansApi.getSummaries());
     } catch (requestError) {
-      console.error(requestError);
+      secureError('plans.load', requestError);
       setError('Não foi possível carregar os planos salvos no servidor.');
     } finally {
       setLoading(false);
@@ -63,7 +64,7 @@ export default function PlanManager({ refreshKey, initialPlans, onActivated, onE
     setError('');
     try { await action(); await loadPlans(); }
     catch (requestError) {
-      console.error(requestError);
+      secureError('plans.action', requestError);
       setError('A operação não foi concluída. Tente novamente.');
     } finally { setBusyId(null); }
   };
@@ -92,7 +93,7 @@ export default function PlanManager({ refreshKey, initialPlans, onActivated, onE
       setHistoryTitle(plan.title);
       setHistory(await studyPlansApi.history(plan.id));
     } catch (requestError) {
-      console.error(requestError);
+      secureError('plans.history', requestError);
       setError('Não foi possível carregar o histórico deste plano.');
     } finally { setBusyId(null); }
   };

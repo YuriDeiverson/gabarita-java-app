@@ -289,12 +289,20 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxxxx
 VITE_AUTH_INACTIVITY_MINUTES=30
 ```
 
+Na Vercel, `VITE_API_URL=/api` não funciona por si só: essa rota pertence ao
+deployment estático e responderá `404` se não houver um rewrite externo. Use a
+URL HTTPS pública completa do backend (incluindo `/api`) ou configure um rewrite
+explícito para esse backend. Depois de alterar uma variável `VITE_*`, faça um
+novo deployment, pois o valor é incorporado ao bundle durante o build.
+
 No backend, configure todas as variáveis de banco, Supabase e CORS no gerenciador de segredos da plataforma. Não copie arquivos `.env` para a imagem Docker.
 
 Checklist antes da publicação:
 
 - Execute os testes e builds do frontend e backend.
 - Confirme que `CORS_ORIGINS` contém apenas domínios autorizados.
+- Confirme que `VITE_API_URL` aponta para o backend público e que
+  `GET <VITE_API_URL>/health` responde com sucesso no deployment publicado.
 - Valide o health check da API.
 - Verifique as migrations pendentes em um ambiente de homologação.
 - Ative proteção de branch e revisão de código.

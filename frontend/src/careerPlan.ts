@@ -1,4 +1,4 @@
-import { scheduleApi, studyPlansApi } from './services/api';
+import { isRetryableApiError, scheduleApi, studyPlansApi } from './services/api';
 import { StudySection } from './types';
 
 export type CareerContestId = string;
@@ -111,10 +111,46 @@ const weekdayName: Record<number, string> = {
   0: 'domingo', 1: 'segunda', 2: 'terca', 3: 'quarta', 4: 'quinta', 5: 'sexta', 6: 'sabado',
 };
 
+const CREATION_RETRY_DELAYS_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
+
+const waitBeforeCreationRetry = (attempt: number) =>
+  new Promise<void>(resolve => globalThis.setTimeout(
+    resolve,
+    CREATION_RETRY_DELAYS_MS[Math.min(attempt, CREATION_RETRY_DELAYS_MS.length - 1)],
+  ));
+
+const retryCreationStep = async <T>(
+  operation: () => Promise<T>,
+  progress: ((message: string) => void) | undefined,
+  activeMessage: string,
+) => {
+  let failedAttempts = 0;
+  for (;;) {
+    progress?.(activeMessage);
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isRetryableApiError(error)) throw error;
+      progress?.('Conexão interrompida. Reconectando automaticamente…');
+      await waitBeforeCreationRetry(failedAttempts++);
+    }
+  }
+};
+
+const remotePlanSettings = (settings: unknown): Record<string, unknown> => {
+  try {
+    const parsed = typeof settings === 'string' ? JSON.parse(settings) : settings;
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+};
+
 export async function createAutomaticCareerPlan(
   contest: CareerContest,
   role: CareerRole,
   preferences: StudyPreferences,
+  onProgress?: (message: string) => void,
 ) {
   if (!isContestAvailable(contest)) throw new Error('A prova deste concurso já foi realizada e a preparação não está mais disponível.');
   const topics = topicsForCareerRole(role);
@@ -135,17 +171,22 @@ export async function createAutomaticCareerPlan(
   const examDate = contest.examDate;
   const totalDays = calculateStudyDays(examDate, preferences.selectedWeekdays);
   const blockMinutes = 60;
+  const creationRequestId = globalThis.crypto.randomUUID();
 
-  const schedule = await scheduleApi.generate({
-    courseId: role.courseId,
-    examDate,
-    studyDays: preferences.selectedWeekdays.map(day => ({
-      day: weekdayName[day],
-      hours: preferences.hoursByWeekday[day] || preferences.hoursPerDay,
-    })),
-    studySections,
-    blockMinutes,
-  });
+  const schedule = await retryCreationStep(
+    () => scheduleApi.generate({
+      courseId: role.courseId,
+      examDate,
+      studyDays: preferences.selectedWeekdays.map(day => ({
+        day: weekdayName[day],
+        hours: preferences.hoursByWeekday[day] || preferences.hoursPerDay,
+      })),
+      studySections,
+      blockMinutes,
+    }),
+    onProgress,
+    'Montando seu cronograma…',
+  );
   const scheduleWeeks = schedule.scheduleWeeks;
   const payload = {
     courseId: role.courseId,
@@ -167,31 +208,44 @@ export async function createAutomaticCareerPlan(
       hoursByWeekday: preferences.hoursByWeekday,
       hasDiscursiveExam: Boolean(role.includeDiscursive),
       automaticCurriculum: true,
+      creationRequestId,
     },
   };
 
-  const remotePlans = await studyPlansApi.getSummaries();
-  let existingPlanId: string | null = null;
-  try {
-    const existing = JSON.parse(localStorage.getItem(`${role.courseId}_study_config`) || '{}');
-    const storedPlanId = existing.examDate >= localTodayIso() && existing.contest === contest.id
-      ? String(existing.studyPlanId || '')
-      : '';
-    if (storedPlanId && remotePlans.some(plan => String(plan.id) === storedPlanId)) {
-      existingPlanId = storedPlanId;
-    }
-  } catch {}
-  if (!existingPlanId) {
-    const reusable = remotePlans.find(plan =>
-      (plan.course_id || plan.courseId) === role.courseId &&
-      (plan.exam_date || plan.examDate) === examDate && plan.title === role.label,
+  const plan = await retryCreationStep(async () => {
+    const remotePlans = await studyPlansApi.getSummaries();
+    const alreadySaved = remotePlans.find(candidate =>
+      remotePlanSettings(candidate.settings).creationRequestId === creationRequestId,
     );
-    existingPlanId = reusable?.id || null;
-  }
-  const plan = existingPlanId && !String(existingPlanId).startsWith('local-')
-    ? await studyPlansApi.update(existingPlanId, payload)
-    : await studyPlansApi.create(payload);
-  await studyPlansApi.activate(plan.id);
+    if (alreadySaved) return alreadySaved;
+
+    let existingPlanId: string | null = null;
+    try {
+      const existing = JSON.parse(localStorage.getItem(`${role.courseId}_study_config`) || '{}');
+      const storedPlanId = existing.examDate >= localTodayIso() && existing.contest === contest.id
+        ? String(existing.studyPlanId || '')
+        : '';
+      if (storedPlanId && remotePlans.some(candidate => String(candidate.id) === storedPlanId)) {
+        existingPlanId = storedPlanId;
+      }
+    } catch {}
+    if (!existingPlanId) {
+      const reusable = remotePlans.find(candidate =>
+        (candidate.course_id || candidate.courseId) === role.courseId &&
+        (candidate.exam_date || candidate.examDate) === examDate && candidate.title === role.label,
+      );
+      existingPlanId = reusable?.id || null;
+    }
+    return existingPlanId && !String(existingPlanId).startsWith('local-')
+      ? studyPlansApi.update(existingPlanId, payload)
+      : studyPlansApi.create(payload);
+  }, onProgress, 'Salvando sua preparação…');
+
+  await retryCreationStep(
+    () => studyPlansApi.activate(plan.id),
+    onProgress,
+    'Ativando sua preparação…',
+  );
 
   const config = {
     examDate,

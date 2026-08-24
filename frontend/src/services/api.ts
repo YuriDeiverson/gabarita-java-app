@@ -7,7 +7,26 @@ const GENERIC_LOAD_ERROR = 'Erro ao carregar. Tente novamente mais tarde.';
 const GENERIC_ACTION_ERROR = 'Não foi possível concluir a operação. Tente novamente mais tarde.';
 const REQUEST_TIMEOUT_MS = 15_000;
 const QUESTION_BANK_TIMEOUT_MS = 45_000;
+const STUDY_PLAN_MUTATION_TIMEOUT_MS = 120_000;
+const SCHEDULE_GENERATION_TIMEOUT_MS = 60_000;
 const RETRYABLE_HTTP_STATUSES = new Set([408, 429, 502, 503, 504]);
+
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly retryable: boolean,
+  ) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
+}
+
+export const isRetryableApiError = (error: unknown) =>
+  error instanceof ApiRequestError && error.retryable;
+
+const isRetryableResponseStatus = (status: number) =>
+  status === 404 || status === 408 || status === 429 || status >= 500;
 const wait = (milliseconds: number) =>
   new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 
@@ -63,7 +82,7 @@ const fetch=async(input:RequestInfo|URL,init:RequestInit={},timeoutMs=REQUEST_TI
     return response;
   } catch {
     // Não exponha falhas de rede, timeout ou detalhes de serviços ao usuário.
-    throw new Error(GENERIC_LOAD_ERROR);
+    throw new ApiRequestError(GENERIC_LOAD_ERROR, 0, true);
   }
 };
 
@@ -75,6 +94,13 @@ const getApiErrorMessage = async (response: Response, fallback: string) => {
     ? GENERIC_LOAD_ERROR
     : fallback || GENERIC_ACTION_ERROR;
 };
+
+const apiResponseError = async (response: Response, fallback: string) =>
+  new ApiRequestError(
+    await getApiErrorMessage(response, fallback),
+    response.status,
+    isRetryableResponseStatus(response.status),
+  );
 
 export interface StudyPlan {
   id: string;
@@ -178,24 +204,24 @@ export interface StudyDashboardData {
 export const studyPlansApi = {
   getSummaries: async (): Promise<StudyPlan[]> => {
     const response = await fetch(`${API_BASE_URL}/study-plans/summaries`);
-    if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
+    if (!response.ok) throw await apiResponseError(response, GENERIC_LOAD_ERROR);
     return response.json();
   },
   getAll: async (includeArchived = false): Promise<StudyPlan[]> => {
     const response = await fetch(`${API_BASE_URL}/study-plans?includeArchived=${includeArchived}`);
-    if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
+    if (!response.ok) throw await apiResponseError(response, GENERIC_LOAD_ERROR);
     return response.json();
   },
 
   getById: async (id: string): Promise<StudyPlan> => {
     const response = await fetch(`${API_BASE_URL}/study-plans/${id}`);
-    if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
+    if (!response.ok) throw await apiResponseError(response, GENERIC_LOAD_ERROR);
     return response.json();
   },
 
   getActive: async (): Promise<StudyPlan> => {
     const response = await fetch(`${API_BASE_URL}/study-plans/active/current`);
-    if (!response.ok) throw new Error(GENERIC_LOAD_ERROR);
+    if (!response.ok) throw await apiResponseError(response, GENERIC_LOAD_ERROR);
     return response.json();
   },
 
@@ -216,8 +242,8 @@ export const studyPlansApi = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Não foi possível salvar o plano'));
+    }, STUDY_PLAN_MUTATION_TIMEOUT_MS);
+    if (!response.ok) throw await apiResponseError(response, 'Não foi possível salvar o plano');
     return response.json();
   },
 
@@ -238,8 +264,8 @@ export const studyPlansApi = {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Não foi possível atualizar o plano'));
+    }, STUDY_PLAN_MUTATION_TIMEOUT_MS);
+    if (!response.ok) throw await apiResponseError(response, 'Não foi possível atualizar o plano');
     return response.json();
   },
 
@@ -256,7 +282,7 @@ export const studyPlansApi = {
     const response = await fetch(`${API_BASE_URL}/study-plans/${id}/activate`, {
       method: 'PATCH',
     });
-    if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Não foi possível ativar o plano'));
+    if (!response.ok) throw await apiResponseError(response, 'Não foi possível ativar o plano');
   },
 
   duplicate: async (id: string, title?: string): Promise<StudyPlan> => {
@@ -413,8 +439,8 @@ export const scheduleApi = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
-  });
-  if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Não foi possível gerar o cronograma'));
+  }, SCHEDULE_GENERATION_TIMEOUT_MS);
+  if (!response.ok) throw await apiResponseError(response, 'Não foi possível gerar o cronograma');
   return response.json();
 },
 
@@ -576,7 +602,7 @@ const jsonRequest = async <T>(path: string, options?: RequestInit): Promise<T> =
     if (response.status === 204) return undefined as T;
     return response.json();
   } catch (error) {
-    if (error instanceof Error && (error.message === GENERIC_LOAD_ERROR || error.message === GENERIC_ACTION_ERROR)) {
+    if (error instanceof ApiRequestError || (error instanceof Error && (error.message === GENERIC_LOAD_ERROR || error.message === GENERIC_ACTION_ERROR))) {
       throw error;
     }
     throw new Error(GENERIC_LOAD_ERROR);

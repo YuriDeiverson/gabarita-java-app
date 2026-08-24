@@ -1,9 +1,19 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import {defineConfig, loadEnv} from 'vite';
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const apiUrl = String(env.VITE_API_URL || '/api').trim();
+
+  if (process.env.VERCEL && !/^https:\/\//i.test(apiUrl)) {
+    throw new Error(
+      'VITE_API_URL deve apontar para a URL HTTPS pública do backend em builds da Vercel. ' +
+      'Uma rota relativa como /api só funciona quando existe um rewrite explícito para o backend.',
+    );
+  }
+
   return {
     plugins: [react(), tailwindcss()],
     resolve: {

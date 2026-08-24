@@ -9,6 +9,7 @@ import {
   isContestAvailable, localTodayIso, topicIdsForCareer, topicsForCareerRole,
 } from '../careerPlan';
 import { CatalogContest, StudyPlan, catalogApi, studyPlansApi } from '../services/api';
+import { secureError } from '../security/secureLogger';
 import './CareerTab.css';
 
 interface Props {
@@ -34,6 +35,7 @@ interface Preparation {
 
 const weekdayLabels: Record<number, string> = { 0: 'domingo', 1: 'segunda', 2: 'terça', 3: 'quarta', 4: 'quinta', 5: 'sexta', 6: 'sábado' };
 const CATALOG_CACHE_KEY = 'career_catalog_cache_v1';
+const LOAD_RETRY_DELAYS_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
 const formatDate = (value?: string) => value ? value.split('-').reverse().join('/') : 'A definir';
 const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const remainingDays = (examDate: string) => Math.max(0, Math.ceil((new Date(`${examDate}T00:00:00`).getTime() - Date.now()) / 86_400_000));
@@ -92,6 +94,7 @@ export default function CareerTab({
   const [pendingRole, setPendingRole] = useState<CareerRole | null>(null);
   const [showContents, setShowContents] = useState(false);
   const [creatingRole, setCreatingRole] = useState('');
+  const [creationStatus, setCreationStatus] = useState('');
   const [busyPreparation, setBusyPreparation] = useState('');
   const [error, setError] = useState('');
   const [preparationVersion, setPreparationVersion] = useState(0);
@@ -112,27 +115,53 @@ export default function CareerTab({
 
   useEffect(() => {
     let cancelled = false;
+    let plansRetryTimer = 0;
+    let catalogRetryTimer = 0;
+    let failedPlanAttempts = 0;
+    let failedCatalogAttempts = 0;
     setLoadingPlans(true);
     setLoadingCatalog(true);
     setError('');
-    studyPlansApi.getSummaries()
-      .then(plans => { if (!cancelled) setRemotePlans(plans); })
-      .catch(() => { if (!cancelled) setError('Suas preparações não puderam ser carregadas agora.'); })
-      .finally(() => { if (!cancelled) setLoadingPlans(false); });
-    catalogApi.contests()
-      .then(catalog => {
+
+    const loadPlans = async () => {
+      try {
+        const plans = await studyPlansApi.getSummaries();
+        if (cancelled) return;
+        setRemotePlans(plans);
+        setLoadingPlans(false);
+      } catch {
+        if (cancelled) return;
+        const delay = LOAD_RETRY_DELAYS_MS[Math.min(failedPlanAttempts++, LOAD_RETRY_DELAYS_MS.length - 1)];
+        plansRetryTimer = window.setTimeout(() => void loadPlans(), delay);
+      }
+    };
+
+    const loadCatalog = async () => {
+      try {
+        const catalog = await catalogApi.contests();
         if (cancelled) return;
         const contests = catalog as CareerContest[];
         setRemoteContests(contests);
         saveCatalogCache(contests);
-      })
-      .catch(() => {
-        if (!cancelled) setError(remoteContests.length
-          ? 'Não foi possível atualizar o catálogo agora. Exibindo a última versão carregada.'
-          : 'Não foi possível carregar o catálogo de concursos. Tente novamente mais tarde.');
-      })
-      .finally(() => { if (!cancelled) setLoadingCatalog(false); });
-    return () => { cancelled = true; };
+        setLoadingCatalog(false);
+        setError(current => current === 'Exibindo a última versão do catálogo enquanto reconectamos ao servidor.' ? '' : current);
+      } catch {
+        if (cancelled) return;
+        if (remoteContests.length > 0) {
+          setError('Exibindo a última versão do catálogo enquanto reconectamos ao servidor.');
+        }
+        const delay = LOAD_RETRY_DELAYS_MS[Math.min(failedCatalogAttempts++, LOAD_RETRY_DELAYS_MS.length - 1)];
+        catalogRetryTimer = window.setTimeout(() => void loadCatalog(), delay);
+      }
+    };
+
+    void loadPlans();
+    void loadCatalog();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(plansRetryTimer);
+      window.clearTimeout(catalogRetryTimer);
+    };
   }, [preparationVersion]);
 
   useEffect(()=>{
@@ -174,18 +203,20 @@ export default function CareerTab({
     if (creatingPlanRef.current) return;
     creatingPlanRef.current = true;
     setCreatingRole(pendingRole.id);
+    setCreationStatus('Preparando os dados do seu plano…');
     setError('');
     try {
-      const result = await createAutomaticCareerPlan(contest, pendingRole, preferences);
+      const result = await createAutomaticCareerPlan(contest, pendingRole, preferences, setCreationStatus);
       setPendingRole(null);
       setPreparationVersion(value => value + 1);
       onPlanGenerated(result.courseId);
     } catch (cause) {
-      console.error('Erro ao criar preparação automática:', cause);
+      secureError('career-plan.create', cause);
       setError(cause instanceof Error ? cause.message : 'Não foi possível criar esta preparação.');
     } finally {
       creatingPlanRef.current = false;
       setCreatingRole('');
+      setCreationStatus('');
     }
   };
 
@@ -530,8 +561,8 @@ export default function CareerTab({
                   <LoaderCircle />
                 </span>
                 <div>
-                  <strong>Criando preparação…</strong>
-                  <p>Aguente só um momento.</p>
+                  <strong>{creationStatus || 'Criando preparação…'}</strong>
+                  <p>Você não precisa tentar novamente; continuaremos automaticamente até concluir.</p>
                 </div>
               </div>
             ) : (

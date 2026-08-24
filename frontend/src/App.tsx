@@ -18,6 +18,7 @@ import {
 } from "./services/api";
 import { ActiveStudyContext } from "./studyContext";
 import { useAuth } from "./auth/AuthContext";
+import { secureWarn } from "./security/secureLogger";
 import {
   Bell,
   BookOpen,
@@ -63,6 +64,9 @@ const CareerTab = lazy(() => import("./components/CareerTab"));
 const PlanManager = lazy(() => import("./components/PlanManager"));
 const AdminPanel = lazy(() => import("./components/AdminPanel"));
 const InitialStudySetup = lazy(() => import("./components/InitialStudySetup"));
+const LOAD_RETRY_DELAYS_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
+const loadRetryDelay = (attempt: number) =>
+  LOAD_RETRY_DELAYS_MS[Math.min(attempt, LOAD_RETRY_DELAYS_MS.length - 1)];
 
 type AppTab =
   | "home"
@@ -135,6 +139,8 @@ export default function App() {
   );
   const [serverPlans, setServerPlans] = useState<StudyPlan[]>([]);
   const [plansBootstrapping, setPlansBootstrapping] = useState(true);
+  const [plansLoadError, setPlansLoadError] = useState("");
+  const plansLoadRequestRef = useRef(0);
   const [studyContext, setStudyContext] = useState<ActiveStudyContext | null>(
     () => {
       try {
@@ -316,25 +322,44 @@ export default function App() {
     try {
       setHeaderNotifications(await notificationsApi.all());
       setNotificationError("");
+      return true;
     } catch (error) {
-      console.warn("Não foi possível carregar as notificações.", error);
+      if (showLoading) {
+        secureWarn("notifications.load", error);
+      }
       setNotificationError(
         error instanceof Error
           ? error.message
           : "Não foi possível carregar suas notificações.",
       );
+      return false;
     } finally {
       if (showLoading) setNotificationLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadHeaderNotifications(true);
-    const interval = window.setInterval(
-      () => void loadHeaderNotifications(),
-      30_000,
-    );
-    return () => window.clearInterval(interval);
+    let cancelled = false;
+    let retryTimer = 0;
+    let failedAttempts = 0;
+
+    const poll = async (showLoading = false) => {
+      if (!showLoading && document.visibilityState !== "visible") {
+        retryTimer = window.setTimeout(() => void poll(), 30_000);
+        return;
+      }
+      const loaded = await loadHeaderNotifications(showLoading);
+      if (cancelled) return;
+      failedAttempts = loaded ? 0 : failedAttempts + 1;
+      const delay = loaded ? 30_000 : loadRetryDelay(failedAttempts - 1);
+      retryTimer = window.setTimeout(() => void poll(), delay);
+    };
+
+    void poll(true);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(retryTimer);
+    };
   }, [loadHeaderNotifications]);
 
   const loadHeaderStudyData = useCallback(async () => {
@@ -467,7 +492,7 @@ export default function App() {
         const parsed = JSON.parse(progressSaved);
         completed = Object.keys(parsed).filter((key) => parsed[key]).length;
       } catch (e) {
-        console.error(e);
+        secureWarn("progress.schedule-cache.parse", e);
       }
     }
 
@@ -479,7 +504,7 @@ export default function App() {
         const parsed = JSON.parse(quizSaved);
         answered = Object.keys(parsed).length;
       } catch (e) {
-        console.error(e);
+        secureWarn("progress.quiz-cache.parse", e);
       }
     }
 
@@ -512,10 +537,16 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
+    let retryTimer = 0;
+    let failedAttempts = 0;
     setPlansBootstrapping(true);
-    studyPlansApi.getSummaries()
-      .then((plans) => {
+    setPlansLoadError("");
+
+    const loadPlans = async () => {
+      try {
+        const plans = await studyPlansApi.getSummaries();
         if (cancelled) return;
+        setPlansLoadError("");
         setServerPlans(plans);
         const activePlan = plans.find(isPrimaryPlan);
         if (activePlan) {
@@ -531,15 +562,22 @@ export default function App() {
           setStudyContext(null);
           setHomeMode(plans.length > 0 ? "plans" : "dashboard");
         }
-      })
-      .catch(() => {
+        setPlansBootstrapping(false);
+      } catch {
         if (cancelled) return;
-        const localPlanAvailable = hasActiveStudyPlan();
-        setHasPlan(localPlanAvailable);
-        setHomeMode(localPlanAvailable ? "dashboard" : "plans");
-      })
-      .finally(() => { if (!cancelled) setPlansBootstrapping(false); });
-    return () => { cancelled = true; };
+        setPlansLoadError("Reconectando ao servidor para carregar seus planos…");
+        retryTimer = window.setTimeout(
+          () => void loadPlans(),
+          loadRetryDelay(failedAttempts++),
+        );
+      }
+    };
+
+    void loadPlans();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(retryTimer);
+    };
   }, [hydrateActivePlan, user?.id]);
 
   useEffect(() => {
@@ -998,7 +1036,7 @@ export default function App() {
       })
       .catch((error) => {
         globalAutomaticCompletionRef.current = "";
-        console.warn("Não foi possível concluir o Pomodoro.", error);
+        secureWarn("pomodoro.auto-complete", error);
       });
   }, [
     activeHeaderSession?.id,
@@ -1182,10 +1220,7 @@ export default function App() {
       const latestSession = await dailyStudyApi.active();
       session = latestSession.id ? latestSession : null;
     } catch (error) {
-      console.warn(
-        "Não foi possível atualizar a sessão antes de criar o plano.",
-        error,
-      );
+      secureWarn("study-session.refresh-before-plan", error);
     }
     if (!session?.id) return true;
     return new Promise<boolean>((resolve) => {
@@ -1273,10 +1308,28 @@ export default function App() {
     setHomeMode("plans");
     setActiveTab("home");
     setPlansBootstrapping(true);
-    studyPlansApi.getSummaries()
-      .then(setServerPlans)
-      .catch(() => {})
-      .finally(() => setPlansBootstrapping(false));
+    setPlansLoadError("");
+    const requestId = ++plansLoadRequestRef.current;
+    let failedAttempts = 0;
+
+    const loadPlans = async () => {
+      try {
+        const plans = await studyPlansApi.getSummaries();
+        if (plansLoadRequestRef.current !== requestId) return;
+        setServerPlans(plans);
+        setPlansLoadError("");
+        setPlansBootstrapping(false);
+      } catch {
+        if (plansLoadRequestRef.current !== requestId) return;
+        setPlansLoadError("Reconectando ao servidor para carregar seus planos…");
+        window.setTimeout(
+          () => void loadPlans(),
+          loadRetryDelay(failedAttempts++),
+        );
+      }
+    };
+
+    void loadPlans();
   };
   const openProfileDestination = (
     tab: "career" | "schedule" | "performance" | "notes" | "admin",
@@ -1308,7 +1361,7 @@ export default function App() {
         items.filter((item) => String(item.id) !== id),
       );
     } catch (error) {
-      console.warn("Não foi possível marcar a notificação como lida.", error);
+      secureWarn("notifications.mark-read", error);
     }
   };
   const readAllNotifications = async () => {
@@ -1318,10 +1371,7 @@ export default function App() {
       await notificationsApi.readAll();
       setHeaderNotifications([]);
     } catch (error) {
-      console.warn(
-        "Não foi possível marcar as notificações como lidas.",
-        error,
-      );
+      secureWarn("notifications.mark-all-read", error);
     } finally {
       setMarkingAllNotifications(false);
     }
@@ -1567,14 +1617,9 @@ export default function App() {
                 </div>
               )}
               {notificationError && (
-                <div className="notification-load-error" role="alert">
-                  <p>Não foi possível carregar as notificações.</p>
-                  <button
-                    type="button"
-                    onClick={() => void loadHeaderNotifications(true)}
-                  >
-                    <RefreshCw /> Tentar novamente
-                  </button>
+                <div className="notification-load-error" role="status">
+                  <RefreshCw className="animate-spin" aria-hidden="true" />
+                  <p>Reconectando para carregar as notificações…</p>
                 </div>
               )}
               {!notificationLoading &&
@@ -2146,7 +2191,7 @@ export default function App() {
           {activeTab === "home" && plansBootstrapping && (
             <section className="mx-auto flex min-h-64 max-w-4xl items-center justify-center gap-3 text-slate-500" role="status">
               <RefreshCw className="h-5 w-5 animate-spin" aria-hidden="true" />
-              <span>Carregando sua preparação…</span>
+              <span>{plansLoadError || "Carregando sua preparação…"}</span>
             </section>
           )}
           {activeTab === "home" && !plansBootstrapping && homeMode === "plans" && (

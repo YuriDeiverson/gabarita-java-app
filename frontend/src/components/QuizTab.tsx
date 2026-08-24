@@ -27,6 +27,7 @@ import {
 import { ActiveStudyContext, normalizeStudySubjectTitle, normalizeStudyText, questionRelevance } from '../studyContext';
 import { filterQuestionsByBoards, questionBoardsFromConfig, questionExamBoard } from '../questionBanks';
 import { readQuestionCache, writeQuestionCache } from '../questionCache';
+import { secureError, secureWarn } from '../security/secureLogger';
 
 interface QuizTabProps {
   mode?: 'session' | 'all';
@@ -187,7 +188,7 @@ const writeGuidedReviewDraft = (key: string | null, draft: Omit<GuidedReviewDraf
   try {
     localStorage.setItem(key, JSON.stringify({ ...draft, updatedAt: new Date().toISOString() }));
   } catch (error) {
-    console.warn('Não foi possível salvar o progresso local da revisão.', error);
+    secureWarn('quiz.review-draft.save', error);
   }
 };
 
@@ -316,7 +317,7 @@ const DetailedFeedbackModal = ({ question, onClose }: { question: Question; onCl
       .then(value => {
         if (!cancelled) setGuide(value);
       })
-      .catch(error => console.warn('Correção completa da questão indisponível.', error))
+      .catch(error => secureWarn('quiz.guide.load', error))
       .finally(() => {
         if (!cancelled) setGuideLoading(false);
       });
@@ -654,7 +655,7 @@ export default function QuizTab({
           return next;
         });
       })
-      .catch(error => console.warn('Anotações de questões indisponíveis.', error));
+      .catch(error => secureWarn('quiz.notes.load', error));
   }, [currentCourseId]);
 
   useEffect(() => {
@@ -736,7 +737,7 @@ export default function QuizTab({
       .then(taxonomy => {
         if (!cancelled) setQuestionTaxonomy(taxonomy);
       })
-      .catch(error => console.warn('Taxonomia de questões indisponível.', error));
+      .catch(error => secureWarn('quiz.taxonomy.load', error));
     return () => {
       cancelled = true;
     };
@@ -778,9 +779,9 @@ export default function QuizTab({
           });
           setAnswers(current => ({ ...current, ...remoteAnswers }));
         })
-        .catch(error => console.warn('Respostas remotas indisponíveis; usando cache local.', error));
+        .catch(error => secureWarn('quiz.remote-answers.load', error));
     } catch (error) {
-      console.warn('Configuração local inválida.', error);
+      secureWarn('quiz.local-config.parse', error);
     }
   }, []);
 
@@ -939,7 +940,7 @@ export default function QuizTab({
         savedHistory[String(questionId)] = { answer: option, answeredAt: new Date().toISOString() };
         localStorage.setItem('quiz_answer_history', JSON.stringify(savedHistory));
       } catch (error) {
-        console.warn('Não foi possível atualizar o histórico local da resposta.', error);
+        secureWarn('quiz.answer-history.save', error);
       }
 
     // Save to API if study plan ID exists
@@ -957,7 +958,7 @@ export default function QuizTab({
           });
         }
       } catch (error) {
-        console.error('Error saving quiz progress:', error);
+        secureError('quiz.progress.save', error);
       }
     }
   };
