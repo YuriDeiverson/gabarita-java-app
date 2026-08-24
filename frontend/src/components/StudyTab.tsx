@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowRight,
   BookOpen,
   Brain,
   Check,
@@ -18,7 +17,7 @@ import { StudyCard, StudySection } from '../types';
 
 interface StudyTabProps {
   studyContext?: ActiveStudyContext | null;
-  onCurrentActivityComplete?: () => void;
+  onCurrentActivityComplete?: () => Promise<void> | void;
 }
 
 const settingsObject = (value: unknown): Record<string, unknown> => {
@@ -91,6 +90,8 @@ export default function StudyTab({ studyContext, onCurrentActivityComplete }: St
   const [activeSectionId, setActiveSectionId] = useState('');
   const [activeCardId, setActiveCardId] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
+  const [completionBusy, setCompletionBusy] = useState(false);
+  const [completionError, setCompletionError] = useState('');
   const filterRef = useRef<HTMLDivElement>(null);
   const [completedCards, setCompletedCards] = useState<Record<string, boolean>>(() => {
     try {
@@ -174,14 +175,22 @@ export default function StudyTab({ studyContext, onCurrentActivityComplete }: St
     setActiveCardId(cardId);
     setFilterOpen(false);
   };
-  const completeCurrent = () => {
-    if (!activeCard) return;
-    setCompletedCards(current => {
-      const updated = { ...current, [activeCard.id]: true };
-      localStorage.setItem('completed_study_cards', JSON.stringify(updated));
-      return updated;
-    });
-    if (activeCard.id === contextMatch?.card.id) onCurrentActivityComplete?.();
+  const completeCurrent = async () => {
+    if (!activeCard || completedCards[activeCard.id] || completionBusy) return;
+    setCompletionBusy(true);
+    setCompletionError('');
+    try {
+      if (activeCard.id === contextMatch?.card.id) await onCurrentActivityComplete?.();
+      setCompletedCards(current => {
+        const updated = { ...current, [activeCard.id]: true };
+        localStorage.setItem('completed_study_cards', JSON.stringify(updated));
+        return updated;
+      });
+    } catch (error) {
+      setCompletionError(error instanceof Error ? error.message : 'Não foi possível concluir este assunto.');
+    } finally {
+      setCompletionBusy(false);
+    }
   };
 
   if (contentLoading) {
@@ -381,15 +390,22 @@ export default function StudyTab({ studyContext, onCurrentActivityComplete }: St
         </article>
 
         <footer className="study-reader-footer">
-          <button type="button" className={isCompleted ? 'is-completed' : ''} onClick={completeCurrent}>
+          <button
+            type="button"
+            className={isCompleted ? 'is-completed' : ''}
+            disabled={completionBusy}
+            onClick={completeCurrent}
+          >
             {isCompleted ? <CheckCircle /> : <Check />}
             {isCompleted
               ? 'Assunto concluído'
-              : activeCard.id === contextMatch?.card.id
-                ? 'Concluir e iniciar revisão'
-                : 'Marcar assunto como concluído'}
-            {!isCompleted && activeCard.id === contextMatch?.card.id && <ArrowRight />}
+              : completionBusy
+                ? 'Finalizando…'
+                : activeCard.id === contextMatch?.card.id
+                  ? 'Concluir assunto'
+                  : 'Marcar assunto como concluído'}
           </button>
+          {completionError && <p role="alert" className="text-xs text-rose-700">{completionError}</p>}
           <BookOpen aria-hidden="true" />
         </footer>
       </section>

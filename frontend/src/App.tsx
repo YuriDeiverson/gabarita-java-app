@@ -1,5 +1,4 @@
 import { lazy, Suspense, useState, useEffect, useCallback, useRef } from "react";
-import QuizTab, { GuidedReviewResult } from "./components/QuizTab";
 import StudyDashboard from "./components/StudyDashboard";
 import QuestionBankTab from "./components/QuestionBankTab";
 import type { AdminSection } from "./components/AdminPanel";
@@ -31,7 +30,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ListChecks,
-  Award,
   X,
   LogOut,
   UserRound,
@@ -70,7 +68,6 @@ type AppTab =
   | "home"
   | "career"
   | "study"
-  | "quiz"
   | "questions"
   | "schedule"
   | "performance"
@@ -124,6 +121,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<AppTab>(() => {
     const saved = localStorage.getItem("app_active_tab");
     const setupAvailable = Boolean(loadStudyPreferences(user?.id));
+    if (saved === "quiz") return hasActiveStudyPlan() ? "study" : "home";
     return saved &&
       saved !== "home" &&
       !hasActiveStudyPlan() &&
@@ -148,11 +146,6 @@ export default function App() {
       }
     },
   );
-  const [reviewResult, setReviewResult] = useState<GuidedReviewResult | null>(
-    null,
-  );
-  const [advancingCycle, setAdvancingCycle] = useState(false);
-  const [cycleError, setCycleError] = useState("");
   const [dashboardVersion, setDashboardVersion] = useState(0);
   const [questionDailyTask, setQuestionDailyTask] = useState<{
     id: string;
@@ -191,7 +184,7 @@ export default function App() {
   const [completedBreakError, setCompletedBreakError] = useState("");
   const breakAlertedRef = useRef("");
   const completedBreakAlertedRef = useRef("");
-  const globalAutomaticPauseRef = useRef("");
+  const globalAutomaticCompletionRef = useRef("");
   const audioContextRef = useRef<AudioContext | null>(null);
 
   const ensureAudioContext = useCallback(() => {
@@ -658,36 +651,32 @@ export default function App() {
     [updateStudyContext],
   );
 
-  const openCurrentReview = useCallback(() => setActiveTab("quiz"), []);
-  const showReviewResult = useCallback((result: GuidedReviewResult) => {
-    setReviewResult(result);
-    setCycleError("");
-    setHomeMode("dashboard");
-    setActiveTab("home");
-  }, []);
-  const advanceAfterReview = useCallback(async () => {
-    if (!reviewResult || advancingCycle) return;
-    setAdvancingCycle(true);
-    setCycleError("");
-    try {
-      let session = await dailyStudyApi.active();
-      if (!session.id) {
-        const today = await dailyStudyApi.today();
-        const task = today.tasks.find(
-          (item) =>
-            item.roadmap_topic_id === studyContext?.roadmapTopicId &&
-            ["AVAILABLE", "IN_PROGRESS"].includes(item.status),
-        );
-        if (!task)
-          throw new Error("Não foi possível localizar a sessão deste assunto.");
+  const completeCurrentActivity = useCallback(async () => {
+    let session = await dailyStudyApi.active();
+    if (!session.id) {
+      const today = await dailyStudyApi.today();
+      const task = today.tasks.find(
+        (item) =>
+          item.roadmap_topic_id === studyContext?.roadmapTopicId &&
+          ["AVAILABLE", "IN_PROGRESS"].includes(item.status),
+      );
+      const alreadyCompleted = today.tasks.some(
+        (item) =>
+          item.roadmap_topic_id === studyContext?.roadmapTopicId &&
+          item.status === "COMPLETED",
+      );
+      if (!task && !alreadyCompleted)
+        throw new Error("Não foi possível localizar a sessão deste assunto.");
+      if (task)
         session = await dailyStudyApi.start(task.id, {
           mode: "FREE",
           device: navigator.userAgent.slice(0, 150),
         });
-      }
+    }
+    if (session.id) {
       if (session.session_kind === "QUESTIONS")
         throw new Error(
-          "Finalize o Pomodoro do banco de questões antes de avançar.",
+          "Finalize o Pomodoro do banco de questões antes de concluir este assunto.",
         );
       if (
         session.roadmap_topic_id &&
@@ -698,39 +687,32 @@ export default function App() {
           "A sessão ativa pertence a outro assunto. Retorne ao início e confira a sessão atual.",
         );
       await dailyStudyApi.finish(String(session.id), {
-        questionsAnswered: reviewResult.answered,
-        correctAnswers: reviewResult.correct,
-        notes: "GUIDED_REVIEW",
+        questionsAnswered: 0,
+        correctAnswers: 0,
+        notes: "CONTENT_COMPLETED",
       });
-      const updated = await dailyStudyApi.today();
-      const next = updated.tasks.find((item) =>
-        ["AVAILABLE", "IN_PROGRESS"].includes(item.status),
-      );
-      if (next)
-        updateStudyContext({
-          roadmapTopicId: next.roadmap_topic_id,
-          topicTitle: next.topic_title,
-          subjectName: next.subject_name,
-          source: "daily-plan",
-        });
-      setReviewResult(null);
-      setDashboardVersion((value) => value + 1);
-    } catch (error) {
-      setCycleError(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível iniciar o próximo assunto.",
-      );
-    } finally {
-      setAdvancingCycle(false);
     }
-  }, [advancingCycle, reviewResult, studyContext, updateStudyContext]);
+    const updated = await dailyStudyApi.today();
+    setHeaderStudyData(updated);
+    setHeaderTimerLoadedAt(Date.now());
+    const next = updated.tasks.find((item) =>
+      ["AVAILABLE", "IN_PROGRESS"].includes(item.status),
+    );
+    if (next)
+      updateStudyContext({
+        roadmapTopicId: next.roadmap_topic_id,
+        topicTitle: next.topic_title,
+        subjectName: next.subject_name,
+        source: "daily-plan",
+      });
+    setDashboardVersion((value) => value + 1);
+  }, [studyContext, updateStudyContext]);
 
   useEffect(() => {
     if (
       !hasPlan ||
       studyContext ||
-      (activeTab !== "study" && activeTab !== "quiz")
+      activeTab !== "study"
     )
       return;
     dailyStudyApi
@@ -976,20 +958,47 @@ export default function App() {
     )
       return;
     const key = `${activeHeaderSession.id}:${headerCycle}`;
-    if (globalAutomaticPauseRef.current === key) return;
-    globalAutomaticPauseRef.current = key;
+    if (globalAutomaticCompletionRef.current === key) return;
+    globalAutomaticCompletionRef.current = key;
+    const completedTitle = String(
+      activeHeaderSession.topic_title || "Sessão atual",
+    );
     dailyStudyApi
-      .pause(String(activeHeaderSession.id), "POMODORO_FOCUS_COMPLETE")
+      .completeFocus(String(activeHeaderSession.id))
+      .then(() => dailyStudyApi.today())
       .then((updated) => {
-        setHeaderStudyData((current) =>
-          current ? { ...current, active_session: updated } : current,
-        );
+        setHeaderStudyData(updated);
         setHeaderTimerLoadedAt(Date.now());
+        const next = updated.tasks.find((item) =>
+          ["AVAILABLE", "IN_PROGRESS"].includes(item.status),
+        );
+        if (next)
+          updateStudyContext({
+            roadmapTopicId: next.roadmap_topic_id,
+            topicTitle: next.topic_title,
+            subjectName: next.subject_name,
+            source: "daily-plan",
+          });
+        setBreakNotice({ title: completedTitle, minutes: 10 });
+        playGentleBreakChime();
+        if (
+          "Notification" in window &&
+          Notification.permission === "granted"
+        ) {
+          try {
+            new Notification("Pomodoro concluído", {
+              body: next
+                ? `Próximo assunto: ${next.topic_title}. Faça uma pausa antes de começar.`
+                : "Todas as sessões planejadas para hoje foram concluídas.",
+              tag: `focus-complete:${key}`,
+            });
+          } catch {}
+        }
         setDashboardVersion((value) => value + 1);
       })
       .catch((error) => {
-        globalAutomaticPauseRef.current = "";
-        console.warn("Não foi possível iniciar o descanso do Pomodoro.", error);
+        globalAutomaticCompletionRef.current = "";
+        console.warn("Não foi possível concluir o Pomodoro.", error);
       });
   }, [
     activeHeaderSession?.id,
@@ -998,6 +1007,8 @@ export default function App() {
     activeHeaderSession?.status,
     headerCycle,
     headerTimerSeconds,
+    playGentleBreakChime,
+    updateStudyContext,
   ]);
 
   useEffect(() => {
@@ -2246,19 +2257,13 @@ export default function App() {
           {hasPlan && activeTab === "study" && (
             <StudyTab
               studyContext={studyContext}
-              onCurrentActivityComplete={openCurrentReview}
-            />
-          )}
-          {hasPlan && activeTab === "quiz" && (
-            <QuizTab
-              mode="session"
-              studyContext={studyContext}
-              onReviewComplete={showReviewResult}
+              onCurrentActivityComplete={completeCurrentActivity}
             />
           )}
           {hasPlan && activeTab === "schedule" && (
             <ScheduleTab
               studyContext={studyContext}
+              refreshVersion={dashboardVersion}
               onOpenStudy={openStudyContext}
               onOpenQuestions={() => {
                 setQuestionDailyTask(null);
@@ -2293,89 +2298,6 @@ export default function App() {
         </div>
         {contextRail}
       </main>
-
-      {reviewResult && (
-        <div
-          className="finish-modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="guided-review-result-title"
-        >
-          <section className="finish-modal">
-            <button
-              type="button"
-              className="modal-close"
-              disabled={advancingCycle}
-              onClick={advanceAfterReview}
-              aria-label="Fechar resultado e avançar"
-            >
-              <X />
-            </button>
-            <span
-              className={`finish-icon ${reviewResult.accuracy < 60 ? "!bg-rose-50 !text-rose-600" : reviewResult.accuracy < 80 ? "!bg-amber-50 !text-amber-600" : ""}`}
-            >
-              <Award />
-            </span>
-            <h3 id="guided-review-result-title">Resultado da revisão</h3>
-            <p>{reviewResult.topicTitle}</p>
-            <div className="grid grid-cols-3 gap-2 my-5">
-              <div className="rounded-xl bg-slate-50 p-3 text-center">
-                <span className="block text-xs text-slate-500">
-                  Respondidas
-                </span>
-                <strong className="text-xl text-slate-900">
-                  {reviewResult.answered}
-                </strong>
-              </div>
-              <div className="rounded-xl bg-emerald-50 p-3 text-center">
-                <span className="block text-xs text-emerald-700">Acertos</span>
-                <strong className="text-xl text-emerald-700">
-                  {reviewResult.correct}
-                </strong>
-              </div>
-              <div className="rounded-xl bg-rose-50 p-3 text-center">
-                <span className="block text-xs text-rose-700">Erros</span>
-                <strong className="text-xl text-rose-700">
-                  {reviewResult.wrong}
-                </strong>
-              </div>
-            </div>
-            <div
-              className={`p-4 rounded-xl border text-sm ${reviewResult.accuracy >= 80 ? "bg-emerald-50 border-emerald-200 text-emerald-800" : reviewResult.accuracy >= 60 ? "bg-amber-50 border-amber-200 text-amber-900" : "bg-rose-50 border-rose-200 text-rose-800"}`}
-            >
-              <strong className="block mb-1">
-                {reviewResult.accuracy >= 80
-                  ? `Parabéns! ${reviewResult.accuracy}% de aproveitamento.`
-                  : reviewResult.accuracy >= 60
-                    ? `Bom caminho: ${reviewResult.accuracy}% de aproveitamento.`
-                    : `Atenção: ${reviewResult.accuracy}% de aproveitamento.`}
-              </strong>
-              <span>
-                {reviewResult.accuracy >= 80
-                  ? `Você demonstrou ótimo domínio de ${reviewResult.topicTitle}. Mantenha o ritmo nas revisões espaçadas.`
-                  : reviewResult.accuracy >= 60
-                    ? `Revise as justificativas das questões erradas e tente explicar os pontos-chave de ${reviewResult.topicTitle} com suas próprias palavras.`
-                    : `Retorne aos pontos-chave de ${reviewResult.topicTitle} e concentre-se nos conceitos que apareceram nas questões erradas antes da próxima revisão.`}
-              </span>
-            </div>
-            {cycleError && (
-              <p role="alert" className="!mt-3 !mb-0 !text-rose-700">
-                {cycleError}
-              </p>
-            )}
-            <button
-              type="button"
-              className="primary-study-action mt-5"
-              disabled={advancingCycle}
-              onClick={advanceAfterReview}
-            >
-              {advancingCycle
-                ? "Preparando próximo assunto…"
-                : "Continuar para o próximo assunto"}
-            </button>
-          </section>
-        </div>
-      )}
 
       {newPlanSessionPrompt && (
         <div className="finish-modal-backdrop" role="presentation">

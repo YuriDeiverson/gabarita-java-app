@@ -1,0 +1,258 @@
+{
+  "schemaVersion": 1,
+  "expectedCount": 42,
+  "corrections": [
+    {
+      "id": "070b1b19-4924-46e2-9968-3f3b3f6c8278",
+      "expected": { "subject": "Segurança da Informação", "topic": "Criptografia, Certificados e TLS" },
+      "target": { "subject": "Banco de Dados", "topic": "Índices e Transações" },
+      "reason": "A questão cobra índices B-Tree e o custo de sua manutenção em escritas."
+    },
+    {
+      "id": "0b5e5676-f4f0-4a79-83f8-52f1f61b6231",
+      "expected": { "subject": "Arquitetura de Software", "topic": "DevOps, Containers e Orquestração" },
+      "target": { "subject": "Banco de Dados", "topic": "Índices e Transações" },
+      "reason": "A questão cobra índices de banco de dados, não containers ou orquestração."
+    },
+    {
+      "id": "13d4d8b2-0cbb-4696-a097-1345e8e8eac1",
+      "expected": { "subject": "Língua Portuguesa", "topic": "Coesão e Coerência" },
+      "target": { "subject": "Inovação e Tecnologia", "topic": "Marco Legal de Ciência, Tecnologia e Inovação" },
+      "reason": "A questão cobra política pública e marco legal de ciência, tecnologia e inovação."
+    },
+    {
+      "id": "19ed2332-f814-40ee-b44a-1cf482cc2b42",
+      "expected": { "subject": "Engenharia de Software", "topic": "Processos de Software" },
+      "target": { "subject": "Legislação Institucional", "topic": "Legislação Institucional Geral" },
+      "reason": "A questão cobra norma institucional geral, sem relação com processo de software."
+    },
+    {
+      "id": "2252843d-e17d-4559-8d5d-c8b6ffd2ac1a",
+      "expected": { "subject": "Segurança da Informação", "topic": "Criptografia, Certificados e TLS" },
+      "target": { "subject": "Banco de Dados", "topic": "Índices e Transações" },
+      "reason": "A questão cobra índices de banco de dados, não criptografia."
+    },
+    {
+      "id": "2334457e-a0b1-4030-8a9e-61b69a984ca9",
+      "expected": { "subject": "Língua Portuguesa", "topic": "Coesão e Coerência" },
+      "target": { "subject": "Segurança da Informação", "topic": "Identidade, Autenticação e Controle de Acesso" },
+      "reason": "A questão cobra OAuth 2.0 e OpenID Connect."
+    },
+    {
+      "id": "235ad548-80a2-4c05-b364-52d9bba47fe1",
+      "expected": { "subject": "Arquitetura de Software", "topic": "DevOps, Containers e Orquestração" },
+      "target": { "subject": "Engenharia de Software", "topic": "Testes e Qualidade de Software" },
+      "reason": "A questão cobra análise estática e qualidade de código com SonarQube."
+    },
+    {
+      "id": "261c1150-9334-4f21-b0df-bfa380d1b63d",
+      "expected": { "subject": "Segurança da Informação", "topic": "Criptografia, Certificados e TLS" },
+      "target": { "subject": "Banco de Dados", "topic": "Normalização de Dados" },
+      "reason": "A questão cobra terceira forma normal em banco de dados."
+    },
+    {
+      "id": "3939a951-000d-4ba1-8956-2e1884bcc048",
+      "expected": { "subject": "Arquitetura de Software", "topic": "DevOps, Containers e Orquestração" },
+      "target": { "subject": "Governança e Gestão de TI", "topic": "Gestão de Projetos e PMBOK" },
+      "reason": "A questão cobra estrutura analítica do projeto segundo o PMBOK."
+    },
+    {
+      "id": "5685078f-f0be-402b-aa71-95b57ab0511e",
+      "expected": { "subject": "Banco de Dados", "topic": "SQL" },
+      "target": { "subject": "Arquitetura de Software", "topic": "Microsserviços e Microfrontends" },
+      "reason": "A questão cobra arquitetura de microsserviços, não linguagem SQL."
+    },
+    {
+      "id": "5836a37c-42eb-475a-88e2-acb39d4c26fc",
+      "expected": { "subject": "Língua Portuguesa", "topic": "Interpretação de Texto" },
+      "target": { "subject": "Programação", "topic": "Java" },
+      "reason": "A questão cobra conceitos da linguagem Java."
+    },
+    {
+      "id": "5c5ef7d9-98ce-4b19-b3cc-ae7e031a79a0",
+      "expected": { "subject": "Língua Portuguesa", "topic": "Interpretação de Texto" },
+      "target": { "subject": "Segurança da Informação", "topic": "Identidade, Autenticação e Controle de Acesso" },
+      "reason": "A questão cobra OAuth 2.0 e OpenID Connect."
+    },
+    {
+      "id": "5fd38e08-c64d-4db5-a85a-3b3ec123872d",
+      "expected": { "subject": "Arquitetura de Software", "topic": "DevOps, Containers e Orquestração" },
+      "target": { "subject": "Engenharia de Software", "topic": "Testes e Qualidade de Software" },
+      "reason": "A questão cobra análise estática e qualidade de código com SonarQube."
+    },
+    {
+      "id": "64f1dd81-bb88-423c-a2a9-41048a888b95",
+      "expected": { "subject": "Segurança da Informação", "topic": "Criptografia, Certificados e TLS" },
+      "target": { "subject": "Arquitetura de Software", "topic": "APIs REST e HTTP" },
+      "reason": "A questão cobra restrições arquiteturais de APIs REST."
+    },
+    {
+      "id": "6def9e9c-8594-4d56-ae63-f74d5116fc7a",
+      "expected": { "subject": "Jornalismo", "topic": "Jornalismo Científico e Especializado" },
+      "target": { "subject": "Inovação e Tecnologia", "topic": "Marco Legal de Ciência, Tecnologia e Inovação" },
+      "reason": "A questão cobra política pública e marco legal de ciência, tecnologia e inovação."
+    },
+    {
+      "id": "701d8b43-18ad-4a38-9a3a-aa62a2482c87",
+      "expected": { "subject": "Ética e Compliance", "topic": "Ética no Serviço Público" },
+      "target": { "subject": "Inovação e Tecnologia", "topic": "Marco Legal de Ciência, Tecnologia e Inovação" },
+      "reason": "A questão cobra política pública e marco legal de ciência, tecnologia e inovação."
+    },
+    {
+      "id": "72657808-1fbf-498c-8553-8d557778786b",
+      "expected": { "subject": "Arquitetura de Software", "topic": "DevOps, Containers e Orquestração" },
+      "target": { "subject": "Engenharia de Software", "topic": "Testes e Qualidade de Software" },
+      "reason": "A questão cobra análise estática e qualidade de código com SonarQube."
+    },
+    {
+      "id": "7352109f-d90e-482f-a62f-a24c0c74bc08",
+      "expected": { "subject": "Banco de Dados", "topic": "SQL" },
+      "target": { "subject": "Arquitetura de Software", "topic": "APIs REST e HTTP" },
+      "reason": "A questão cobra princípios e comunicação de APIs REST."
+    },
+    {
+      "id": "76407fa2-aa24-4897-af5e-db5aa5ce2fda",
+      "expected": { "subject": "Jornalismo", "topic": "Fundamentos de Jornalismo" },
+      "target": { "subject": "Inovação e Tecnologia", "topic": "Marco Legal de Ciência, Tecnologia e Inovação" },
+      "reason": "A questão cobra política pública e marco legal de ciência, tecnologia e inovação."
+    },
+    {
+      "id": "7660e3d9-6dda-41c1-be4d-3e7768a9a799",
+      "expected": { "subject": "Segurança da Informação", "topic": "Criptografia, Certificados e TLS" },
+      "target": { "subject": "Governança e Gestão de TI", "topic": "Gestão de Projetos e PMBOK" },
+      "reason": "A questão cobra estrutura analítica do projeto segundo o PMBOK."
+    },
+    {
+      "id": "77a02566-da90-4561-a8c7-890b259741bf",
+      "expected": { "subject": "Segurança da Informação", "topic": "Criptografia, Certificados e TLS" },
+      "target": { "subject": "Governança e Gestão de TI", "topic": "Gestão de Projetos e PMBOK" },
+      "reason": "A questão cobra estrutura analítica do projeto segundo o PMBOK."
+    },
+    {
+      "id": "793655c6-3f18-4484-b211-fb60e4ed2385",
+      "expected": { "subject": "Segurança da Informação", "topic": "Criptografia, Certificados e TLS" },
+      "target": { "subject": "Governança e Gestão de TI", "topic": "Gestão de Projetos e PMBOK" },
+      "reason": "A questão cobra estrutura analítica do projeto segundo o PMBOK."
+    },
+    {
+      "id": "7fa25984-b2a2-4ce8-bd83-27991a7b562d",
+      "expected": { "subject": "Arquitetura de Software", "topic": "DevOps, Containers e Orquestração" },
+      "target": { "subject": "Governança e Gestão de TI", "topic": "Gestão de Projetos e PMBOK" },
+      "reason": "A questão cobra estrutura analítica do projeto segundo o PMBOK."
+    },
+    {
+      "id": "8c8c7520-2051-481d-97d4-d70cdab46bc6",
+      "expected": { "subject": "Informática", "topic": "Fundamentos de Informática" },
+      "target": { "subject": "Direito Administrativo", "topic": "Administração Pública" },
+      "reason": "A questão cobra organização e princípios da Administração Pública."
+    },
+    {
+      "id": "8e6d42b7-2832-4713-8c17-6efbbabfaf42",
+      "expected": { "subject": "Segurança da Informação", "topic": "Criptografia, Certificados e TLS" },
+      "target": { "subject": "Arquitetura de Software", "topic": "APIs REST e HTTP" },
+      "reason": "A questão cobra restrições arquiteturais de APIs REST."
+    },
+    {
+      "id": "91c34dbf-159e-4e36-b625-0ff8edbe2e36",
+      "expected": { "subject": "Língua Portuguesa", "topic": "Coesão e Coerência" },
+      "target": { "subject": "Segurança da Informação", "topic": "Identidade, Autenticação e Controle de Acesso" },
+      "reason": "A questão cobra OAuth 2.0 e OpenID Connect."
+    },
+    {
+      "id": "920245ee-411d-4ce5-9c86-f7d5004e55ed",
+      "expected": { "subject": "Ética e Compliance", "topic": "Ética no Serviço Público" },
+      "target": { "subject": "Inovação e Tecnologia", "topic": "Marco Legal de Ciência, Tecnologia e Inovação" },
+      "reason": "A questão cobra política pública e marco legal de ciência, tecnologia e inovação."
+    },
+    {
+      "id": "96001d9d-ef15-45f1-9931-a004e5f6d011",
+      "expected": { "subject": "Ética e Compliance", "topic": "Ética no Serviço Público" },
+      "target": { "subject": "Inovação e Tecnologia", "topic": "Marco Legal de Ciência, Tecnologia e Inovação" },
+      "reason": "A questão cobra política pública e marco legal de ciência, tecnologia e inovação."
+    },
+    {
+      "id": "9b4806da-2fdd-4d78-a80b-816b2a821455",
+      "expected": { "subject": "Segurança da Informação", "topic": "Criptografia, Certificados e TLS" },
+      "target": { "subject": "Banco de Dados", "topic": "Normalização de Dados" },
+      "reason": "A questão cobra terceira forma normal em banco de dados."
+    },
+    {
+      "id": "9d83df17-689b-47c2-9215-c9cbc1bac150",
+      "expected": { "subject": "Jornalismo", "topic": "Fundamentos de Jornalismo" },
+      "target": { "subject": "Inovação e Tecnologia", "topic": "Marco Legal de Ciência, Tecnologia e Inovação" },
+      "reason": "A questão cobra política pública e marco legal de ciência, tecnologia e inovação."
+    },
+    {
+      "id": "a5c18034-97d1-493b-9ed4-76a62858dab5",
+      "expected": { "subject": "Segurança da Informação", "topic": "Criptografia, Certificados e TLS" },
+      "target": { "subject": "Banco de Dados", "topic": "Índices e Transações" },
+      "reason": "A questão cobra índices de banco de dados, não criptografia."
+    },
+    {
+      "id": "a9c0d6dd-cc38-4969-a5e8-1087760f0e3f",
+      "expected": { "subject": "Proteção de Dados e LGPD", "topic": "Lei Geral de Proteção de Dados" },
+      "target": { "subject": "Ética e Compliance", "topic": "Ética no Serviço Público" },
+      "reason": "A questão cobra deveres éticos do agente público, não tratamento de dados pessoais."
+    },
+    {
+      "id": "a9cc8359-17b4-4683-ae2d-f2b6bcd23222",
+      "expected": { "subject": "Jornalismo", "topic": "Fundamentos de Jornalismo" },
+      "target": { "subject": "Inovação e Tecnologia", "topic": "Marco Legal de Ciência, Tecnologia e Inovação" },
+      "reason": "A questão cobra política pública e marco legal de ciência, tecnologia e inovação."
+    },
+    {
+      "id": "b3f96683-49d3-4ad3-aec3-9b75d44ee2f1",
+      "expected": { "subject": "Engenharia de Software", "topic": "Processos de Software" },
+      "target": { "subject": "Ética e Compliance", "topic": "Compliance e Integridade" },
+      "reason": "A questão cobra programa de integridade e compliance."
+    },
+    {
+      "id": "bdf9f448-7f65-4c70-8759-532bd3c060d7",
+      "expected": { "subject": "Jornalismo", "topic": "Redação Jornalística, Lide e Pirâmide Invertida" },
+      "target": { "subject": "Ética e Compliance", "topic": "Compliance e Integridade" },
+      "reason": "A questão cobra mecanismos de integridade e compliance, não redação jornalística."
+    },
+    {
+      "id": "bec205f8-9d09-4f23-8dbe-a131889b44fe",
+      "expected": { "subject": "Arquitetura de Software", "topic": "DevOps, Containers e Orquestração" },
+      "target": { "subject": "Governança e Gestão de TI", "topic": "Gestão de Projetos e PMBOK" },
+      "reason": "A questão cobra estrutura analítica do projeto segundo o PMBOK."
+    },
+    {
+      "id": "d30b8116-18b6-43f8-8b74-87dd84aafa72",
+      "expected": { "subject": "Sistemas Operacionais", "topic": "Processos e Sistemas de Arquivos" },
+      "target": { "subject": "Ética e Compliance", "topic": "Compliance e Integridade" },
+      "reason": "A questão cobra controles e programa de integridade, não processos de sistema operacional."
+    },
+    {
+      "id": "d8f3b5c5-e7cb-4b2c-b3e2-a1253b93ba9a",
+      "expected": { "subject": "Engenharia de Software", "topic": "Processos de Software" },
+      "target": { "subject": "Ética e Compliance", "topic": "Ética no Serviço Público" },
+      "reason": "A questão cobra conduta ética no serviço público."
+    },
+    {
+      "id": "da242352-47d0-43cf-8428-c55934541d94",
+      "expected": { "subject": "Arquitetura de Software", "topic": "DevOps, Containers e Orquestração" },
+      "target": { "subject": "Engenharia de Software", "topic": "Testes e Qualidade de Software" },
+      "reason": "A questão cobra análise estática e qualidade de código com SonarQube."
+    },
+    {
+      "id": "db97979b-622e-4885-a842-9d1b16d3a2f9",
+      "expected": { "subject": "Arquitetura de Software", "topic": "DevOps, Containers e Orquestração" },
+      "target": { "subject": "Banco de Dados", "topic": "Índices e Transações" },
+      "reason": "A questão cobra índices de banco de dados, não containers ou orquestração."
+    },
+    {
+      "id": "eae87098-c1d0-489c-b6c5-8c601ba153e8",
+      "expected": { "subject": "Língua Portuguesa", "topic": "Ortografia e Acentuação" },
+      "target": { "subject": "Segurança da Informação", "topic": "Identidade, Autenticação e Controle de Acesso" },
+      "reason": "A questão cobra OAuth 2.0 e OpenID Connect."
+    },
+    {
+      "id": "f30e22b0-6d9a-4266-8466-72d96f1e779d",
+      "expected": { "subject": "Engenharia de Software", "topic": "Processos de Software" },
+      "target": { "subject": "Ética e Compliance", "topic": "Compliance e Integridade" },
+      "reason": "A questão cobra programa de integridade e compliance."
+    }
+  ]
+}

@@ -1,0 +1,1322 @@
+{
+  "total": 1838,
+  "statusCounts": {
+    "ACTIVE": 1771,
+    "ANNULLED": 21,
+    "DRAFT": 46
+  },
+  "published": 1792,
+  "individuallyReviewed": 1791,
+  "drafts": 46,
+  "pendingEditorial": 0,
+  "quarantinedDrafts": 46,
+  "failures": 305,
+  "failedQuestions": 250,
+  "duplicateFields": 0,
+  "failureSamples": [
+    [
+      "7853b5ca-415b-4262-8ea7-c52b8d23bc9f",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "4bad43c8-f9b9-41d3-b510-1a1185ce1fd3",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "01e6a62b-a192-4f25-ac5f-c9f3ce3a9bb8",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "b9af0537-7d9b-429b-adfc-16f8be642c35",
+      "comentário metalinguístico incorporado ao ensino"
+    ],
+    [
+      "512a2cab-27d9-4df7-aa6f-68b74f6d849d",
+      "comentário metalinguístico incorporado ao ensino"
+    ],
+    [
+      "36041d4f-f1a7-4a40-b636-a30ad66db2d7",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "0eb6f975-a94a-48fe-89e5-3f047e751e2b",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "5fa234b8-03e9-4da1-a5d0-b9770c6f5cb8",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "f6519d24-4a49-4876-ad09-445234e87c46",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "15b04f2d-b7e2-49e4-9c97-b4ede51753f0",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "75b67029-1fd6-475f-9eba-22d86fe2cda2",
+      "comentário metalinguístico incorporado ao ensino"
+    ],
+    [
+      "cb8fc339-5357-493b-a60b-e18a24163906",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "022ef5de-41cb-4592-b968-8c04eb70e837",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "02f22419-edd0-47ab-9868-54953467f72c",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "02f22419-edd0-47ab-9868-54953467f72c",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "07e20bd6-6628-4a04-9212-0289905952ab",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "093ba8ca-6eac-4f69-9b95-4d520c883b35",
+      "frase longa repetida no mesmo bloco"
+    ],
+    [
+      "093ba8ca-6eac-4f69-9b95-4d520c883b35",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "097eacf5-74cf-44d7-8708-a502b06138e8",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "0a668fe1-4034-4696-9970-cbb4c8c2f6c1",
+      "answerAnalysis repete a confirmação do gabarito"
+    ]
+  ],
+  "duplicateSamples": [],
+  "allFailures": [
+    [
+      "7853b5ca-415b-4262-8ea7-c52b8d23bc9f",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "4bad43c8-f9b9-41d3-b510-1a1185ce1fd3",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "01e6a62b-a192-4f25-ac5f-c9f3ce3a9bb8",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "b9af0537-7d9b-429b-adfc-16f8be642c35",
+      "comentário metalinguístico incorporado ao ensino"
+    ],
+    [
+      "512a2cab-27d9-4df7-aa6f-68b74f6d849d",
+      "comentário metalinguístico incorporado ao ensino"
+    ],
+    [
+      "36041d4f-f1a7-4a40-b636-a30ad66db2d7",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "0eb6f975-a94a-48fe-89e5-3f047e751e2b",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "5fa234b8-03e9-4da1-a5d0-b9770c6f5cb8",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "f6519d24-4a49-4876-ad09-445234e87c46",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "15b04f2d-b7e2-49e4-9c97-b4ede51753f0",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "75b67029-1fd6-475f-9eba-22d86fe2cda2",
+      "comentário metalinguístico incorporado ao ensino"
+    ],
+    [
+      "cb8fc339-5357-493b-a60b-e18a24163906",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "022ef5de-41cb-4592-b968-8c04eb70e837",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "02f22419-edd0-47ab-9868-54953467f72c",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "02f22419-edd0-47ab-9868-54953467f72c",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "07e20bd6-6628-4a04-9212-0289905952ab",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "093ba8ca-6eac-4f69-9b95-4d520c883b35",
+      "frase longa repetida no mesmo bloco"
+    ],
+    [
+      "093ba8ca-6eac-4f69-9b95-4d520c883b35",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "097eacf5-74cf-44d7-8708-a502b06138e8",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "0a668fe1-4034-4696-9970-cbb4c8c2f6c1",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "0cfdabee-25a0-43d7-9e08-724a928fef21",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "0cfdabee-25a0-43d7-9e08-724a928fef21",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "0cfdabee-25a0-43d7-9e08-724a928fef21",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "67947a70-53e5-41ba-bb4c-0ea42b63faff",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "0e05ec85-4ff2-4895-a762-38afe45ccf7c",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "0e2b6e2a-3810-4306-9450-9dcfd75749a9",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "0f394045-8277-491d-ab62-ec2336c4d2bc",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "0fedb7a0-5989-4d1f-9073-02927c9758b2",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "15135350-2a29-4044-9106-f13323e0c075",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "1556f772-49d1-452e-a571-7d083e0a493e",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "156d2690-d0a2-4cbf-9863-c50f1b38cdb8",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "17d99774-9b04-43e9-a321-d90b4fa1144b",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "17d99774-9b04-43e9-a321-d90b4fa1144b",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "198364f6-b39d-4ae8-961d-536a0c7b2e54",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "198364f6-b39d-4ae8-961d-536a0c7b2e54",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "1bd9353e-5abd-408e-a884-19f453724c5d",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "1d3ddd55-f8c7-4bac-8a7b-66d212bf8bb5",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "1d3ddd55-f8c7-4bac-8a7b-66d212bf8bb5",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "1dac8b67-bd5a-4cc1-9c90-fa61b2cce39d",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "1de6821d-e4a6-4190-b9e5-79e364972614",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "1e56b6d8-3c05-40c6-a2dd-cb3aaff50e69",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "1e6edfcb-15b5-4754-9bbf-3bd907831298",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "1e6edfcb-15b5-4754-9bbf-3bd907831298",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "1ebf157c-c1e1-4877-ac27-1b55ecf154f1",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "1f827810-b000-4d91-af2e-1bac78a09e2a",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "1f827810-b000-4d91-af2e-1bac78a09e2a",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "20e7b6df-038f-4364-91e2-21ff88235208",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "23092823-fe55-4073-baa8-5778945cdcc9",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "23092823-fe55-4073-baa8-5778945cdcc9",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "235c41f0-2783-4ae0-963e-76efee784c1f",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "2446e25b-7145-41f4-a22c-d5cab40b3ce9",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "2538e289-03b8-49d8-9b9d-82c99fc787ed",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "2538e289-03b8-49d8-9b9d-82c99fc787ed",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "27045b25-5f4f-439e-8315-a0c483136e17",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "27045b25-5f4f-439e-8315-a0c483136e17",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "27045b25-5f4f-439e-8315-a0c483136e17",
+      "frase longa repetida no mesmo bloco"
+    ],
+    [
+      "27045b25-5f4f-439e-8315-a0c483136e17",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "27bbd4b3-b372-446f-8a2c-48b3cb6ba5a2",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "2865addf-9bfd-4f68-a4c0-4ae02f6c2dce",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "2885290b-6787-4d48-ac58-b970d582c99e",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "2afc109f-59c2-4032-ad1c-f5ffb6626eeb",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "2fab6bdb-e6e6-41a9-801e-33be11b51cfa",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "3552010f-982d-44af-a02d-f815c3f3527c",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "36865757-2a8c-4369-acc7-ef84e20bc512",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "36865757-2a8c-4369-acc7-ef84e20bc512",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "37219de9-41a8-497a-b263-7425603aee0b",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "3826e709-bf8a-4077-82e1-345c50ad36d8",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "3939a951-000d-4ba1-8956-2e1884bcc048",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "3ab283f0-3996-4877-acd9-390dfedae674",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "3c3b4822-cca5-4c3e-9b99-faea0c9c9fab",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "4050619f-8136-4b2f-bde2-c23e3c315773",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "40f777e1-c16a-42a1-940e-c44d81cca371",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "4186d27f-fe44-4535-b4c2-eb1be7ee2cd8",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "43e775e1-aa6e-48c2-8038-568a30658cc0",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "45c970f4-0d21-4690-b10f-72891fd36b7c",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "460ca058-5078-48ed-b3d0-b38f593b0b74",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "4637128e-79f6-43a0-901e-e3f339ad19c3",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "4637128e-79f6-43a0-901e-e3f339ad19c3",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "48248b5e-ce02-4df2-ae97-80b3d8476615",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "4b38abc0-f460-4ea2-9f29-4a77ef89ff69",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "4cf10d8f-e2f5-4c7e-8e6d-d3c62c753668",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "4cf10d8f-e2f5-4c7e-8e6d-d3c62c753668",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "4cf10d8f-e2f5-4c7e-8e6d-d3c62c753668",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "4d18172c-70eb-4706-be57-b64b875e3c9b",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "4e521a41-6176-4223-abc9-d1ff9e4ebef4",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "4e521a41-6176-4223-abc9-d1ff9e4ebef4",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "50dddcf3-1580-4dbb-b1ab-8239d83d53f8",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "518dca31-64d6-4e14-abb1-90d52ea3792f",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "518dca31-64d6-4e14-abb1-90d52ea3792f",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "5195cec8-5471-469b-a230-067c207762e2",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "51f225ee-3af5-44ea-beaa-fa96f0ed9b9b",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "51bfaa73-2797-42e8-9ec5-dd0c57469809",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "551a3212-8be1-4da4-9bea-631050b46140",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "551a3212-8be1-4da4-9bea-631050b46140",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "2758e2f6-1fe8-49df-8c5d-992a201760de",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "55848ee5-0e71-4816-99c0-838165ed8008",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "5836a37c-42eb-475a-88e2-acb39d4c26fc",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "5836a37c-42eb-475a-88e2-acb39d4c26fc",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "5a3f1990-f960-4acc-9d3b-9ecdd2a7e5b7",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "5a9cc58d-892c-40ba-abe4-7ae571a1d245",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "5da704e2-1e7c-4d45-8dd5-29c291ec0131",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "60cf05a8-78ec-444c-8ac1-4e70e6682801",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "60cf05a8-78ec-444c-8ac1-4e70e6682801",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "617540ab-e952-491d-81de-15ebd32ee462",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "627776c6-c8da-4e8f-9a6d-2bcfaa6a8bb4",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "63e8888d-a2e7-41bc-b8ce-343bfcc797b0",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "6482a8a4-5657-45ec-8864-ec777cd7e251",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "64f1dd81-bb88-423c-a2a9-41048a888b95",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "65b73ca7-106c-490a-8794-4371a6d900a8",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "6604c7be-e4f4-4086-b045-1d51486beb13",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "6624fbde-c32f-45b7-a35f-22c207866d7d",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "67f9646a-149d-47a4-ba26-e0b716f17ff7",
+      "comentário metalinguístico incorporado ao ensino"
+    ],
+    [
+      "69de8bee-3fae-42b7-8791-160489b05cf8",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "6b2d8331-364b-414c-9cfd-5050a160be80",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "6b2d8331-364b-414c-9cfd-5050a160be80",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "6b2d8331-364b-414c-9cfd-5050a160be80",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "6eb81b18-20fe-4ee7-8669-a31f33c34271",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "6ec4fdea-24b6-42fe-af3c-50ab9af8cc06",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "6f25b845-2328-48db-be58-955426d401b7",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "70d18c00-0f87-437d-aa01-ad710aa6219e",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "716278fc-62d0-4727-a638-61bc636c645c",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "72c72987-5091-4603-83c0-e26444499d64",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "754b646e-133c-4056-8489-8c4fa6c9a7b6",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "7736ff7b-655d-4ee9-9dab-3be4c2de342b",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "78bd9930-15ab-4801-83bd-6d7fe1e292c4",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "7a79d21f-f7b4-4bae-9bf8-259f529c951b",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "7d0c3b95-74b9-4d3f-a27b-15ba6a0625cf",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "7d89d677-66cd-4eaf-aa26-a8f5e334bb69",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "7fa25984-b2a2-4ce8-bd83-27991a7b562d",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "80f156ae-c8ff-4809-8c31-527ee6256b28",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "82246a04-2d4c-46f1-b0b8-8f14d32f1c0e",
+      "frase longa repetida no mesmo bloco"
+    ],
+    [
+      "82246a04-2d4c-46f1-b0b8-8f14d32f1c0e",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "858f29a4-e3a4-4b4e-83f8-20f9ae2749ef",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "85c9fe6c-f942-48bb-9f55-35a084cd89a1",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "86759c69-041a-4ea6-b7a9-a8f32f616d11",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "89d058f4-9153-45b4-a3e2-c32adb6ab074",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "8a0cbced-0af0-440b-a274-d75f51f7ea5f",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "8bfaad04-b8c3-45c3-8a7d-f7cc48d49be5",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "8cf24e22-4f55-4b2f-810f-7c5a3af9c20c",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "8e7d84cd-7926-4826-a204-bf5110744395",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "90c0b0f1-cd6a-4e6c-bb0c-e282182c3b6e",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "912a1e0a-9bfd-465b-b3c3-78d75be740f2",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "91732760-d962-48e5-b3ec-25460c6f94ec",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "91732760-d962-48e5-b3ec-25460c6f94ec",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "91c34dbf-159e-4e36-b625-0ff8edbe2e36",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "9244d4a4-ef52-426a-9b19-b9cc1fbac87b",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "9280e72e-edc8-43b1-a912-82fe73ac9a72",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "95898a18-ffd6-47f0-91a9-fff032eb97ce",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "97509396-c96b-4eec-b6db-27838682584d",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "97509396-c96b-4eec-b6db-27838682584d",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "982e132a-1d11-4efb-96d4-91a133affa91",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "984d77a2-b254-4825-8e7e-8099f686bd5b",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "9b4806da-2fdd-4d78-a80b-816b2a821455",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "9b593a0f-6e1c-4914-9dc5-f063d2197ab2",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "9c62eaf2-7ec5-435b-a378-178b1aa4b515",
+      "comentário metalinguístico incorporado ao ensino"
+    ],
+    [
+      "9d64b6a6-b763-4bb3-ada2-22205a6a4866",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "a16abd36-72bc-4813-9c2a-1fbff64f9e04",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "a16abd36-72bc-4813-9c2a-1fbff64f9e04",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "a16abd36-72bc-4813-9c2a-1fbff64f9e04",
+      "frase longa repetida no mesmo bloco"
+    ],
+    [
+      "a16abd36-72bc-4813-9c2a-1fbff64f9e04",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "a23e2eca-a60a-43a8-bdd8-e771abb7ca76",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "a30de0c2-9238-4892-b044-1e3d0684701b",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "a4e29155-f1b8-436a-9606-4de7c0bf2e3a",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "a5b325e7-982b-40cd-bf46-7b63e372355a",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "a5b8da69-9d24-4ed3-9196-067124653d94",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "a729aa38-3035-4239-8ac8-e287103740ff",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "a76cfb33-3593-4f34-9228-f831308564bb",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "a76cfb33-3593-4f34-9228-f831308564bb",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "a7c2abff-c042-4df0-a5f6-32b43f716fca",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "a948d90c-224f-47a8-8d53-8d2faff5ac22",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "a948d90c-224f-47a8-8d53-8d2faff5ac22",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "a948d90c-224f-47a8-8d53-8d2faff5ac22",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "ab9934e7-9439-4cf0-9d24-a272b1882c71",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "ac1396c6-d97e-4427-99af-bf7c5ad92a5f",
+      "frase longa repetida no mesmo bloco"
+    ],
+    [
+      "ac1396c6-d97e-4427-99af-bf7c5ad92a5f",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "ace4533f-0326-4e95-a351-34f9c38572bb",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "acffa48c-9af0-41de-9728-3ffa5ee262d6",
+      "frase longa repetida no mesmo bloco"
+    ],
+    [
+      "acffa48c-9af0-41de-9728-3ffa5ee262d6",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "ad3ccec3-c838-40f4-a7a2-9152a6f709f1",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "ad3ccec3-c838-40f4-a7a2-9152a6f709f1",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "b13e3892-aaf7-465e-a163-592e9e363122",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "b512d38f-fa15-48a5-a3c5-5f0398c08015",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "b7729ddc-3703-47db-b70e-cc693456af5a",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "b79c7f3c-292a-463f-bc1c-0fd209bdc7e6",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "b7a54093-4dc8-4b53-a9ed-e8395955c36c",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "b91b58b5-7879-4600-ac3e-22c22850b1e3",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "bb88707f-1889-4106-8b4b-c875aecee39d",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "bcffcc14-f104-409a-aa7b-6a39846cb898",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "bee9afd4-567f-40a8-ae79-d3caa44a7004",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "bfec570b-915a-4350-a043-caae90c69189",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "c23844e6-9920-4101-bba5-392b5fb1d7e9",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "c337672c-70fe-4f2a-92c2-38077342347d",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "c3632878-2ede-40a1-b08b-b3e7ede4beba",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "c3e9b3b5-99bd-4446-92ee-047ce679a52e",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "c59fe3da-6c60-492c-b43e-ef404fb2b797",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "c626965e-2b42-41e6-ba54-2cce94871643",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "c640319a-25e1-4516-bd4f-b8e6c1a25a53",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "c640319a-25e1-4516-bd4f-b8e6c1a25a53",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "c7af6835-293c-4c71-b94c-4b0345b556d7",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "c8268a8e-0d41-454b-9d84-f8bf45113b67",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "c8268a8e-0d41-454b-9d84-f8bf45113b67",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "c88e32c6-9e95-468f-a37f-13c12a6d9dae",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "cae0bf0c-cc57-413a-aa19-5f824cf8b183",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "cbfe090d-0d53-480e-aa01-6cdf56ced476",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "cc572c9a-a518-45c5-9c66-81744f67a86b",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "cdfa0225-319b-4ecd-8a1e-602f61e3146b",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "ce938d14-3cc5-41e4-89bb-e15f8cfe92d8",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "ce938d14-3cc5-41e4-89bb-e15f8cfe92d8",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "cf24e761-28f1-4694-a365-bfc6526fac1d",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "d0533773-c741-4617-8d35-3bb74c3f0ca9",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "d0533773-c741-4617-8d35-3bb74c3f0ca9",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "d10d3161-1041-4d0b-8132-ae5dfe22fd05",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "d10d3161-1041-4d0b-8132-ae5dfe22fd05",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "d1ba91b5-2af2-4988-9ea6-6f395b3827ae",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "d47205f9-fdf7-4ca5-9931-5da539a229bc",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "d5a8ac03-5e00-4456-88fc-c0f1edda5d8e",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "d5f89981-2783-4f9b-ba76-aad68a5c8930",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "d5f89981-2783-4f9b-ba76-aad68a5c8930",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "d693acb4-a7b0-4e22-8f56-607833372469",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "d738eb4a-0633-4a15-b987-819e4870e837",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "d94b9668-43cd-4e99-b624-a040fcb99bd0",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "db110505-0178-4d79-8ae2-a6821368f3f3",
+      "comentário metalinguístico incorporado ao ensino"
+    ],
+    [
+      "db51bf69-d641-4313-8b66-e977cb3f1842",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "dbb2b44f-2caf-4787-a16b-08dc4e30a24b",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "dc7705fb-843c-44e7-8c5f-5faf2383d769",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "dfb89426-27df-4523-ac98-d083765ac875",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "e31ae264-6a3e-44b4-a67a-b9a634840399",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "e3b41c33-91cb-4677-8ad2-e76e0a3f9eb6",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "e5376a8c-9e2e-4e1b-b1b0-e84625c605c6",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "5023e54f-94de-46be-af42-638691bfbaba",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "abc7c57b-6d5d-4a22-84bc-8c2832fd1e3a",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "5774f70e-d69d-42fe-9292-30a17bc9f14a",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "60ec41dd-fd4f-4527-9b6c-c4993413ff3b",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "0d0bf01e-5baf-4569-860a-8fd9607b7002",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "2bb0c355-ab32-4a05-a478-10a29f46d582",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "6b520560-0a50-42aa-94a9-8d4f9191dfc4",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "29940af3-25f1-4eca-8bfc-e7a073a7c63e",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "4c5fb2fd-eb41-4de1-a85b-bc40bd090b45",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "3a622e5f-18bc-4367-854e-84fadb51354e",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "ab5713c1-802d-4887-b570-29c529b6896b",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "58048eed-07f5-4acd-9827-decfb63ec8ef",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "345f67bf-1d7b-4fba-b70e-9e6bc8b83a80",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "345f67bf-1d7b-4fba-b70e-9e6bc8b83a80",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "96001d9d-ef15-45f1-9931-a004e5f6d011",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "bb76eb0a-483a-4149-9908-473beacb99f7",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "12c45efb-dc26-4856-8393-a442a88f7b9c",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "e9c39b88-e503-4ccd-8bb2-3a835d5d6b14",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "0a45309e-5a2c-4a1f-972c-10fb836f9b2e",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "d9a8f5a6-b3cb-450d-adca-a72bf76102e2",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "ea1a876a-92e1-4e0e-b71b-aa3e2582c26b",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "431bc579-ea51-431c-baf3-ced60f3cf04f",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "d5c09c62-8250-4a60-bab8-22d79938d3be",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "ec8dbece-0928-4d67-8e0d-3c1f14d01010",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "ecdcdb47-0b83-46ac-b1b4-fa6b48341fae",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "ee59849e-973e-4502-a586-933e3ff0dcdd",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "ee59849e-973e-4502-a586-933e3ff0dcdd",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "eedad0a8-9e30-422f-94d5-237deef4bee0",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "d0f3a017-e43a-4e62-973e-7cb0edeb31d6",
+      "comentário metalinguístico incorporado ao ensino"
+    ],
+    [
+      "efe8190a-ed47-4f71-9d75-609ad819b336",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "efe8190a-ed47-4f71-9d75-609ad819b336",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "f45e94bb-41da-486a-b74b-80f7b79fa57b",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "f48b8597-c26a-4c97-a1b3-df25e3c8677f",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "f4f66bcb-22be-47b0-b106-aa4ffbb2c111",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "f655c1da-a0be-4910-9a3b-2d67101e1555",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "cd8eeeab-3136-4249-bfa5-f866de7708cf",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "f6cf7d50-3046-4237-9a4b-0a9557b8ee53",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "f78e6e26-7186-4917-b7e7-4416ec7f7d3d",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "f90a3315-1e3f-4fbd-9716-291d0e03aeae",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "f90a3315-1e3f-4fbd-9716-291d0e03aeae",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "fa00bebf-d07a-422c-bb25-9f15a1a4669b",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "fbbe7d87-b037-4937-8ec8-20c771eb2311",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "fbe3bd56-ca2e-4425-935c-43435f001988",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "fbe3bd56-ca2e-4425-935c-43435f001988",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "fcd84b95-b736-4b1e-80b4-1c80ade2ad4a",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "f1ed63b9-63f6-478c-9e7a-6f22b332ca5b",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "fd827aea-a81e-41e8-9c77-a295fc7cfa9a",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "d4ff46a3-b4a7-40e8-8eeb-4d2cc0f35634",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "d4ff46a3-b4a7-40e8-8eeb-4d2cc0f35634",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "dd280695-b396-4c44-9415-0438f5e634cd",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "fefb58a0-6db6-49e5-8898-8b016c429edd",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "fefe6f7e-b526-4759-a763-8d5549adacc5",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "ff51cceb-7719-4182-a2ea-dee98472a52e",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "877f1f34-8de7-4bad-b5ea-9fe211b1af89",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "877f1f34-8de7-4bad-b5ea-9fe211b1af89",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "827dd394-f63f-4e9e-84da-9e466cdeb48e",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "62640372-6522-4ad0-8b0f-1923b3d83d0b",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "62640372-6522-4ad0-8b0f-1923b3d83d0b",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "b82cf98a-de8c-4a0b-a6ac-44c1dbd6aa29",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "33ef37ca-d609-49b4-a739-3dfed8dd70a9",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "4ddfc983-dfcd-4177-881f-0c4fe240b676",
+      "comentário metalinguístico incorporado ao ensino"
+    ],
+    [
+      "f7dbe26b-fccf-48da-9936-7d570445683a",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "f7dbe26b-fccf-48da-9936-7d570445683a",
+      "marcação ou saída interna incorporada ao texto"
+    ],
+    [
+      "421099ee-4846-4152-835d-56939e8e2015",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "1ad7dc1f-7916-4611-8d2b-ca0c3c9c48ed",
+      "frase longa repetida no mesmo bloco"
+    ],
+    [
+      "1ad7dc1f-7916-4611-8d2b-ca0c3c9c48ed",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "e5b7c341-f663-4a35-b792-1520c9a9be88",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "e5b7c341-f663-4a35-b792-1520c9a9be88",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "0e91e3d3-4122-4a2a-86ba-a1150ca35b2d",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "c0e3a694-c3ea-4325-aff7-265054d3ab79",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "19b19fc9-994f-4bd1-965c-5cb6ff12e8b5",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "130f095e-84c1-400e-b893-b8331cd57dd2",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "0e2e8207-dad6-4d2c-93d3-e6403878c62b",
+      "answerAnalysis repete a confirmação do gabarito"
+    ],
+    [
+      "18526ef3-2ef8-442b-8865-be900f12622b",
+      "caractere invisível, de controle ou de substituição"
+    ],
+    [
+      "18526ef3-2ef8-442b-8865-be900f12622b",
+      "caractere de alfabeto alheio incorporado ao texto"
+    ],
+    [
+      "4fceeeab-eff7-453e-ae50-eea2692cd05c",
+      "answerAnalysis repete a confirmação do gabarito"
+    ]
+  ],
+  "allDuplicates": []
+}

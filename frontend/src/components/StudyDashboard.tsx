@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookOpen,
-  ChevronRight,
   Clock3,
   Pause,
   Play,
-  RotateCcw,
   Sparkles,
   Target,
   TimerReset,
@@ -33,18 +31,6 @@ const duration = (minutes: number) => {
 const clock = (seconds: number) =>
   `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 const number = (value: unknown) => Number(value || 0);
-const reviewTiming = (review: Record<string, any>) => {
-  if (review.status === 'OVERDUE') return 'Atrasada';
-  if (review.status === 'AVAILABLE') return 'Hoje';
-  const raw = String(review.scheduled_date || '');
-  const parts = raw.slice(0, 10).split('-').map(Number);
-  if (parts.length !== 3 || parts.some(value => !Number.isFinite(value))) return 'Agendada';
-  const target = Date.UTC(parts[0], parts[1] - 1, parts[2]);
-  const now = new Date();
-  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  const days = Math.max(0, Math.round((target - today) / 86_400_000));
-  return days === 0 ? 'Hoje' : days === 1 ? 'Amanhã' : `Em ${days} dias`;
-};
 const pomodoroConfig = (session: StudySession | null) => {
   if (!session?.pomodoro_config) return null;
   try {
@@ -72,7 +58,6 @@ export default function StudyDashboard({
   const [loading, setLoading] = useState(!initialData);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string[]>([]);
-  const [mobileInsightsOpen, setMobileInsightsOpen] = useState(false);
   const [tick, setTick] = useState(0);
   const [loadedAt, setLoadedAt] = useState(Date.now());
   const hadInitialData = useRef(Boolean(initialData));
@@ -151,13 +136,9 @@ export default function StudyDashboard({
     active.status === 'PAUSED' &&
     active.pause_reason === 'POMODORO_FOCUS_COMPLETE' &&
     Boolean(pomo);
-  const selectedFocusMinutes = !currentTask
-    ? 50
-    : currentTask.planned_minutes === 35
-      ? 25
-      : currentTask.planned_minutes <= 30
-        ? currentTask.planned_minutes
-        : 50;
+  const selectedFocusMinutes = currentTask?.planned_minutes && currentTask.planned_minutes <= 30
+    ? currentTask.planned_minutes
+    : 50;
   const focusSeconds = Math.max(1, number(pomo?.focusMinutes) * 60);
   const focusElapsed = pomo ? Math.max(0, elapsed - cycle * focusSeconds) : 0;
   const focusRemaining = pomo ? Math.max(0, focusSeconds - focusElapsed) : selectedFocusMinutes * 60;
@@ -216,7 +197,8 @@ export default function StudyDashboard({
               focusMinutes: selectedFocusMinutes,
               shortBreakMinutes: 10,
               longBreakMinutes: 10,
-              cycles: 4,
+              cycles: 1,
+              targetCycles: 1,
             },
         device: navigator.userAgent.slice(0, 150),
       });
@@ -290,9 +272,6 @@ export default function StudyDashboard({
   if (!data) return null;
 
   const progress = Math.min(100, number(data.today.progress_percentage));
-  const recommendedTopicStudied = number(data.next.attempts) > 0;
-  const recommendationMastery = recommendedTopicStudied ? number(data.next.mastery) : number(data.next.plan_mastery);
-  const recommendationMasteryLabel = recommendedTopicStudied ? 'Domínio do assunto' : 'Domínio médio do plano';
 
   return (
     <div className="daily-dashboard">
@@ -471,90 +450,6 @@ export default function StudyDashboard({
         </section>
       </div>
 
-      <button
-        type="button"
-        className={`mobile-insights-toggle ${mobileInsightsOpen ? 'is-open' : ''}`}
-        onClick={() => setMobileInsightsOpen(value => !value)}
-        aria-expanded={mobileInsightsOpen}
-        aria-controls="dashboard-insights"
-      >
-        <span>
-          <Sparkles />
-          <span>
-            <strong>Recomendações e revisões</strong>
-            <small>Consulte quando precisar</small>
-          </span>
-        </span>
-        <ChevronRight />
-      </button>
-
-      <div id="dashboard-insights" className={`daily-secondary-grid ${mobileInsightsOpen ? 'is-mobile-open' : ''}`}>
-        <section className="recommendation-card">
-          <div className="recommendation-icon">
-            <Sparkles />
-          </div>
-          <span className="eyebrow">Adaptação automática</span>
-          <h3>{String(data.next.title || 'Rotina em dia')}</h3>
-          <p>{String(data.next.reason || 'Continue cumprindo as etapas para receber recomendações personalizadas.')}</p>
-          {data.next.mastery !== undefined && (
-            <div className="recommendation-mastery">
-              <span>{recommendationMasteryLabel}</span>
-              <strong>{Math.round(recommendationMastery)}%</strong>
-              <small>{number(data.next.studied_topics)} assuntos avaliados</small>
-            </div>
-          )}
-          <button
-            onClick={() =>
-              onOpenStudy(
-                data.next.title
-                  ? {
-                      roadmapTopicId: String(data.next.id || ''),
-                      topicTitle: String(data.next.title),
-                      subjectName: String(data.next.subject_name || ''),
-                      source: 'recommendation',
-                    }
-                  : undefined
-              )
-            }
-          >
-            Ver conteúdo <ChevronRight />
-          </button>
-        </section>
-        <section className="reviews-card">
-          <div className="card-heading">
-            <div>
-              <span className="eyebrow">Memória ativa</span>
-              <h3>Revisões</h3>
-            </div>
-            <RotateCcw />
-          </div>
-          {data.reviews.length === 0 ? (
-            <p className="empty-reviews">
-              Ainda não há revisão agendada. Ao concluir a atividade atual e registrar as questões, o primeiro ciclo de
-              revisão será criado.
-            </p>
-          ) : (
-            data.reviews.map(review => {
-              const timing = reviewTiming(review);
-              return (
-                <article key={String(review.id)}>
-                  <span
-                    className={`review-tag ${review.status === 'OVERDUE' ? 'is-overdue' : review.status === 'SCHEDULED' ? 'is-scheduled' : ''}`}
-                  >
-                    {timing}
-                  </span>
-                  <div>
-                    <strong>{String(review.topic_title)}</strong>
-                    <p>
-                      {String(review.subject_name)} · {number(review.question_goal)} questões
-                    </p>
-                  </div>
-                </article>
-              );
-            })
-          )}
-        </section>
-      </div>
     </div>
   );
 }

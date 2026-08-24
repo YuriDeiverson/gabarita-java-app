@@ -266,12 +266,22 @@ public class AdminContentController {
         if(!Set.of("ACTIVE","ANNULLED").contains(status))return;
         String analysis=text(r.answerAnalysis()).toLowerCase(Locale.ROOT);
         String strategy=text(r.similarQuestionStrategy()).toLowerCase(Locale.ROOT);
+        var tips=cleanPoints(r.fixationTips());
+        String completeGuide=String.join(" ",text(r.detailedTopic()),text(r.conceptExplanation()),
+          text(r.decisiveEvidence()),text(r.answerAnalysis()),text(r.examTrap()),
+          text(r.similarQuestionStrategy()),String.join(" ",tips));
         if(!GuideContentQuality.followsHierarchy(r.detailedTopic(),r.category(),r.topic()))
           throw new IllegalArgumentException("O assunto detalhado deve começar por Disciplina → Assunto catalogado");
         if(GuideContentQuality.anticipatesAnswer(r.decisiveEvidence()))
           throw new IllegalArgumentException("O ponto decisivo deve apresentar a regra ou evidência sem antecipar o gabarito");
         if(GuideContentQuality.usesAutomaticTemplate(analysis)||analysis.startsWith("1. o item afirma")||analysis.startsWith("1. delimite a afirmação"))
           throw new IllegalArgumentException("Substitua a análise automática por uma explicação específica desta questão");
+        if(GuideContentQuality.containsEditorialArtifact(completeGuide))
+          throw new IllegalArgumentException("Remova resíduos de geração, emojis, marcação interna ou caracteres alheios ao conteúdo didático");
+        if(!GuideContentQuality.hasOneOfficialAnswerConfirmation(r.answerAnalysis()))
+          throw new IllegalArgumentException("Confirme o gabarito oficial uma única vez, somente ao concluir a análise");
+        if(GuideContentQuality.admitsSourceOrAnswerConflict(completeGuide))
+          throw new IllegalArgumentException("A fonte ou o gabarito apresenta conflito; mantenha a questão como rascunho para revisão editorial");
         if(List.of("isole a afirmação central","identifique o mecanismo técnico afirmado","localize o trecho cobrado",
           "separe sujeito, competência, requisito","compare a relação lógica afirmada","traduza os dados para relações").stream().anyMatch(strategy::startsWith))
           throw new IllegalArgumentException("A estratégia para questões parecidas está genérica; relacione-a ao conceito ou erro deste item");
@@ -279,7 +289,6 @@ public class AdminContentController {
           throw new IllegalArgumentException("A correção completa não pode transcrever o enunciado inteiro; destaque apenas o ponto decisivo e desenvolva o ensinamento");
         if(GuideContentQuality.repeatsWhole(r.explanation(),r.conceptExplanation())||GuideContentQuality.repeatsWhole(r.explanation(),r.answerAnalysis()))
           throw new IllegalArgumentException("A correção completa deve acrescentar conteúdo novo, não repetir o comentário resumido do card");
-        var tips=cleanPoints(r.fixationTips());
         if(tips.stream().anyMatch(tip->GuideContentQuality.sameText(tip,r.similarQuestionStrategy())))
           throw new IllegalArgumentException("A síntese para revisão não pode repetir a estratégia para questões parecidas");
         ensureUniqueGuideField(questionId,"concept_explanation","base conceitual",r.conceptExplanation());

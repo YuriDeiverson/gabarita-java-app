@@ -35,4 +35,25 @@ class GuideContentQualityTest {
         assertFalse(GuideContentQuality.followsHierarchy(
           "Interpretação → Inferência","Língua Portuguesa","Interpretação de Texto"));
     }
+
+    @Test void rejectsGenerationResidueAndDecorativeVerdicts() {
+        assertTrue(GuideContentQuality.containsEditorialArtifact("Conclusão. ✅ (Certo)"));
+        assertTrue(GuideContentQuality.containsEditorialArtifact("texto answerAnalysis: fragmento interno"));
+        assertTrue(GuideContentQuality.containsEditorialArtifact("texto com caractere invisível\u200B"));
+        assertFalse(GuideContentQuality.containsEditorialArtifact("A relação entre α e β preserva a proporcionalidade."));
+    }
+
+    @Test void requiresExactlyOneOfficialAnswerConfirmation() {
+        assertTrue(GuideContentQuality.hasOneOfficialAnswerConfirmation("Após a análise, o gabarito oficial é Certo."));
+        assertFalse(GuideContentQuality.hasOneOfficialAnswerConfirmation("O item está Certo."));
+        assertFalse(GuideContentQuality.hasOneOfficialAnswerConfirmation(
+          "O gabarito oficial é Certo. Portanto, confirma-se novamente o gabarito."));
+    }
+
+    @Test void detectsWhenTheGuideAdmitsAConflictWithTheSource() {
+        assertTrue(GuideContentQuality.admitsSourceOrAnswerConflict(
+          "A denominação não é tecnicamente adequada, preservando o gabarito informado."));
+        assertFalse(GuideContentQuality.admitsSourceOrAnswerConflict(
+          "A regra técnica e os dados do item conduzem à mesma conclusão."));
+    }
 }

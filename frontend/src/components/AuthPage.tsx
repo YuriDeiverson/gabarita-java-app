@@ -2,6 +2,17 @@ import { FormEvent, useState } from 'react';
 import { BookOpenCheck, Eye, EyeOff, LockKeyhole, Mail, Sparkles, UserRound } from 'lucide-react';
 import { isAuthRetryableFetchError, type AuthError } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '../auth/supabase';
+import { AUTH_LOGOUT_REASON_KEY } from '../auth/inactivity';
+
+const initialSessionNotice = () => {
+  const reason = sessionStorage.getItem(AUTH_LOGOUT_REASON_KEY);
+  sessionStorage.removeItem(AUTH_LOGOUT_REASON_KEY);
+  if (reason === 'inactivity')
+    return 'Sua sessão foi encerrada após um período de inatividade. Entre novamente para continuar.';
+  if (reason === 'restore-timeout')
+    return 'A sessão anterior demorou para responder e foi encerrada. Entre novamente para continuar.';
+  return '';
+};
 
 const authenticationErrorMessage = (cause: unknown) => {
   const error = cause as Partial<AuthError> | undefined;
@@ -51,7 +62,7 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState(initialSessionNotice);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();

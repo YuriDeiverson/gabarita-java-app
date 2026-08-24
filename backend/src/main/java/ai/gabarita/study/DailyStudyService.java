@@ -29,6 +29,7 @@ public class DailyStudyService {
         UUID planId = (UUID) plan.get("id");
         int goal = Math.max(30, number(plan,"daily_goal_minutes"));
         ensureRoadmap(plan, goal);
+        sessions.reconcileActiveSession(currentUser.id());
         engagement.protectYesterday(currentUser.id(), planId);
         var tasks = bootstrap.ensureToday(planId, currentUser.id(), goal);
         LocalDate today = bootstrap.userToday(currentUser.id());

@@ -28,6 +28,7 @@ interface Props {
   studyContext: ActiveStudyContext | null;
   onOpenStudy: (context?: ActiveStudyContext) => void;
   onOpenQuestions: () => void;
+  refreshVersion?: number;
 }
 
 const statusLabel: Record<string, string> = {
@@ -196,7 +197,9 @@ function AgendaTopicAccordion({
               <Check />
               <small>Desempenho</small>
               <strong>
-                {questions
+                {item.status === "COMPLETED" && questions === 0
+                  ? "Finalizado"
+                  : questions
                   ? `${correct} acertos · ${accuracy}%`
                   : "Ainda não realizado"}
               </strong>
@@ -220,7 +223,7 @@ function AgendaTopicAccordion({
   );
 }
 
-export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions }: Props) {
+export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions, refreshVersion }: Props) {
   const today = isoDate(new Date());
   const [dashboard, setDashboard] = useState<StudyDashboardData | null>(null);
   const [agenda, setAgenda] = useState<ScheduleAgendaDay[]>([]);
@@ -310,7 +313,7 @@ export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions
   useEffect(() => {
     const planId = dashboard?.plan?.id;
     if (planId) void requestAgenda(String(planId), activeMonth);
-  }, [activeMonth, dashboard?.plan?.id, requestAgenda]);
+  }, [activeMonth, dashboard?.plan?.id, refreshVersion, requestAgenda]);
   useEffect(() => {
     const planId = dashboard?.plan?.id;
     if (!planId) return;

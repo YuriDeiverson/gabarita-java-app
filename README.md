@@ -122,9 +122,10 @@ Crie `frontend/.env`:
 VITE_API_URL=/api
 VITE_SUPABASE_URL=https://SEU_PROJECT_REF.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxxxx
+VITE_AUTH_INACTIVITY_MINUTES=30
 ```
 
-A variável `VITE_SUPABASE_ANON_KEY` também é aceita para compatibilidade. Nunca coloque `service_role`, senha do banco, JWT secret ou qualquer chave privada em uma variável iniciada por `VITE_`: essas variáveis fazem parte do bundle entregue ao navegador.
+A variável `VITE_SUPABASE_ANON_KEY` também é aceita para compatibilidade. `VITE_AUTH_INACTIVITY_MINUTES` é opcional, usa 30 minutos por padrão e aceita valores entre 5 minutos e 24 horas. Nunca coloque `service_role`, senha do banco, JWT secret ou qualquer chave privada em uma variável iniciada por `VITE_`: essas variáveis fazem parte do bundle entregue ao navegador.
 
 ## Executando localmente
 
@@ -285,6 +286,7 @@ No frontend de produção, configure:
 VITE_API_URL=https://api.seu-dominio.com/api
 VITE_SUPABASE_URL=https://SEU_PROJECT_REF.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxxxx
+VITE_AUTH_INACTIVITY_MINUTES=30
 ```
 
 No backend, configure todas as variáveis de banco, Supabase e CORS no gerenciador de segredos da plataforma. Não copie arquivos `.env` para a imagem Docker.

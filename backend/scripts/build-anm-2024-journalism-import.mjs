@@ -91,7 +91,27 @@ const itemText = (number) => {
   return value.replace(/\s+/g, ' ').trim();
 };
 
-const questions = Array.from({ length: 120 }, (_, index) => {
+const normalizeQuestionKey = (value) => String(value ?? '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-zA-Z0-9]+/g, ' ')
+  .trim()
+  .toLowerCase();
+
+const dedupeQuestions = (items) => {
+  const seen = new Set();
+  const unique = [];
+  for (const question of items) {
+    const key = [question.text, question.correct, question.reference]
+      .map(normalizeQuestionKey)
+      .join('::');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(question);
+  }
+  return unique;
+};
+
+const questions = dedupeQuestions(Array.from({ length: 120 }, (_, index) => {
   const item = index + 1;
   const [category, topic] = categoryFor(item);
   const answer = answers[index] === 'X' ? 'Anulada' : answers[index] === 'C' ? 'Certo' : 'Errado';
@@ -107,7 +127,7 @@ const questions = Array.from({ length: 120 }, (_, index) => {
   else if (item >= 98 && item <= 102) Object.assign(question, { passageTitle: passages.news.title, passageContent: passages.news.content, passageSource: passages.news.source });
   else if (item >= 108 && item <= 111) Object.assign(question, { passageTitle: passages.article.title, passageContent: passages.article.content, passageSource: passages.article.source });
   return question;
-});
+}));
 
 mkdirSync(resolve(outputPath, '..'), { recursive: true });
 writeFileSync(outputPath, `${JSON.stringify(questions, null, 2)}\n`);

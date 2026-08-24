@@ -15,6 +15,7 @@ const limit=Number(args.get('--limit')||0);
 const applyToDatabase=args.get('--apply')==='true';
 const subjectFilter=args.get('--subject')||'';
 const questionFilter=args.get('--question')||'';
+const forceIdsFile=args.get('--force-ids-file')||'';
 const auditOnly=args.get('--audit')==='true';
 const ignoreCheckpoint=args.get('--ignore-checkpoint')==='true';
 const model=args.get('--model')||'gpt-5.6-terra';
@@ -24,6 +25,18 @@ const shardCount=Math.max(1,Math.min(8,Number(args.get('--shards')||1)));
 const shardIndex=Math.max(0,Math.min(shardCount-1,Number(args.get('--shard')||0)));
 const checkpointPath=resolve(import.meta.dirname,shardCount===1?'generated-question-guides.ndjson':`generated-question-guides-${shardIndex}-of-${shardCount}.ndjson`);
 const tempRoot=mkdtempSync(join(tmpdir(),'gabarita-guide-review-'));
+let forcedQuestionIds=[];
+if(forceIdsFile){
+  const raw=readFileSync(resolve(projectRoot,forceIdsFile),'utf8');
+  try{
+    const parsed=JSON.parse(raw);
+    forcedQuestionIds=(Array.isArray(parsed)?parsed:parsed.records||parsed.corrections||parsed.quarantines||[])
+      .map(value=>typeof value==='string'?value:value.id);
+  }catch{forcedQuestionIds=raw.split(/\s+/).filter(Boolean);}
+  if(forcedQuestionIds.some(id=>!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)))
+    throw new Error(`Arquivo de IDs contém UUID inválido: ${forceIdsFile}`);
+  forcedQuestionIds=[...new Set(forcedQuestionIds)];
+}
 
 const envFile=readFileSync(resolve(backendRoot,'.env'),'utf8');
 const settings=Object.fromEntries(envFile.split(/\r?\n/).filter(line=>line&&!line.startsWith('#')&&line.includes('='))
@@ -43,6 +56,30 @@ const sqlLiteral=value=>`'${String(value??'').replaceAll("'","''")}'`;
 const normalized=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR')
   .replace(/[^a-z0-9]+/g,' ').trim();
 const sha=value=>createHash('sha256').update(value).digest('hex');
+const hasForbiddenCharacters=value=>/[\u200B-\u200F\uFEFF\uFFFC\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u.test(String(value??''));
+const hasForeignScript=value=>Array.from(String(value??'')).some(character=>
+  /\p{Letter}/u.test(character)&&!/[\p{Script=Latin}\p{Script=Greek}]/u.test(character));
+const hasRepeatedSentence=value=>{
+  const sentences=String(value??'').split(/[.!?]+/).map(normalized).filter(sentence=>sentence.length>=40);
+  return new Set(sentences).size!==sentences.length;
+};
+const countOccurrences=(value,needle)=>normalized(value).split(normalized(needle)).length-1;
+const hasPictogram=value=>Array.from(String(value??'')).some(character=>
+  /\p{Extended_Pictographic}/u.test(character)&&!['©','®','™','ℹ'].includes(character));
+const hasRepeatedVerdictDecoration=value=>/\(\s*(certo|errado)\s*\)|\[\s*confirmado\s*:\s*(certo|errado)\s*\]|\\n|\*\*\s*gabarito/iu.test(String(value??''));
+const hasSuspiciousTrailingJunk=value=>/(?:certo|errado)[.!]?\s+\d+(?:\.\d+)+\s*$|[【】]/iu.test(String(value??''));
+const hasEpistemicConflict=value=>{
+  const text=normalized(value);
+  return /preserv(a|ando|ado).{0,100}gabarito|mantendo se o gabarito|gabarito (fornecido|disponibilizado) exige/.test(text)
+    ||/(enunciado|trecho|fragmento|recorte).{0,120}nao (contem|exibe|figura|reproduz|permite).{0,160}(termo referido|pergunta|their|software platforms|comprovacao textual|contexto original)/.test(text)
+    ||/nao e tecnicamente adequad|inconsistencia entre (o rotulo|a denominacao)|tensao cronologica evidente|terminologia .{0,80} usual.{0,180}(contudo|apesar|preserv)/.test(text);
+};
+const hasExcessiveAnswerMarkers=value=>{
+  const raw=String(value??'');
+  const verdicts=normalized(raw).match(/\b(certo|errado)\b/g)?.length||0;
+  const longDashes=raw.match(/[—–]/g)?.length||0;
+  return verdicts>4||longDashes>8;
+};
 
 if(auditOnly){
   const rows=JSON.parse(runPsql(`
@@ -52,7 +89,8 @@ if(auditOnly){
       'detailedTopic',q.detailed_topic,'conceptExplanation',q.concept_explanation,
       'decisiveEvidence',q.decisive_evidence,'answerAnalysis',q.answer_analysis,
       'examTrap',q.exam_trap,'similarQuestionStrategy',q.similar_question_strategy,
-      'fixationTips',q.fixation_tips,'review',q.metadata->>'guideEditorialReview'
+      'fixationTips',q.fixation_tips,'review',q.metadata->>'guideEditorialReview',
+      'hasGuidePreviousStatus',q.metadata ? 'guidePreviousStatus'
     )),'[]'::jsonb)
     FROM questions q JOIN subjects s ON s.id=q.subject_id JOIN topics t ON t.id=q.topic_id
   `)||'[]');
@@ -60,11 +98,45 @@ if(auditOnly){
   const failures=[];const duplicateFields=[];
   const hashes=new Map();
   for(const row of published){
+    const guideValues=['detailedTopic','conceptExplanation','decisiveEvidence','answerAnalysis','examTrap','similarQuestionStrategy','fixationTips']
+      .flatMap(field=>Array.isArray(row[field])?row[field]:[row[field]]);
+    const rawJoined=guideValues.join(' ');
+    const normalizedJoined=normalized(rawJoined);
     const lengths={conceptExplanation:300,decisiveEvidence:40,answerAnalysis:400,examTrap:120,similarQuestionStrategy:160};
     for(const [field,min] of Object.entries(lengths))if(String(row[field]||'').trim().length<min)failures.push([row.id,`${field} < ${min}`]);
     if(!normalized(row.detailedTopic).startsWith(normalized(`${row.subject} ${row.topic}`)))failures.push([row.id,'detailedTopic fora da hierarquia']);
     if(!Array.isArray(row.fixationTips)||row.fixationTips.length<3||row.fixationTips.length>4)failures.push([row.id,'fixationTips fora de 3-4']);
-    if(/esta questao foi retirada|recebe uma aula autoral|comentario curto nao sera repetido|correcao completa enquanto/.test(normalized(Object.values(row).join(' '))))failures.push([row.id,'placeholder editorial']);
+    if(/esta questao foi retirada|recebe uma aula autoral|comentario curto nao sera repetido|correcao completa enquanto/.test(normalizedJoined))failures.push([row.id,'placeholder editorial']);
+    if(/proposicao examinada e|essa formulacao (atribui ao assunto|entra em conflito)|conforme o conceito/.test(normalizedJoined))failures.push([row.id,'frase-modelo proibida']);
+    if(/answeranalysis|examtrap|similarquestionstrategy|fixationtips|comparisonheaders|comparisonrows/.test(normalizedJoined))
+      failures.push([row.id,'nome interno de campo incorporado ao texto']);
+    if(/instagram|target blank|noopener|texto para reflexao|deus esta presente|estude ore|aprovacao de amanha/.test(normalizedJoined))
+      failures.push([row.id,'conteúdo promocional ou alheio ao ensino']);
+    if(/["']\s*,\s*["']?(answerAnalysis|examTrap|similarQuestionStrategy|fixationTips|id)["']?\s*:|\]\s*\}\s*,\s*\{/.test(rawJoined))
+      failures.push([row.id,'fragmento de JSON incorporado ao texto']);
+    if(hasForbiddenCharacters(rawJoined))failures.push([row.id,'caractere invisível, de controle ou de substituição']);
+    if(hasForeignScript(rawJoined))failures.push([row.id,'caractere de alfabeto alheio incorporado ao texto']);
+    if(/<br\b|<a\b|href\s*=|assistant to=|functions\.exec|jsiitext|numerusform|[\u10A0-\u10FF]/iu.test(rawJoined))
+      failures.push([row.id,'marcação ou saída interna incorporada ao texto']);
+    if(hasRepeatedSentence(row.answerAnalysis)||hasRepeatedSentence(row.conceptExplanation))
+      failures.push([row.id,'frase longa repetida no mesmo bloco']);
+    if(countOccurrences(row.answerAnalysis,'gabarito oficial')>1)
+      failures.push([row.id,'answerAnalysis repete a confirmação do gabarito']);
+    if(countOccurrences(row.answerAnalysis,'gabarito')>1)
+      failures.push([row.id,'answerAnalysis contém mais de um marcador de gabarito']);
+    if(hasPictogram(rawJoined))failures.push([row.id,'emoji ou pictograma decorativo incorporado ao ensino']);
+    if(hasRepeatedVerdictDecoration(row.answerAnalysis))
+      failures.push([row.id,'answerAnalysis contém veredito decorativo ou marcação repetida']);
+    if(hasSuspiciousTrailingJunk(row.answerAnalysis))
+      failures.push([row.id,'answerAnalysis contém resíduo estranho após a conclusão']);
+    if(hasExcessiveAnswerMarkers(row.answerAnalysis))
+      failures.push([row.id,'answerAnalysis repete excessivamente vereditos, símbolos ou marcadores']);
+    if(normalizedJoined.includes('esta questao poderia ser enriquecida com mais exemplos mas o dado decisivo ja e suficiente'))
+      failures.push([row.id,'comentário metalinguístico incorporado ao ensino']);
+    if(hasEpistemicConflict(rawJoined))
+      failures.push([row.id,'guia admite conflito entre a fonte e o gabarito']);
+    if(/gabarito|item (esta|e) (certo|errado)|portanto.*(certo|errado)/.test(normalized(row.decisiveEvidence)))
+      failures.push([row.id,'decisiveEvidence antecipa o gabarito']);
     const statement=normalized(String(row.statement||'').replace(/^\[[^\]]+\]\s*/,''));
     const explanation=normalized(String(row.explanation||'').replace(/^(item\s+)?(certo|errado|correto|incorreto)[.:]?\s*/i,''));
     for(const field of ['conceptExplanation','decisiveEvidence','answerAnalysis','examTrap','similarQuestionStrategy']){
@@ -78,13 +150,17 @@ if(auditOnly){
     }
   }
   const statusCounts=Object.fromEntries(rows.map(row=>row.status).filter(Boolean).reduce((map,status)=>map.set(status,(map.get(status)||0)+1),new Map()));
-  console.log(JSON.stringify({
+  const result={
     total:rows.length,statusCounts,published:published.length,
     individuallyReviewed:rows.filter(row=>row.review==='individual-v1').length,
-    pendingEditorial:rows.filter(row=>row.status==='DRAFT'&&row.review!=='individual-v1').length,
-    failures:failures.length,duplicateFields:duplicateFields.length,
+    drafts:rows.filter(row=>row.status==='DRAFT').length,
+    pendingEditorial:rows.filter(row=>row.status==='DRAFT'&&row.hasGuidePreviousStatus).length,
+    quarantinedDrafts:rows.filter(row=>row.status==='DRAFT'&&!row.hasGuidePreviousStatus).length,
+    failures:failures.length,failedQuestions:new Set(failures.map(([id])=>id)).size,duplicateFields:duplicateFields.length,
     failureSamples:failures.slice(0,20),duplicateSamples:duplicateFields.slice(0,20),
-  },null,2));
+  };
+  writeFileSync(resolve(import.meta.dirname,'question-guide-audit-report.json'),JSON.stringify({...result,allFailures:failures,allDuplicates:duplicateFields},null,2));
+  console.log(JSON.stringify(result,null,2));
   process.exit(failures.length||duplicateFields.length?2:0);
 }
 
@@ -120,11 +196,35 @@ const query=`
         AND q.answer_analysis !~* 'proposição examinada é:|a proposição anulada é:|essa formulação (atribui ao assunto|entra em conflito)')
         OR concat_ws(' ',q.concept_explanation,q.decisive_evidence,q.answer_analysis,q.exam_trap,q.similar_question_strategy,q.fixation_tips::text)
           ~* 'answerAnalysis|examTrap|similarQuestionStrategy|fixationTips|comparisonHeaders|comparisonRows|instagram|target[ =]|noopener|texto para reflexão|deus está presente|estude,? ore|aprovação de amanhã|\\]\\s*\\}\\s*,\\s*\\{'
+        OR position(chr(8203) in concat_ws(' ',q.concept_explanation,q.decisive_evidence,q.answer_analysis,q.exam_trap,q.similar_question_strategy,q.fixation_tips::text))>0
+        OR position(chr(8204) in concat_ws(' ',q.concept_explanation,q.decisive_evidence,q.answer_analysis,q.exam_trap,q.similar_question_strategy,q.fixation_tips::text))>0
+        OR position(chr(8205) in concat_ws(' ',q.concept_explanation,q.decisive_evidence,q.answer_analysis,q.exam_trap,q.similar_question_strategy,q.fixation_tips::text))>0
+        OR position(chr(8206) in concat_ws(' ',q.concept_explanation,q.decisive_evidence,q.answer_analysis,q.exam_trap,q.similar_question_strategy,q.fixation_tips::text))>0
+        OR position(chr(8207) in concat_ws(' ',q.concept_explanation,q.decisive_evidence,q.answer_analysis,q.exam_trap,q.similar_question_strategy,q.fixation_tips::text))>0
+        OR position(chr(65279) in concat_ws(' ',q.concept_explanation,q.decisive_evidence,q.answer_analysis,q.exam_trap,q.similar_question_strategy,q.fixation_tips::text))>0
+        OR position(chr(65532) in concat_ws(' ',q.concept_explanation,q.decisive_evidence,q.answer_analysis,q.exam_trap,q.similar_question_strategy,q.fixation_tips::text))>0
+        OR concat_ws(' ',q.concept_explanation,q.decisive_evidence,q.answer_analysis,q.exam_trap,q.similar_question_strategy,q.fixation_tips::text)
+          ~ '[Ѐ-ӿ֐-׿؀-ۿऀ-ॿঀ-৿਀-੿઀-૿଀-୿஀-௿ఀ-౿ಀ-೿ഀ-ൿก-๿຀-໿က-႟ᄀ-ᇿ぀-ヿ一-鿿가-힯]'
+        OR concat_ws(' ',q.concept_explanation,q.decisive_evidence,q.answer_analysis,q.exam_trap,q.similar_question_strategy,q.fixation_tips::text)
+          ~* '<br|<a|href[[:space:]]*=|assistant to=|functions\\.exec|jsiitext|numerusform|esta questão poderia ser enriquecida com mais exemplos'
+        OR (length(lower(q.answer_analysis))-length(replace(lower(q.answer_analysis),'gabarito oficial','')))/length('gabarito oficial')>1
+        OR (length(lower(q.answer_analysis))-length(replace(lower(q.answer_analysis),'gabarito','')))/length('gabarito')>1
+        OR (length(lower(q.answer_analysis))-length(replace(lower(q.answer_analysis),'certo','')))/length('certo')>4
+        OR (length(lower(q.answer_analysis))-length(replace(lower(q.answer_analysis),'errado','')))/length('errado')>4
+        OR (length(q.answer_analysis)-length(replace(q.answer_analysis,'—','')))>8
+        OR (length(q.answer_analysis)-length(replace(q.answer_analysis,'✅','')))>2
+        OR (length(q.answer_analysis)-length(replace(q.answer_analysis,'❌','')))>2
+        OR q.answer_analysis ~* '\\((certo|errado)\\)|\\[[[:space:]]*confirmado[[:space:]]*:|\\\\n|\\*\\*[[:space:]]*gabarito'
+        OR q.answer_analysis ~* '(certo|errado)[.!]?[[:space:]]+[0-9]+(\\.[0-9]+)+[[:space:]]*$|[【】]'
+        OR concat_ws(' ',q.concept_explanation,q.decisive_evidence,q.answer_analysis,q.exam_trap,q.similar_question_strategy,q.fixation_tips::text)
+          ~ '[☀-➿🌀-🫿]'
+        ${forcedQuestionIds.length?`OR q.id IN (${forcedQuestionIds.map(id=>sqlLiteral(id)+'::uuid').join(',')})`:''}
       )
       ${filters.length?`AND ${filters.join(' AND ')}`:''}
   ) source`;
 let questions=JSON.parse(runPsql(query)||'[]');
-if(shardCount>1)questions=questions.filter((question,index)=>index%shardCount===shardIndex);
+if(shardCount>1)questions=questions.filter(question=>
+  Number.parseInt(sha(question.id).slice(0,8),16)%shardCount===shardIndex);
 if(limit>0)questions=questions.slice(0,limit);
 
 const applyGuide=(question,guide)=>{
@@ -145,13 +245,13 @@ Regras obrigatórias:
 1. detailedTopic: use exatamente “Disciplina → Assunto catalogado → Recorte específico”.
 2. conceptExplanation: ensine antes de julgar. Explique definição, funcionamento, distinções, condições, limites e, quando útil, um exemplo próprio. Deve ser uma pequena aula autossuficiente.
 3. decisiveEvidence: apresente somente o termo, dado, passagem da fonte, dispositivo, fórmula ou regra que será confrontada na análise. Não copie o enunciado completo e não antecipe a conclusão. Neste campo são proibidas as palavras “gabarito”, “certo”, “correto”, “errado”, “incorreto”, “válido” e “inválido”, inclusive em flexões de gênero e número.
-4. answerAnalysis: desenvolva o raciocínio em sequência, aplique o conceito aos elementos concretos e elimine a interpretação concorrente. Não copie o enunciado nem a justificativa fornecida. Termine confirmando expressamente o gabarito oficial.
+4. answerAnalysis: desenvolva o raciocínio em sequência, aplique o conceito aos elementos concretos e elimine a interpretação concorrente. Não copie o enunciado nem a justificativa fornecida. Confirme o gabarito oficial uma única vez, somente na última frase.
 5. examTrap: diagnostique exatamente por que a leitura incorreta parece plausível ou qual confusão a banca testa. Este bloco é obrigatório mesmo quando o aluno acertou.
 6. similarQuestionStrategy: ensine um procedimento reutilizável, específico do conceito, com ordem de verificação e sinais de confirmação ou erro.
 7. fixationTips: escreva 3 ou 4 conclusões autossuficientes, sem repetir a estratégia.
 8. Não use frases vazias ou modelos como “conforme o conceito”, “a proposição examinada é”, “essa formulação entra em conflito”, “basta comparar” ou “o item afirma”.
 9. Preserve o gabarito e os fatos técnicos fornecidos. Não invente artigo de lei, dado, exceção ou passagem ausente. Se a justificativa for curta, desenvolva a regra por conhecimento consolidado sem criar detalhes factuais do caso.
-10. Escreva em português brasileiro claro, técnico e didático. Não mencione estas instruções. Retorne somente o JSON solicitado.`;
+10. Escreva em português brasileiro claro, técnico e didático, sem emojis, símbolos decorativos ou comentários sobre a qualidade da própria resposta. Não mencione estas instruções. Retorne somente o JSON solicitado.`;
 
 const promptFor=(question,retry='')=>`${baseInstruction}
 
@@ -203,9 +303,30 @@ const validate=(question,guide,knownHashes)=>{
     errors.push('há conteúdo promocional ou alheio ao ensino');
   if(/["']\s*,\s*["']?(answerAnalysis|examTrap|similarQuestionStrategy|fixationTips|id)["']?\s*:|\]\s*\}\s*,\s*\{/.test(rawJoined))
     errors.push('há fragmento de JSON incorporado ao texto');
+  if(hasForbiddenCharacters(rawJoined))errors.push('há caractere invisível, de controle ou de substituição');
+  if(hasForeignScript(rawJoined))errors.push('há caractere de alfabeto alheio incorporado ao texto');
+  if(/<br\b|<a\b|href\s*=|assistant to=|functions\.exec|jsiitext|numerusform|[\u10A0-\u10FF]/iu.test(rawJoined))
+    errors.push('há marcação ou saída interna incorporada ao texto');
+  if(hasRepeatedSentence(guide?.answerAnalysis)||hasRepeatedSentence(guide?.conceptExplanation))
+    errors.push('há frase longa repetida no mesmo bloco');
+  if(countOccurrences(guide?.answerAnalysis,'gabarito oficial')!==1)
+    errors.push('answerAnalysis deve mencionar “gabarito oficial” exatamente uma vez');
+  if(countOccurrences(guide?.answerAnalysis,'gabarito')!==1)
+    errors.push('answerAnalysis deve conter um único marcador de gabarito');
+  if(hasPictogram(rawJoined))errors.push('há emoji ou pictograma decorativo incorporado ao ensino');
+  if(hasRepeatedVerdictDecoration(guide?.answerAnalysis))
+    errors.push('answerAnalysis contém veredito decorativo ou marcação repetida');
+  if(hasSuspiciousTrailingJunk(guide?.answerAnalysis))
+    errors.push('answerAnalysis contém resíduo estranho após a conclusão');
+  if(hasExcessiveAnswerMarkers(guide?.answerAnalysis))
+    errors.push('answerAnalysis repete excessivamente vereditos, símbolos ou marcadores');
+  if(normalizedJoined.includes('esta questao poderia ser enriquecida com mais exemplos mas o dado decisivo ja e suficiente'))
+    errors.push('há comentário metalinguístico incorporado ao ensino');
+  if(hasEpistemicConflict(rawJoined))errors.push('o guia admite conflito entre a fonte e o gabarito');
   if(!normalized(guide?.answerAnalysis).includes(normalized(question.correct)))errors.push('answerAnalysis não confirma expressamente o gabarito oficial');
   if(!Array.isArray(guide?.fixationTips)||guide.fixationTips.length<3||guide.fixationTips.length>4)errors.push('fixationTips precisa ter 3 ou 4 itens');
   else if(new Set(guide.fixationTips.map(normalized)).size!==guide.fixationTips.length)errors.push('fixationTips contém itens repetidos');
+  else if(guide.fixationTips.some(tip=>String(tip).length>600))errors.push('fixationTips contém item com mais de 600 caracteres');
   for(const field of ['conceptExplanation','answerAnalysis','examTrap','similarQuestionStrategy']){
     const digest=sha(normalized(guide?.[field]));if(knownHashes.has(digest))errors.push(`${field} repete literalmente outra questão`);
   }

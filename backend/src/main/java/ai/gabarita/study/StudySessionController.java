@@ -23,6 +23,7 @@ public class StudySessionController {
     @GetMapping("/active") public Map<String,Object> active(){return service.activeOrEmpty(currentUser.id());}
     @PostMapping("/{id}/pause") public Map<String,Object> pause(@PathVariable UUID id,@RequestBody(required=false) PauseInput input){return service.pause(currentUser.id(),id,input==null?null:input.reason());}
     @PostMapping("/{id}/resume") public Map<String,Object> resume(@PathVariable UUID id){return service.resume(currentUser.id(),id);}
+    @PostMapping("/{id}/complete-focus") public Map<String,Object> completeFocus(@PathVariable UUID id){return service.completePomodoroFocus(currentUser.id(),id);}
     @PostMapping("/{id}/finish") public Map<String,Object> finish(@PathVariable UUID id,@Valid @RequestBody(required=false) FinishInput input){
         var value=input==null?new FinishInput(0,0,null):input;
         return service.finish(currentUser.id(),id,value.questionsAnswered()==null?0:value.questionsAnswered(),value.correctAnswers()==null?0:value.correctAnswers(),value.notes());

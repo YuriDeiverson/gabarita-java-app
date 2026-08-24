@@ -765,6 +765,7 @@ export const dailyStudyApi = {
     jsonRequest<StudySession>(`/study/topics/${topicId}/review/start`, { method: 'POST', body: JSON.stringify(data) }),
   pause: (id: string, reason?: string) => jsonRequest<StudySession>(`/study/sessions/${id}/pause`, { method: 'POST', body: JSON.stringify({ reason }) }),
   resume: (id: string) => jsonRequest<StudySession>(`/study/sessions/${id}/resume`, { method: 'POST' }),
+  completeFocus: (id: string) => jsonRequest<{ session: StudySession; feedback: string[]; experience: StudyDashboardData['experience'] }>(`/study/sessions/${id}/complete-focus`, { method: 'POST' }),
   finish: (id: string, data: { questionsAnswered: number; correctAnswers: number; notes?: string }) =>
     jsonRequest<{ session: StudySession; feedback: string[]; experience: StudyDashboardData['experience'] }>(`/study/sessions/${id}/finish`, { method: 'POST', body: JSON.stringify(data) }),
   cancel: (id: string, notes?: string) => jsonRequest<StudySession>(`/study/sessions/${id}/cancel`, { method: 'POST', body: JSON.stringify({ notes }) }),

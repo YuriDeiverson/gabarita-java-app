@@ -15,6 +15,11 @@ const paths=[
 const normalized=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
   .toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g,' ').trim();
 const sha=value=>createHash('sha256').update(value).digest('hex');
+const hasForbiddenCharacters=value=>/[\u200B-\u200F\uFEFF\uFFFC\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u.test(String(value??''));
+const hasRepeatedSentence=value=>{
+  const sentences=String(value??'').split(/[.!?]+/).map(normalized).filter(sentence=>sentence.length>=40);
+  return new Set(sentences).size!==sentences.length;
+};
 const latest=new Map();
 let records=0;
 
@@ -39,6 +44,14 @@ for(const record of latest.values()){
     failures.push([record.id,'conteúdo promocional ou alheio ao ensino']);
   if(/["']\s*,\s*["']?(answerAnalysis|examTrap|similarQuestionStrategy|fixationTips|id)["']?\s*:|\]\s*\}\s*,\s*\{/.test(Object.values(guide||{}).flat().join(' ')))
     failures.push([record.id,'fragmento de JSON incorporado ao texto']);
+  const rawJoined=Object.values(guide||{}).flat().join(' ');
+  if(hasForbiddenCharacters(rawJoined))failures.push([record.id,'caractere invisível, de controle ou de substituição']);
+  if(/<br\b|<a\b|href\s*=|assistant to=|functions\.exec|jsiitext|numerusform|[\u10A0-\u10FF]/iu.test(rawJoined))
+    failures.push([record.id,'marcação ou saída interna incorporada ao texto']);
+  if(hasRepeatedSentence(guide?.answerAnalysis)||hasRepeatedSentence(guide?.conceptExplanation))
+    failures.push([record.id,'frase longa repetida no mesmo bloco']);
+  if(Array.isArray(guide?.fixationTips)&&guide.fixationTips.some(tip=>String(tip).length>600))
+    failures.push([record.id,'fixationTips contém item com mais de 600 caracteres']);
   for(const field of ['conceptExplanation','answerAnalysis','examTrap','similarQuestionStrategy']){
     const digest=sha(normalized(guide?.[field]));const key=`${field}:${digest}`;
     if(hashes.has(key))duplicateFields.push([field,hashes.get(key),record.id]);else hashes.set(key,record.id);

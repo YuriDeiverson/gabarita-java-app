@@ -1,0 +1,299 @@
+{
+  "schemaVersion": 1,
+  "expectedCount": 33,
+  "reviewReason": "source-or-answer-conflict",
+  "criteria": {
+    "missing-source-context": "O gabarito Certo depende de palavra, antecedente, oração ou sinal de pontuação que não existe no fragmento reproduzido pelo próprio enunciado.",
+    "answer-key-conflict": "O gabarito Certo contradiz um fato técnico ou cronológico objetivo reconhecido pelo próprio material de correção.",
+    "excluded-missing-target-with-errado": "A ausência do elemento citado torna a proposição falsa e, portanto, sustenta o gabarito Errado; não há conflito de chave a quarentenar."
+  },
+  "quarantines": [
+    {
+      "id": "105761da-8cb8-4cf9-86e5-9aaa22612a5f",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #285)",
+      "statementMd5": "8f2901c5aa2490defb3c4691658d164e",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A frase reproduzida não contém o pronome “suas” nem o antecedente “decisões”, embora o gabarito valide essa retomada anafórica."
+    },
+    {
+      "id": "13069eb2-c14d-4dcc-9871-e9c19a0c959c",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #351)",
+      "statementMd5": "ac86e336fb6aa0c0ac7f4ed34038a598",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A oração reproduzida não contém “FAPEAL”, embora o gabarito valide uma vírgula supostamente empregada logo após esse termo."
+    },
+    {
+      "id": "1ebf157c-c1e1-4877-ac27-1b55ecf154f1",
+      "reference": "Simulado CEBRASPE - Língua Inglesa (Questão #1505)",
+      "statementMd5": "88497a452077c873ce4219cb33d80131",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A frase reproduzida não contém “their” nem “software platforms”, embora o gabarito valide a relação anafórica entre esses elementos."
+    },
+    {
+      "id": "2744ca86-97c5-48bd-96b1-208cae3e6041",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #371)",
+      "statementMd5": "3a254630fd254624600f5605a318e01a",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A oração reproduzida não contém “moralidade”, embora o gabarito valide uma vírgula supostamente empregada logo após esse termo."
+    },
+    {
+      "id": "28ab01a3-6a98-475e-af57-1c98d54ebd5a",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #391)",
+      "statementMd5": "5367e29ad0358e9a85cce4afe0911951",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A oração reproduzida não contém “fomenta”, embora o gabarito valide uma vírgula supostamente empregada logo após esse termo."
+    },
+    {
+      "id": "2ce91137-e229-4d89-bd5b-626f6be44f53",
+      "reference": "CEBRASPE — SEPLAG/AL — Especialista em Gestão Pública — Edital 2026 — Item 46",
+      "statementMd5": "aee8bb3c22dd026047a9de6c49300945",
+      "correctAnswer": "Certo",
+      "reasonKey": "answer-key-conflict",
+      "reason": "O item situa 1839 no período republicano, embora 1839 pertença ao período imperial; o próprio guia reconhece a tensão e preserva artificialmente o gabarito Certo."
+    },
+    {
+      "id": "3f663078-b46f-4fa0-80d6-072b98e662f0",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #301)",
+      "statementMd5": "5d7d509a1f11ce66059d729cae5d5f3a",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A oração reproduzida não contém “fomenta”, embora o gabarito valide uma vírgula supostamente empregada logo após esse termo."
+    },
+    {
+      "id": "499e0a89-6cdd-454e-bec4-8832b6b713d0",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #281)",
+      "statementMd5": "d31cab2e0b821f5f360caad5dd7da74f",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A oração reproduzida não contém “moralidade”, embora o gabarito valide uma vírgula supostamente empregada logo após esse termo."
+    },
+    {
+      "id": "4e0b1978-237e-42bc-a5ed-bf057f8662c5",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #291)",
+      "statementMd5": "198e1abbe9081412458933bf588738e2",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A oração reproduzida não contém “FAPEAL”, embora o gabarito valide uma vírgula supostamente empregada logo após esse termo."
+    },
+    {
+      "id": "4eb4840d-f0fc-49ea-9162-29ad66b064fd",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #295)",
+      "statementMd5": "3bba0f7478fa8f1d77240e1b1c110ceb",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A frase reproduzida não contém o pronome “suas” nem o antecedente “decisões”, embora o gabarito valide essa retomada anafórica."
+    },
+    {
+      "id": "5a4368e3-64c9-4af4-b568-e344675fa95b",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #321)",
+      "statementMd5": "cda34e614b55e67ed62ab40f7f92c726",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A oração reproduzida não contém “FAPEAL”, embora o gabarito valide uma vírgula supostamente empregada logo após esse termo."
+    },
+    {
+      "id": "5b496816-4eb2-4db0-b700-fca1414bf002",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #315)",
+      "statementMd5": "ba1c48c5ddf2c920fac2ad0b2b10c339",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A frase reproduzida não contém o pronome “suas” nem o antecedente “decisões”, embora o gabarito valide essa retomada anafórica."
+    },
+    {
+      "id": "67a680cc-1fb1-4961-ab98-fb154a9e8079",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #279)",
+      "statementMd5": "3332b8a2d0167bacb7a409e4ca8024d0",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A frase reproduzida não contém “suas” nem oração adjetiva introduzida por esse termo, embora o gabarito a classifique como explicativa."
+    },
+    {
+      "id": "67a7fad7-e3dd-4a2b-802d-ed1f77c80a99",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #361)",
+      "statementMd5": "fc44dbfed611f1ab0f920e02a38c8e46",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A oração contém “fomenta”, mas não contém vírgula logo após o termo, embora o gabarito valide esse emprego de pontuação."
+    },
+    {
+      "id": "716278fc-62d0-4727-a638-61bc636c645c",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #305)",
+      "statementMd5": "ada4ed783d7b3e07227c4a8a636f2dc5",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A frase reproduzida não contém o pronome “suas” nem o antecedente “decisões”, embora o gabarito valide essa retomada anafórica."
+    },
+    {
+      "id": "829ee6a2-4a20-4b8b-b6f8-df409af81cd7",
+      "reference": "Simulado CEBRASPE - TI Básica (Questão #629)",
+      "statementMd5": "bd109be1f643600a507acae6841d420d",
+      "correctAnswer": "Certo",
+      "reasonKey": "answer-key-conflict",
+      "reason": "O item chama de spyware a simulação de comunicação legítima para captura de credenciais, comportamento de phishing; o próprio guia reconhece a classificação incompatível com o gabarito Certo."
+    },
+    {
+      "id": "85a57acb-82de-43c4-ab61-3253e577ee5f",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #309)",
+      "statementMd5": "0c91ed6966234fdc889be165282b8523",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A frase reproduzida não contém “suas” nem oração adjetiva introduzida por esse termo, embora o gabarito a classifique como explicativa."
+    },
+    {
+      "id": "87367b52-114c-4553-b77a-919b5db3c356",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #311)",
+      "statementMd5": "eb4a6a6934f50d00b3d8a82161ac0f96",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A oração reproduzida não contém “moralidade”, embora o gabarito valide uma vírgula supostamente empregada logo após esse termo."
+    },
+    {
+      "id": "8a88e7e5-b6cf-4090-8263-641e942718cb",
+      "reference": "Simulado CEBRASPE - Língua Inglesa (Questão #1527)",
+      "statementMd5": "e3616f56750279fb072f1687ee2d9747",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A frase reproduzida não contém “fosters”, embora o gabarito valide sua substituição contextual por “encourages”."
+    },
+    {
+      "id": "a7e0f83c-3175-47d4-903a-c682de05b3d6",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #341)",
+      "statementMd5": "42e7e3b7115d5426ec2b524a0fd8bc56",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A oração reproduzida não contém “moralidade”, embora o gabarito valide uma vírgula supostamente empregada logo após esse termo."
+    },
+    {
+      "id": "a90b5fc4-4a99-4964-984b-8b4c15a13584",
+      "reference": "Simulado CEBRASPE - Língua Inglesa (Questão #1503)",
+      "statementMd5": "0497fd4e5bcfb59186ec7fdff659cd00",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A frase reproduzida não contém “fosters”, embora o gabarito valide sua substituição contextual por “encourages”."
+    },
+    {
+      "id": "af2fe216-c5fd-4716-9375-581b8791fda3",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #331)",
+      "statementMd5": "3f3f7888a125c41f7c13a79b6d0b2dbd",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A oração reproduzida não contém “fomenta”, embora o gabarito valide uma vírgula supostamente empregada logo após esse termo."
+    },
+    {
+      "id": "b249ba5a-1b9c-4cef-a13e-12be5af93359",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #299)",
+      "statementMd5": "6b4cad7c9edae6ba5787dd2dab808646",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A frase reproduzida não contém “suas” nem oração adjetiva introduzida por esse termo, embora o gabarito a classifique como explicativa."
+    },
+    {
+      "id": "c0cbe99a-6d9d-494c-a995-1aaf219ff3fb",
+      "reference": "Simulado CEBRASPE - Língua Inglesa (Questão #1529)",
+      "statementMd5": "30c3cd38e8bd3de2770f5ddccc13e1c6",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A frase reproduzida não contém “their” nem “software platforms”, embora o gabarito valide a relação anafórica entre esses elementos."
+    },
+    {
+      "id": "c1f72df8-a197-442d-8163-81941e44ffd9",
+      "reference": "Simulado CEBRASPE - Língua Inglesa (Questão #1517)",
+      "statementMd5": "dfa19ee2a7134ccff5f32d121ab7e084",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A frase reproduzida contém “software platforms”, mas não contém “their”, embora o gabarito valide a relação anafórica entre esses elementos."
+    },
+    {
+      "id": "c3e9b3b5-99bd-4446-92ee-047ce679a52e",
+      "reference": "Simulado CEBRASPE - Língua Inglesa (Questão #1511)",
+      "statementMd5": "d9c7629b5a812147d79441ecb5c4eb36",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A frase reproduzida não contém “their” nem “software platforms”, embora o gabarito valide a relação anafórica entre esses elementos."
+    },
+    {
+      "id": "c6b6ab6a-f9f7-40c1-96aa-c8ad8f92de28",
+      "reference": "Simulado CEBRASPE - TI Básica (Questão #635)",
+      "statementMd5": "046cee5e14770c73a10f0d7123be186e",
+      "correctAnswer": "Certo",
+      "reasonKey": "answer-key-conflict",
+      "reason": "O item chama de spyware o bloqueio criptográfico de arquivos com cobrança de resgate, comportamento de ransomware; o próprio guia reconhece a classificação incompatível com o gabarito Certo."
+    },
+    {
+      "id": "cc8f032d-cb68-478b-997b-0c1875ebc75c",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #289)",
+      "statementMd5": "950db432894f1b40f51ff38c79245cfc",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A frase reproduzida não contém “suas” nem oração adjetiva introduzida por esse termo, embora o gabarito a classifique como explicativa."
+    },
+    {
+      "id": "db98df3a-2ba4-4f67-b337-8ef486e4dcae",
+      "reference": "Simulado CEBRASPE - Língua Inglesa (Questão #1523)",
+      "statementMd5": "c516640725364b9de65010f3057d9b8b",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A frase reproduzida não contém “their” nem “software platforms”, embora o gabarito valide a relação anafórica entre esses elementos."
+    },
+    {
+      "id": "e4964d0f-a45b-43b9-abfd-1db67675c4ee",
+      "reference": "Simulado CEBRASPE - Língua Inglesa (Questão #1521)",
+      "statementMd5": "ec00426131f8acaf3ff5c5f549f8c26a",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A frase reproduzida não contém “fosters”, embora o gabarito valide sua substituição contextual por “encourages”."
+    },
+    {
+      "id": "e9c39b88-e503-4ccd-8bb2-3a835d5d6b14",
+      "reference": "Simulado CEBRASPE - Língua Inglesa (Questão #1515)",
+      "statementMd5": "fc0f0c416dae3ddbce9ca2eef780dcb0",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A frase reproduzida não contém “fosters”, embora o gabarito valide sua substituição contextual por “encourages”."
+    },
+    {
+      "id": "f1f419e6-9328-4add-b3b3-ad9f7e521a04",
+      "reference": "Simulado CEBRASPE - TI Básica (Questão #623)",
+      "statementMd5": "633584ee813dd8c35e3b434be950425b",
+      "correctAnswer": "Certo",
+      "reasonKey": "answer-key-conflict",
+      "reason": "O item atribui ao RSA uma única chave privada compartilhada para cifrar e decifrar, descrição de criptografia simétrica; o próprio guia reconhece que RSA é assimétrico e preserva artificialmente o gabarito Certo."
+    },
+    {
+      "id": "f3f16f79-1fd6-4ddf-bc67-7d7574311863",
+      "reference": "Simulado CEBRASPE - Língua Portuguesa (Questão #381)",
+      "statementMd5": "ef1de018b3e65fc132ed6487a881923d",
+      "correctAnswer": "Certo",
+      "reasonKey": "missing-source-context",
+      "reason": "A oração reproduzida não contém “FAPEAL”, embora o gabarito valide uma vírgula supostamente empregada logo após esse termo."
+    }
+  ],
+  "excludedMissingTargetWithErrado": [
+    "0a79988f-aaee-4b1c-b548-584a6fe462bc",
+    "0b64292c-0dbd-4e2c-8beb-dda23065e2a0",
+    "3387749f-6f32-496d-89b3-67ec728f635c",
+    "4099b569-89c0-457f-a163-5f2d3638d985",
+    "545250dc-346d-4aa2-9c89-5c17c235e915",
+    "55848ee5-0e71-4816-99c0-838165ed8008",
+    "6482a8a4-5657-45ec-8864-ec777cd7e251",
+    "75177d36-e6e9-4177-a186-e65477dc99ae",
+    "75c308d2-63bf-4a32-95aa-9b9a5098ee67",
+    "7b3f2f0d-fcc1-4e19-aa21-cbe9af986035",
+    "8115d456-d713-466a-9295-7f45ecac2377",
+    "813e44e7-875b-4243-aa3b-4098e64f4a0d",
+    "9c47aca9-db90-47b1-9aa5-b3a650560b49",
+    "b13e3892-aaf7-465e-a163-592e9e363122",
+    "b3e1995f-4a34-44bb-bed9-f49ab50afbc5",
+    "c8a3baf9-614c-4aba-ba3f-149d4d81f75d",
+    "cb989cc0-c6eb-45f0-a587-620da7a658a3",
+    "d2fa7de1-099f-45c1-9d12-dc5f70060b15",
+    "d4c5c464-ebd5-48f6-9c82-cd8662f4de82",
+    "d625d2c0-cd5a-486f-bf33-58a72dccb7c1",
+    "fc4165fb-916b-4834-871d-280403f1981c"
+  ]
+}
