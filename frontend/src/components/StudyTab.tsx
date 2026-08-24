@@ -41,7 +41,13 @@ const mergeSharedStudyLibrary = (current: StudySection[], library: SharedStudySu
   current.map(section => ({
     ...section,
     cards: section.cards.map(card => {
-      const shared = library.find(item => normalizeStudyText(item.title) === normalizeStudyText(card.title));
+      const shared =
+        library.find(item => card.sharedSubjectId && item.id === card.sharedSubjectId) ||
+        library.find(
+          item =>
+            normalizeStudyText(item.title) === normalizeStudyText(card.title) &&
+            normalizeStudyText(item.discipline) === normalizeStudyText(section.title)
+        );
       return shared
         ? {
             ...card,
@@ -58,12 +64,33 @@ const mergeSharedStudyLibrary = (current: StudySection[], library: SharedStudySu
 const distinctPoints = (values: string[]) => {
   const seen = new Set<string>();
   return values.filter(value => {
+    if (typeof value !== 'string') return false;
     const text = value.trim();
     const key = normalizeStudyText(text);
     if (!text || seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+};
+
+const sanitizeStudyHtml = (html: string) => {
+  if (!html || typeof document === 'undefined') return '';
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  const allowedTags = new Set(['P', 'STRONG', 'B', 'EM', 'I', 'UL', 'OL', 'LI', 'H2', 'H3', 'H4', 'BR', 'CODE', 'BLOCKQUOTE']);
+  const blockedTags = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'FORM', 'INPUT', 'BUTTON']);
+  [...template.content.querySelectorAll('*')].forEach(element => {
+    if (blockedTags.has(element.tagName)) {
+      element.remove();
+      return;
+    }
+    if (!allowedTags.has(element.tagName)) {
+      element.replaceWith(...element.childNodes);
+      return;
+    }
+    [...element.attributes].forEach(attribute => element.removeAttribute(attribute.name));
+  });
+  return template.innerHTML;
 };
 
 const applicationGuide = (discipline: string, subject: string) => {
@@ -244,9 +271,11 @@ export default function StudyTab({ studyContext, onCurrentActivityComplete }: St
   ];
   const materialMiniQuestions = contentBlocks
     .flatMap(block => block.miniQuestions || [])
-    .filter(question => question.prompt?.trim() && question.answer?.trim())
+    .filter(question => question?.prompt?.trim() && question?.answer?.trim())
     .slice(0, 3);
   const miniQuestions = materialMiniQuestions.length > 0 ? materialMiniQuestions : fallbackMiniQuestions;
+  const hasAppliedExample = contentBlocks.some(block => block.id === 'exemplo-aplicado');
+  const safeBaseContent = sanitizeStudyHtml(activeCard.content);
 
   return (
     <div id="study-tab-container" className="study-layout">
@@ -318,24 +347,29 @@ export default function StudyTab({ studyContext, onCurrentActivityComplete }: St
             </ol>
           </section>
 
-          <div className="study-reader-rich-content" dangerouslySetInnerHTML={{ __html: activeCard.content }} />
+          <div className="study-reader-rich-content" dangerouslySetInnerHTML={{ __html: safeBaseContent }} />
 
-          <section className="study-reader-example" aria-label="Exemplo guiado">
-            <strong>
-              <Lightbulb /> Exemplo guiado de aplicação
-            </strong>
-            <p>
-              Imagine uma questão cobrando <b>{activeCard.title}</b>. Antes de olhar as alternativas, explique com suas
-              palavras qual conceito resolve o problema e procure no enunciado a evidência que sustenta essa escolha.
-            </p>
-            <p>{applicationGuide(activeSection.title, activeCard.title)}</p>
-          </section>
+          {!hasAppliedExample && (
+            <section className="study-reader-example" aria-label="Exemplo guiado">
+              <strong>
+                <Lightbulb /> Exemplo guiado de aplicação
+              </strong>
+              <p>
+                Imagine uma questão cobrando <b>{activeCard.title}</b>. Antes de olhar as alternativas, explique com suas
+                palavras qual conceito resolve o problema e procure no enunciado a evidência que sustenta essa escolha.
+              </p>
+              <p>{applicationGuide(activeSection.title, activeCard.title)}</p>
+            </section>
+          )}
 
           {contentBlocks.map((block, index) => (
             <section className="study-reader-chapter" key={block.id || index}>
               <span>Capítulo {index + 1}</span>
               <h3>{block.title}</h3>
-              <div className="study-reader-plain-content">{block.content}</div>
+              <div
+                className="study-reader-plain-content"
+                dangerouslySetInnerHTML={{ __html: sanitizeStudyHtml(block.content) }}
+              />
               {Boolean(block.keyTakeaways?.length) && (
                 <div className="study-reader-key-points">
                   <strong>
@@ -372,7 +406,7 @@ export default function StudyTab({ studyContext, onCurrentActivityComplete }: St
                 </strong>
                 <p>Tente responder primeiro. A correção comentada está disponível logo abaixo de cada questão.</p>
               </div>
-              <span>3 questões</span>
+              <span>{miniQuestions.length} {miniQuestions.length === 1 ? 'questão' : 'questões'}</span>
             </header>
             <div>
               {miniQuestions.map((question, index) => (

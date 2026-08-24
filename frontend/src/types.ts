@@ -1,5 +1,6 @@
 export interface StudyCard {
   id: string;
+  sharedSubjectId?: string;
   title: string;
   paretoRatio: string; // e.g. "Alta Relevância (80/20)"
   isQuente: boolean;

@@ -882,7 +882,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 }
 .study-reader-chapter > span { color: var(--accent-2); font-size: 10px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
 .study-reader-chapter h3 { margin: 7px 0 16px; color: var(--ink) !important; font-size: 21px !important; }
-.study-reader-plain-content { white-space: pre-line; color: #414843; font-size: 15px; line-height: 1.82; }
+.study-reader-plain-content { color: #414843; font-size: 15px; line-height: 1.82; }
+.study-reader-plain-content p { margin: 0 0 1em; }
+.study-reader-plain-content p:last-child { margin-bottom: 0; }
+.study-reader-plain-content ul, .study-reader-plain-content ol { margin: .8em 0 1.2em; padding-left: 1.4em; }
+.study-reader-plain-content ul { list-style: disc; }
+.study-reader-plain-content ol { list-style: decimal; }
 .study-reader-key-points { width: 100%; max-width: none; margin: 28px 0 0; padding: 17px 18px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface-2); }
 .study-reader-key-points strong { display: flex; align-items: center; gap: 7px; color: var(--ink); font-size: 12px; }
 .study-reader-key-points strong svg { width: 15px; height: 15px; color: var(--accent); }
