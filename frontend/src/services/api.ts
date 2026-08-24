@@ -772,9 +772,23 @@ export const adminApi = {
     return jsonRequest<AdminQuestionPage>(`/admin/content/questions?${params}`);
   },
   createQuestion: (data:Record<string,unknown>) => jsonRequest('/admin/content/questions', { method:'POST',body:JSON.stringify(data) }),
-  importQuestions: (questions:Record<string,unknown>[]) => jsonRequest<{imported:number;ids:string[]}>('/admin/content/questions/batch', {
-    method:'POST',body:JSON.stringify({questions}),
-  }),
+  importQuestions: async (questions:Record<string,unknown>[]) => {
+    const response=await fetch(`${API_BASE_URL}/admin/content/questions/batch`, {
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({questions}),
+    });
+    if(!response.ok){
+      let message=GENERIC_ACTION_ERROR;
+      if(response.status===400){
+        try{
+          const body=await response.json() as {code?:unknown;error?:unknown};
+          if(body.code==='QUESTION_IMPORT_INVALID'&&typeof body.error==='string'&&body.error.length<=360)
+            message=body.error;
+        }catch{/* A resposta inválida permanece oculta. */}
+      }
+      throw new ApiRequestError(message,response.status,isRetryableResponseStatus(response.status));
+    }
+    return response.json() as Promise<{imported:number;ids:string[]}>;
+  },
   updateQuestion: (id:string,data:Record<string,unknown>) => jsonRequest(`/admin/content/questions/${id}`, { method:'PUT',body:JSON.stringify(data) }),
   deleteQuestion: (id:string) => jsonRequest<void>(`/admin/content/questions/${id}`, { method:'DELETE' }),
   questionReports: (status='PENDING') => jsonRequest<AdminQuestionReport[]>(`/admin/content/question-reports?status=${encodeURIComponent(status)}`),

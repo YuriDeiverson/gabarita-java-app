@@ -34,8 +34,8 @@ public final class LearningRules {
         return timeReached && (questionGoal == 0 || questionsReached);
     }
 
-    public static boolean validStreakDay(int correctAnswers) {
-        return correctAnswers >= 10;
+    public static boolean validStreakDay(int questionsAnswered, int completedSessions) {
+        return questionsAnswered > 0 || completedSessions > 0;
     }
 
     public static int levelForXp(int totalXp) {

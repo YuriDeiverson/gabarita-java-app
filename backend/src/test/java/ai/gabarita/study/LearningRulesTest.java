@@ -32,10 +32,11 @@ class LearningRulesTest {
         assertTrue(urgentWeak > distantMastered);
     }
 
-    @Test void streakRequiresTenCorrectAnswersAndUsesUserTimezone() {
-        assertFalse(LearningRules.validStreakDay(0));
-        assertFalse(LearningRules.validStreakDay(9));
-        assertTrue(LearningRules.validStreakDay(10));
+    @Test void streakAcceptsAnAnsweredQuestionOrACompletedSessionAndUsesUserTimezone() {
+        assertFalse(LearningRules.validStreakDay(0, 0));
+        assertTrue(LearningRules.validStreakDay(1, 0));
+        assertTrue(LearningRules.validStreakDay(0, 1));
+        assertTrue(LearningRules.validStreakDay(3, 2));
         assertEquals("2026-07-20", LearningRules.localDate(Instant.parse("2026-07-21T01:30:00Z"), "America/Maceio").toString());
     }
 

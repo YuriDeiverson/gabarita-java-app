@@ -58,7 +58,7 @@ public class QuizProgressController {
           ON CONFLICT(study_plan_id,question_id) DO UPDATE
           SET answer=EXCLUDED.answer,is_correct=EXCLUDED.is_correct,
             roadmap_topic_id=COALESCE(EXCLUDED.roadmap_topic_id,quiz_answer_events.roadmap_topic_id),
-            topic_title=COALESCE(EXCLUDED.topic_title,quiz_answer_events.topic_title)
+            topic_title=COALESCE(EXCLUDED.topic_title,quiz_answer_events.topic_title),answered_at=now()
           """).param("p",r.studyPlanId()).param("q",String.valueOf(r.questionId())).param("answer",r.answer())
                 .param("correct",r.isCorrect()).param("topic",r.roadmapTopicId()).param("title",r.topicTitle()).update();
         engagement.recordQuestionActivity(currentUser.id(),r.studyPlanId());

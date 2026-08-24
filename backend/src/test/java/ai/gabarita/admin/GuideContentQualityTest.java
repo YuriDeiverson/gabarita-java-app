@@ -43,10 +43,12 @@ class GuideContentQualityTest {
         assertFalse(GuideContentQuality.containsEditorialArtifact("A relação entre α e β preserva a proporcionalidade."));
     }
 
-    @Test void requiresExactlyOneOfficialAnswerConfirmation() {
-        assertTrue(GuideContentQuality.hasOneOfficialAnswerConfirmation("Após a análise, o gabarito oficial é Certo."));
-        assertFalse(GuideContentQuality.hasOneOfficialAnswerConfirmation("O item está Certo."));
-        assertFalse(GuideContentQuality.hasOneOfficialAnswerConfirmation(
+    @Test void acceptsAnOfficialAnswerOrANaturalConcludingVerdict() {
+        assertTrue(GuideContentQuality.hasConcludingAnswerConfirmation("Após a análise, o gabarito oficial é Certo."));
+        assertTrue(GuideContentQuality.hasConcludingAnswerConfirmation("A permissão necessária está presente. Portanto, a afirmação está correta."));
+        assertTrue(GuideContentQuality.hasConcludingAnswerConfirmation("As limitações descritas tornam a assertiva errada."));
+        assertFalse(GuideContentQuality.hasConcludingAnswerConfirmation("A análise termina sem confirmar a resposta."));
+        assertFalse(GuideContentQuality.hasConcludingAnswerConfirmation(
           "O gabarito oficial é Certo. Portanto, confirma-se novamente o gabarito."));
     }
 

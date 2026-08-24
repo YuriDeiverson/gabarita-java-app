@@ -34,6 +34,7 @@ public class DailyStudyService {
         var tasks = bootstrap.ensureToday(planId, currentUser.id(), goal);
         LocalDate today = bootstrap.userToday(currentUser.id());
         refreshReviews(today);
+        engagement.refreshDay(currentUser.id(), planId);
         var summary = jdbc.sql("""
             SELECT COALESCE(SUM(planned_minutes) FILTER(WHERE NOT outside_planned_hours),0) planned_minutes,
               COALESCE(SUM(completed_minutes) FILTER(WHERE NOT outside_planned_hours),0) completed_minutes,

@@ -1248,6 +1248,11 @@ export default function App() {
               <div>
                 <small>Ofensiva</small>
                 <strong>{Number(headerStudyData.streak.current_streak || 0)} dias</strong>
+                <p>
+                  {Boolean(headerStudyData.streak.today_qualified)
+                    ? 'Ofensiva garantida hoje'
+                    : 'Responda 1 questão ou conclua 1 sessão hoje'}
+                </p>
                 <p>Recorde: {Number(headerStudyData.streak.longest_streak || 0)} dias</p>
                 <p>
                   <ShieldCheck />
@@ -1359,8 +1364,8 @@ export default function App() {
         <div
           className="header-streak-trigger"
           role="img"
-          aria-label={`Ofensiva atual: ${Number(headerStudyData?.streak?.current_streak || 0)} dias`}
-          title={`Ofensiva atual: ${Number(headerStudyData?.streak?.current_streak || 0)} dias`}
+          aria-label={`Ofensiva atual: ${Number(headerStudyData?.streak?.current_streak || 0)} dias. ${Boolean(headerStudyData?.streak?.today_qualified) ? 'Garantida hoje' : 'Responda uma questão ou conclua uma sessão hoje'}`}
+          title={`Ofensiva atual: ${Number(headerStudyData?.streak?.current_streak || 0)} dias. ${Boolean(headerStudyData?.streak?.today_qualified) ? 'Garantida hoje' : 'Responda uma questão ou conclua uma sessão hoje'}`}
         >
           <Flame aria-hidden="true" />
           <span>{Number(headerStudyData?.streak?.current_streak || 0)}</span>
@@ -1505,6 +1510,7 @@ export default function App() {
     notification => notification.priority === 'HIGH' && !notification.read_at
   );
   const contextualStreak = Math.max(0, Number(headerStudyData?.streak?.current_streak || 0));
+  const contextualStreakQualified = Boolean(headerStudyData?.streak?.today_qualified);
   const contextualStudiedDays = Math.max(0, Number(headerStudyData?.streak?.studied_days_month || 0));
   const contextualProgress = Math.max(
     0,
@@ -1550,6 +1556,11 @@ export default function App() {
                   <strong>
                     {contextualStreak} {contextualStreak === 1 ? 'dia' : 'dias'}
                   </strong>
+                  <p>
+                    {contextualStreakQualified
+                      ? 'Ofensiva garantida hoje'
+                      : 'Responda 1 questão ou conclua 1 sessão hoje'}
+                  </p>
                   <p>
                     {contextualStudiedDays} {contextualStudiedDays === 1 ? 'dia estudado' : 'dias estudados'} neste mês
                   </p>

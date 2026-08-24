@@ -46,10 +46,12 @@ final class GuideContentQuality {
           || text.contains("noopener")||text.contains("esta questao poderia ser enriquecida com mais exemplos");
     }
 
-    static boolean hasOneOfficialAnswerConfirmation(String value) {
+    static boolean hasConcludingAnswerConfirmation(String value) {
         String text=normalized(value);int occurrences=0;int index=0;
         while((index=text.indexOf("gabarito",index))>=0){occurrences++;index+="gabarito".length();}
-        return occurrences==1&&text.contains("gabarito oficial");
+        if(occurrences==1&&text.contains("gabarito oficial"))return true;
+        if(occurrences>0)return false;
+        return text.matches(".*\\b(item|afirmacao|assertiva|proposicao)\\b.{0,100}\\b(certo|correto|certa|correta|errado|incorreto|errada|incorreta)\\b$");
     }
 
     static boolean admitsSourceOrAnswerConflict(String value) {

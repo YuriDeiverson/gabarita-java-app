@@ -311,7 +311,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   border-radius: 11px;
   background: var(--surface-2);
 }
-.profile-study-grid .profile-streak-card { grid-column: 1 / -1; min-height: 88px; }
+.profile-study-grid .profile-streak-card { grid-column: 1 / -1; min-height: 104px; }
 .profile-study-grid article > span { width: 25px; height: 25px; display: grid; place-items: center; flex: 0 0 25px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-2); }
 .profile-study-grid article > span svg { width: 13px; height: 13px; }
 .profile-study-grid article > div { min-width: 0; }

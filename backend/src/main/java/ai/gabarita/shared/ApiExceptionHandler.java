@@ -1,5 +1,6 @@
 package ai.gabarita.shared;
 
+import ai.gabarita.admin.QuestionImportException;
 import java.time.Instant;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -18,6 +19,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class ApiExceptionHandler {
     private static final Pattern CONSTRAINT_PATTERN = Pattern.compile("constraint \\\"([a-zA-Z0-9_]+)\\\"");
+    @ExceptionHandler(QuestionImportException.class)
+    ResponseEntity<?> questionImportInvalid(QuestionImportException ex) {
+        return ResponseEntity.badRequest().body(Map.of(
+                "error", ex.getMessage(), "code", "QUESTION_IMPORT_INVALID",
+                "item", ex.item(), "timestamp", Instant.now()));
+    }
+
     @ExceptionHandler(NoSuchElementException.class)
     ResponseEntity<?> notFound(NoSuchElementException ex) {
         return error(HttpStatus.NOT_FOUND, ex.getMessage());

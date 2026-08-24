@@ -27,6 +27,7 @@ public class EngagementService {
     @Transactional
     public void refreshDay(UUID userId, UUID planId) {
         LocalDate today = bootstrap.userToday(userId);
+        expireStreakForInactivity(userId);
         var totals = jdbc.sql("""
             SELECT COALESCE((SELECT SUM(dt.completed_minutes) FROM daily_tasks dt WHERE dt.user_id=:u AND dt.plan_id=:p AND dt.task_date=:date),0)
                 +COALESCE((SELECT SUM(ss.effective_seconds/60) FROM study_sessions ss JOIN users su ON su.id=ss.user_id
@@ -34,31 +35,16 @@ public class EngagementService {
                   AND ss.daily_task_id IS NULL
                   AND (ss.ended_at AT TIME ZONE su.timezone)::date=:date),0) studied_minutes,
               COALESCE((SELECT COUNT(*) FROM daily_tasks dt WHERE dt.user_id=:u AND dt.plan_id=:p AND dt.task_date=:date AND dt.status='COMPLETED'),0) tasks_completed,
-              COALESCE((SELECT SUM(dt.questions_answered) FROM daily_tasks dt WHERE dt.user_id=:u AND dt.plan_id=:p AND dt.task_date=:date),0)
-                +COALESCE((SELECT SUM(ss.questions_answered) FROM study_sessions ss JOIN users su ON su.id=ss.user_id
-                  WHERE ss.user_id=:u AND ss.plan_id=:p AND ss.session_kind='QUESTIONS' AND ss.status='COMPLETED'
-                  AND ss.daily_task_id IS NULL
-                  AND (ss.ended_at AT TIME ZONE su.timezone)::date=:date),0) questions_answered,
-              COALESCE((SELECT SUM(dt.correct_answers) FROM daily_tasks dt WHERE dt.user_id=:u AND dt.task_date=:date),0)
-                +COALESCE((SELECT SUM(ss.correct_answers) FROM study_sessions ss JOIN users su ON su.id=ss.user_id
-                  WHERE ss.user_id=:u AND ss.session_kind='QUESTIONS' AND ss.status IN('RUNNING','PAUSED','COMPLETED')
-                  AND ss.daily_task_id IS NULL
-                  AND (COALESCE(ss.ended_at,ss.started_at) AT TIME ZONE su.timezone)::date=:date),0)
-                +COALESCE((SELECT SUM(ss.correct_answers) FROM study_sessions ss JOIN users su ON su.id=ss.user_id
-                  WHERE ss.user_id=:u AND ss.session_kind='QUESTIONS' AND ss.status IN('RUNNING','PAUSED')
-                  AND ss.daily_task_id IS NOT NULL
-                  AND (ss.started_at AT TIME ZONE su.timezone)::date=:date),0)
-                +COALESCE((SELECT COUNT(*) FROM quiz_answer_events event JOIN study_plans sp ON sp.id=event.study_plan_id
-                  JOIN users su ON su.id=sp.user_id WHERE sp.user_id=:u AND event.is_correct
-                  AND (event.answered_at AT TIME ZONE su.timezone)::date=:date),0) correct_answers,
               COALESCE((SELECT ROUND(100.0*SUM(dt.completed_minutes)/NULLIF(SUM(dt.planned_minutes),0),2)
                 FROM daily_tasks dt WHERE dt.user_id=:u AND dt.plan_id=:p AND dt.task_date=:date
                   AND NOT dt.outside_planned_hours),0) goal_percentage
             """).param("u", userId).param("p", planId).param("date", today).query().singleRow();
+        var qualification = dailyQualification(userId, today);
         int minutes = number(totals, "studied_minutes"), tasks = number(totals, "tasks_completed"),
-                questions = number(totals, "questions_answered"), correctAnswers = number(totals, "correct_answers");
+                questions = number(qualification, "questions_answered"),
+                completedSessions = number(qualification, "sessions_completed");
         double goal = ((Number) totals.get("goal_percentage")).doubleValue();
-        boolean valid = LearningRules.validStreakDay(correctAnswers), perfect = goal >= 100;
+        boolean valid = LearningRules.validStreakDay(questions, completedSessions), perfect = goal >= 100;
         var previousDay = jdbc.sql("SELECT valid,perfect FROM streak_days WHERE user_id=:u AND study_date=:date")
                 .param("u", userId).param("date", today).query().listOfRows();
         boolean wasValid = !previousDay.isEmpty() && Boolean.TRUE.equals(previousDay.getFirst().get("valid"));
@@ -75,9 +61,7 @@ public class EngagementService {
         if (valid && !wasValid) {
             var streak = jdbc.sql("SELECT * FROM study_streaks WHERE user_id=:u FOR UPDATE").param("u", userId).query().singleRow();
             LocalDate last = localDate(streak.get("last_valid_date"));
-            Instant lastAnswer = timestamp(streak.get("last_question_answered_at"));
-            int current = last != null && last.equals(today.minusDays(1)) && lastAnswer != null
-                    && lastAnswer.isAfter(Instant.now().minus(Duration.ofHours(24)))
+            int current = last != null && last.equals(today.minusDays(1))
                     ? number(streak, "current_streak") + 1 : 1;
             int longest = Math.max(current, number(streak, "longest_streak"));
             jdbc.sql("""
@@ -87,7 +71,7 @@ public class EngagementService {
                     .param("u", userId).update();
             award(userId, 10, "STREAK_DAY", "STREAK_DAY", null, "streak:" + userId + ":" + today);
             createNotification(userId, planId, "STREAK_INCREASED", "Ofensiva aumentada!",
-                    "Você chegou a " + current + " dia" + (current == 1 ? "" : "s") + " de ofensiva.", "NORMAL");
+                    "Sua atividade de hoje garantiu " + current + " dia" + (current == 1 ? "" : "s") + " de ofensiva.", "NORMAL");
         }
         if (perfect && !wasPerfect) {
             int perfectDays = jdbc.sql("UPDATE study_streaks SET perfect_days=perfect_days+1,updated_at=now() WHERE user_id=:u RETURNING perfect_days")
@@ -109,7 +93,6 @@ public class EngagementService {
     @Transactional
     public void recordQuestionActivity(UUID userId, UUID planId) {
         jdbc.sql("INSERT INTO study_streaks(user_id) VALUES(:u) ON CONFLICT(user_id) DO NOTHING").param("u", userId).update();
-        expireStreakForInactivity(userId);
         jdbc.sql("UPDATE study_streaks SET last_question_answered_at=now(),updated_at=now() WHERE user_id=:u")
                 .param("u", userId).update();
         refreshDay(userId, planId);
@@ -145,20 +128,55 @@ public class EngagementService {
     @Transactional
     public Map<String,Object> streak(UUID userId) {
         expireStreakForInactivity(userId);
+        LocalDate today = bootstrap.userToday(userId);
         var row = jdbc.sql("SELECT * FROM study_streaks WHERE user_id=:u").param("u", userId)
                 .query().listOfRows().stream().findFirst().orElse(Map.of());
         var result = new LinkedHashMap<String,Object>(row);
-        result.put("studied_days_month", jdbc.sql("SELECT COUNT(*) FROM streak_days WHERE user_id=:u AND valid AND study_date>=date_trunc('month',CURRENT_DATE)::date")
-                .param("u", userId).query(Integer.class).single());
+        var qualification = dailyQualification(userId, today);
+        int questions = number(qualification, "questions_answered");
+        int sessions = number(qualification, "sessions_completed");
+        boolean recorded = jdbc.sql("SELECT valid OR protected FROM streak_days WHERE user_id=:u AND study_date=:date")
+                .param("u", userId).param("date", today).query(Boolean.class).optional().orElse(false);
+        result.put("today_questions_answered", questions);
+        result.put("today_sessions_completed", sessions);
+        result.put("qualified_by_questions", questions > 0);
+        result.put("qualified_by_session", sessions > 0);
+        result.put("today_qualified", recorded || LearningRules.validStreakDay(questions, sessions));
+        result.put("studied_days_month", jdbc.sql("SELECT COUNT(*) FROM streak_days WHERE user_id=:u AND valid AND study_date>=:month")
+                .param("u", userId).param("month", today.withDayOfMonth(1)).query(Integer.class).single());
         return result;
     }
 
     private void expireStreakForInactivity(UUID userId) {
+        LocalDate oldestActiveDay = bootstrap.userToday(userId).minusDays(1);
         jdbc.sql("""
             UPDATE study_streaks SET current_streak=0,status='BROKEN',updated_at=now()
-            WHERE user_id=:u AND current_streak>0 AND last_question_answered_at IS NOT NULL
-              AND last_question_answered_at < now()-INTERVAL '24 hours'
-            """).param("u", userId).update();
+            WHERE user_id=:u AND current_streak>0 AND last_valid_date IS NOT NULL
+              AND last_valid_date<:oldestActiveDay
+            """).param("u", userId).param("oldestActiveDay", oldestActiveDay).update();
+    }
+
+    private Map<String,Object> dailyQualification(UUID userId, LocalDate date) {
+        return jdbc.sql("""
+            SELECT GREATEST(
+                COALESCE((SELECT SUM(dt.questions_answered) FROM daily_tasks dt
+                  WHERE dt.user_id=:u AND dt.task_date=:date),0),
+                COALESCE((SELECT COUNT(*) FROM quiz_answer_events event
+                  JOIN study_plans sp ON sp.id=event.study_plan_id JOIN users su ON su.id=sp.user_id
+                  WHERE sp.user_id=:u AND (event.answered_at AT TIME ZONE su.timezone)::date=:date),0)
+                +COALESCE((SELECT COUNT(*) FROM question_session_answers answer
+                  JOIN study_sessions ss ON ss.id=answer.session_id JOIN users su ON su.id=ss.user_id
+                  WHERE ss.user_id=:u AND (answer.answered_at AT TIME ZONE su.timezone)::date=:date),0)
+                +COALESCE((SELECT SUM(ss.questions_answered) FROM study_sessions ss
+                  JOIN users su ON su.id=ss.user_id WHERE ss.user_id=:u AND ss.session_kind='STUDY'
+                  AND ss.status='COMPLETED' AND (ss.ended_at AT TIME ZONE su.timezone)::date=:date),0)
+                +COALESCE((SELECT COUNT(*) FROM answers answer JOIN users su ON su.id=answer.user_id
+                  WHERE answer.user_id=:u AND (answer.answered_at AT TIME ZONE su.timezone)::date=:date),0)
+              ) questions_answered,
+              COALESCE((SELECT COUNT(*) FROM study_sessions ss JOIN users su ON su.id=ss.user_id
+                WHERE ss.user_id=:u AND ss.status='COMPLETED'
+                  AND (ss.ended_at AT TIME ZONE su.timezone)::date=:date),0) sessions_completed
+            """).param("u", userId).param("date", date).query().singleRow();
     }
 
     public Map<String,Object> experience(UUID userId) {
@@ -188,14 +206,6 @@ public class EngagementService {
         if (value instanceof LocalDate date) return date;
         if (value instanceof java.sql.Date date) return date.toLocalDate();
         return LocalDate.parse(String.valueOf(value));
-    }
-    private Instant timestamp(Object value) {
-        if (value == null) return null;
-        if (value instanceof Instant instant) return instant;
-        if (value instanceof OffsetDateTime offset) return offset.toInstant();
-        if (value instanceof java.sql.Timestamp timestamp) return timestamp.toInstant();
-        if (value instanceof LocalDateTime local) return local.atZone(ZoneId.systemDefault()).toInstant();
-        return null;
     }
     private String levelName(int level) { return switch(Math.min(level,5)) { case 1 -> "Iniciante"; case 2 -> "Aprendiz"; case 3 -> "Consistente"; case 4 -> "Estrategista"; default -> "Especialista"; }; }
 }

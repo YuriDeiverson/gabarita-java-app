@@ -1,6 +1,7 @@
 package ai.gabarita.simulation;
 
 import ai.gabarita.auth.CurrentUser;
+import ai.gabarita.study.EngagementService;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -8,13 +9,17 @@ import java.util.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.transaction.annotation.Transactional;
 
 @RestController
 @RequestMapping("/api/simulations")
 public class SimulationController {
   private final JdbcClient jdbc;
   private final CurrentUser currentUser;
-  SimulationController(JdbcClient jdbc,CurrentUser currentUser){this.jdbc=jdbc;this.currentUser=currentUser;}
+  private final EngagementService engagement;
+  SimulationController(JdbcClient jdbc,CurrentUser currentUser,EngagementService engagement){
+    this.jdbc=jdbc;this.currentUser=currentUser;this.engagement=engagement;
+  }
   public record CreateInput(UUID planId,@NotBlank String title,String scoreMode,Integer timeLimitSeconds,
     List<UUID> questionIds,UUID subjectId,UUID topicId,@Min(1) @Max(500) Integer quantity){}
   public record AnswerInput(@NotNull UUID questionId,@NotNull JsonNode answer,@Min(0) Integer timeSpentSeconds){}
@@ -28,10 +33,14 @@ public class SimulationController {
   @GetMapping("/{id}") public Map<String,Object> one(@PathVariable UUID id){var sim=jdbc.sql("SELECT * FROM simulations WHERE id=:id AND user_id=:u").param("id",id).param("u",currentUser.id()).query().listOfRows().stream().findFirst().orElseThrow(()->new NoSuchElementException("Simulado não encontrado"));var questions=jdbc.sql("SELECT q.id,q.statement,q.type,q.difficulty,q.passage_id,sq.position FROM simulation_questions sq JOIN questions q ON q.id=sq.question_id WHERE sq.simulation_id=:s ORDER BY sq.position").param("s",id).query().listOfRows();var result=new LinkedHashMap<String,Object>(sim);result.put("questions",questions);return result;}
   @PatchMapping("/{id}/start") public Map<String,Object> start(@PathVariable UUID id){jdbc.sql("UPDATE simulations SET status='RUNNING',started_at=COALESCE(started_at,now()),paused_at=NULL WHERE id=:id AND user_id=:u").param("id",id).param("u",currentUser.id()).update();return one(id);}
   @PatchMapping("/{id}/pause") public Map<String,Object> pause(@PathVariable UUID id){jdbc.sql("UPDATE simulations SET status='PAUSED',paused_at=now() WHERE id=:id AND user_id=:u").param("id",id).param("u",currentUser.id()).update();return one(id);}
-  @PostMapping("/{id}/answers") public Map<String,Object> answer(@PathVariable UUID id,@Valid @RequestBody AnswerInput r){
+  @PostMapping("/{id}/answers") @Transactional public Map<String,Object> answer(@PathVariable UUID id,@Valid @RequestBody AnswerInput r){
     assertSimulation(id);
     JsonNode correct=jdbc.sql("SELECT q.correct_answer::text FROM questions q JOIN simulation_questions sq ON sq.question_id=q.id WHERE q.id=:q AND sq.simulation_id=:s").param("q",r.questionId()).param("s",id).query(String.class).optional().map(this::node).orElseThrow(()->new NoSuchElementException("Questão não encontrada neste simulado"));boolean isCorrect=correct.equals(r.answer());
-    return jdbc.sql("INSERT INTO answers(id,user_id,simulation_id,question_id,answer,correct,time_spent_seconds) VALUES(gen_random_uuid(),:u,:s,:q,CAST(:answer AS jsonb),:correct,:time) ON CONFLICT(simulation_id,question_id) DO UPDATE SET answer=CAST(:answer AS jsonb),correct=:correct,time_spent_seconds=:time,answered_at=now() RETURNING id,question_id,correct,time_spent_seconds,answered_at").param("u",currentUser.id()).param("s",id).param("q",r.questionId()).param("answer",r.answer().toString()).param("correct",isCorrect).param("time",r.timeSpentSeconds()==null?0:r.timeSpentSeconds()).query().singleRow();
+    var saved=jdbc.sql("INSERT INTO answers(id,user_id,simulation_id,question_id,answer,correct,time_spent_seconds) VALUES(gen_random_uuid(),:u,:s,:q,CAST(:answer AS jsonb),:correct,:time) ON CONFLICT(simulation_id,question_id) DO UPDATE SET answer=CAST(:answer AS jsonb),correct=:correct,time_spent_seconds=:time,answered_at=now() RETURNING id,question_id,correct,time_spent_seconds,answered_at").param("u",currentUser.id()).param("s",id).param("q",r.questionId()).param("answer",r.answer().toString()).param("correct",isCorrect).param("time",r.timeSpentSeconds()==null?0:r.timeSpentSeconds()).query().singleRow();
+    var simulation=jdbc.sql("SELECT plan_id FROM simulations WHERE id=:id AND user_id=:u")
+      .param("id",id).param("u",currentUser.id()).query().singleRow();
+    engagement.recordQuestionActivity(currentUser.id(),(UUID)simulation.get("plan_id"));
+    return saved;
   }
   @PatchMapping("/{id}/finish") public Map<String,Object> finish(@PathVariable UUID id){assertSimulation(id);jdbc.sql("UPDATE simulations SET status='FINISHED',finished_at=now() WHERE id=:id AND user_id=:u").param("id",id).param("u",currentUser.id()).update();return jdbc.sql("SELECT COUNT(*) answered,COUNT(*) FILTER(WHERE correct) correct,COUNT(*) FILTER(WHERE NOT correct) wrong FROM answers WHERE simulation_id=:s AND user_id=:u").param("s",id).param("u",currentUser.id()).query().singleRow();}
   private void assertSimulation(UUID id){if(jdbc.sql("SELECT COUNT(*) FROM simulations WHERE id=:id AND user_id=:u").param("id",id).param("u",currentUser.id()).query(Integer.class).single()==0)throw new NoSuchElementException("Simulado não encontrado");}

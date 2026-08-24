@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.sql.Types;
+import java.text.Normalizer;
 import java.util.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -135,7 +136,8 @@ public class AdminContentController {
         for(var question:request.questions()){
             UUID id=UUID.randomUUID();
             try{id=saveQuestion(id,question,false);}
-            catch(RuntimeException error){throw new IllegalArgumentException("Questão "+(index+1)+": "+fallback(error.getMessage(),"dados inválidos"),error);}
+            catch(IllegalArgumentException error){throw new QuestionImportException(index+1,fallback(error.getMessage(),"dados inválidos"));}
+            catch(RuntimeException error){throw new QuestionImportException(index+1,"não foi possível validar os dados informados");}
             ids.add(id.toString());index++;
         }
         return Map.of("imported",ids.size(),"ids",ids);
@@ -151,7 +153,8 @@ public class AdminContentController {
     private UUID saveQuestion(UUID id,QuestionRequest r,boolean update){
         validateQuestion(r);
         validateDetailedGuide(r);
-        TaxonomySelection taxonomy=resolveTaxonomy(r.category(),r.topic());
+        TaxonomySelection taxonomy=resolveTaxonomy(r);
+        String detailedTopic=canonicalDetailedTopic(r.detailedTopic(),r.category(),r.topic(),taxonomy.subjectName(),taxonomy.topicName());
         String answer;String metadata;String fixationTips;String comparisonHeaders;String comparisonRows;
         try{answer=json.writeValueAsString(r.correct().trim());var metadataValues=new LinkedHashMap<String,Object>();
             metadataValues.put("category",taxonomy.subjectName());metadataValues.put("topic",taxonomy.topicName());
@@ -168,7 +171,7 @@ public class AdminContentController {
             """).param("statement",r.text().trim()).query(UUID.class).list();
             if(!existing.isEmpty()){attachCourse(existing.getFirst(),r.courseId());return existing.getFirst();}
         }
-        validateGuideSpecificity(id,r);
+        validateGuideSpecificity(id,r,detailedTopic,taxonomy);
         UUID passageId=resolvePassage(r);
         if(update){
             int changed=jdbc.sql("""
@@ -181,7 +184,7 @@ public class AdminContentController {
               """).param("board",r.board().trim()).param("type",questionType(r)).param("statement",r.text().trim())
               .param("explanation",text(r.explanation())).param("status",status).param("answer",answer).param("metadata",metadata)
               .param("subjectId",taxonomy.subjectId()).param("topicId",taxonomy.topicId())
-              .param("passage",passageId,Types.OTHER).param("detailedTopic",text(r.detailedTopic())).param("concept",text(r.conceptExplanation()))
+              .param("passage",passageId,Types.OTHER).param("detailedTopic",detailedTopic).param("concept",text(r.conceptExplanation()))
               .param("evidence",text(r.decisiveEvidence())).param("analysis",text(r.answerAnalysis())).param("trap",text(r.examTrap()))
               .param("strategy",text(r.similarQuestionStrategy()))
               .param("fixationTips",fixationTips).param("comparisonHeaders",comparisonHeaders).param("comparisonRows",comparisonRows).param("id",id).update();
@@ -195,7 +198,7 @@ public class AdminContentController {
               """).param("id",id).param("board",r.board().trim()).param("type",questionType(r)).param("statement",r.text().trim())
               .param("explanation",text(r.explanation())).param("status",status).param("answer",answer).param("metadata",metadata)
               .param("subjectId",taxonomy.subjectId()).param("topicId",taxonomy.topicId())
-              .param("passage",passageId,Types.OTHER).param("detailedTopic",text(r.detailedTopic())).param("concept",text(r.conceptExplanation()))
+              .param("passage",passageId,Types.OTHER).param("detailedTopic",detailedTopic).param("concept",text(r.conceptExplanation()))
               .param("evidence",text(r.decisiveEvidence())).param("analysis",text(r.answerAnalysis())).param("trap",text(r.examTrap()))
               .param("strategy",text(r.similarQuestionStrategy()))
               .param("fixationTips",fixationTips).param("comparisonHeaders",comparisonHeaders).param("comparisonRows",comparisonRows).update();
@@ -214,7 +217,8 @@ public class AdminContentController {
     }
 
     private record TaxonomySelection(UUID subjectId,UUID topicId,String subjectName,String topicName){}
-    private TaxonomySelection resolveTaxonomy(String category,String topic){
+    private TaxonomySelection resolveTaxonomy(QuestionRequest request){
+      String category=request.category().trim();String topic=request.topic().trim();
       var rows=jdbc.sql("""
         SELECT s.id subject_id,t.id topic_id,s.name subject_name,t.name topic_name
         FROM subjects s JOIN topics t ON t.subject_id=s.id
@@ -222,9 +226,80 @@ public class AdminContentController {
           AND lower(btrim(s.name))=lower(btrim(:category)) AND lower(btrim(t.name))=lower(btrim(:topic))
         LIMIT 1
         """).param("category",category).param("topic",topic).query().listOfRows();
-      if(rows.isEmpty())throw new IllegalArgumentException("Selecione um assunto pertencente à disciplina informada");
-      var row=rows.getFirst();return new TaxonomySelection((UUID)row.get("subject_id"),(UUID)row.get("topic_id"),
+      if(!rows.isEmpty())return taxonomy(rows.getFirst());
+      var byTopic=taxonomyByUniqueTopic(topic);if(byTopic!=null)return byTopic;
+      for(String segment:text(request.detailedTopic()).split("\\s*→\\s*")){
+        if(segment.isBlank()||segment.equalsIgnoreCase(category)||segment.equalsIgnoreCase(topic))continue;
+        byTopic=taxonomyByUniqueTopic(segment);if(byTopic!=null)return byTopic;
+      }
+      return createTaxonomy(category,topic);
+    }
+
+    private TaxonomySelection taxonomyByUniqueTopic(String topic){
+      var rows=jdbc.sql("""
+        SELECT s.id subject_id,t.id topic_id,s.name subject_name,t.name topic_name
+        FROM subjects s JOIN topics t ON t.subject_id=s.id
+        WHERE s.exam_id IS NULL AND s.active AND t.active AND lower(btrim(t.name))=lower(btrim(:topic))
+        ORDER BY s.position,t.position LIMIT 2
+        """).param("topic",topic).query().listOfRows();
+      return rows.size()==1?taxonomy(rows.getFirst()):null;
+    }
+
+    private TaxonomySelection createTaxonomy(String category,String topic){
+      String subjectSlug=slug(category);String topicSlug=slug(topic);
+      jdbc.sql("""
+        INSERT INTO subjects(id,name,slug,area,position,active)
+        SELECT gen_random_uuid(),:name,:slug,:area,COALESCE(MAX(position),990)+10,true
+        FROM subjects WHERE exam_id IS NULL ON CONFLICT DO NOTHING
+        """).param("name",category).param("slug",subjectSlug).param("area",taxonomyArea(category)).update();
+      var subject=jdbc.sql("SELECT id,name FROM subjects WHERE exam_id IS NULL AND slug=:slug LIMIT 1")
+        .param("slug",subjectSlug).query().singleRow();
+      UUID subjectId=(UUID)subject.get("id");
+      jdbc.sql("UPDATE subjects SET active=true WHERE id=:id AND NOT active").param("id",subjectId).update();
+      jdbc.sql("""
+        INSERT INTO topics(id,subject_id,name,slug,position,active)
+        SELECT gen_random_uuid(),:subject,:name,:slug,COALESCE(MAX(position),990)+10,true
+        FROM topics WHERE subject_id=:subject ON CONFLICT DO NOTHING
+        """).param("subject",subjectId).param("name",topic).param("slug",topicSlug).update();
+      jdbc.sql("UPDATE topics SET active=true WHERE subject_id=:subject AND slug=:slug AND NOT active")
+        .param("subject",subjectId).param("slug",topicSlug).update();
+      var row=jdbc.sql("""
+        SELECT s.id subject_id,t.id topic_id,s.name subject_name,t.name topic_name
+        FROM subjects s JOIN topics t ON t.subject_id=s.id WHERE s.id=:subject AND t.slug=:topicSlug
+        """).param("subject",subjectId).param("topicSlug",topicSlug).query().singleRow();
+      return taxonomy(row);
+    }
+
+    private TaxonomySelection taxonomy(Map<String,Object> row){
+      return new TaxonomySelection((UUID)row.get("subject_id"),(UUID)row.get("topic_id"),
         String.valueOf(row.get("subject_name")),String.valueOf(row.get("topic_name")));
+    }
+
+    static String canonicalDetailedTopic(String supplied,String suppliedCategory,String suppliedTopic,String subject,String topic){
+      String detailed=trimmed(supplied);if(GuideContentQuality.followsHierarchy(detailed,subject,topic))return detailed;
+      var segments=new ArrayList<>(Arrays.asList(detailed.split("\\s*→\\s*")));
+      if(segments.isEmpty()||(!sameNormalized(segments.getFirst(),suppliedCategory)&&!sameNormalized(segments.getFirst(),subject)))return detailed;
+      segments.removeFirst();
+      while(!segments.isEmpty()&&List.of(suppliedCategory,suppliedTopic,subject,topic).stream()
+        .anyMatch(value->sameNormalized(segments.getFirst(),value)))segments.removeFirst();
+      String prefix=subject+" → "+topic;return segments.isEmpty()?prefix:prefix+" → "+String.join(" → ",segments);
+    }
+
+    static String slug(String value){
+      String normalized=Normalizer.normalize(trimmed(value),Normalizer.Form.NFD).replaceAll("\\p{M}","")
+        .toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+","-").replaceAll("(^-+|-+$)","");
+      if(normalized.isBlank())throw new IllegalArgumentException("Disciplina e assunto devem conter letras ou números");
+      return normalized.length()<=140?normalized:normalized.substring(0,140).replaceAll("-+$","");
+    }
+
+    private static boolean sameNormalized(String first,String second){return normalized(first).equals(normalized(second));}
+    private static String normalized(String value){return Normalizer.normalize(trimmed(value),Normalizer.Form.NFD)
+      .replaceAll("\\p{M}","").toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+"," ").trim();}
+    private static String trimmed(String value){return value==null?"":value.trim();}
+
+    private String taxonomyArea(String category){
+      String value=slug(category);return value.matches(".*(informat|comput|sistema|software|dados|tecnolog).*" )
+        ?"Tecnologia da Informação":"Outros";
     }
 
     private UUID resolvePassage(QuestionRequest r){
@@ -261,16 +336,16 @@ public class AdminContentController {
         if(comparisonCount>0&&r.comparisonHeaders()==null)throw new IllegalArgumentException("Informe os cabeçalhos da tabela comparativa");
         if(comparisonCount==0&&r.comparisonHeaders()!=null)throw new IllegalArgumentException("Remova os cabeçalhos ou informe as linhas da tabela comparativa");
     }
-    private void validateGuideSpecificity(UUID questionId,QuestionRequest r){
+    private void validateGuideSpecificity(UUID questionId,QuestionRequest r,String detailedTopic,TaxonomySelection taxonomy){
         String status="Anulada".equalsIgnoreCase(r.correct())?"ANNULLED":fallback(r.status(),"ACTIVE").toUpperCase(Locale.ROOT);
         if(!Set.of("ACTIVE","ANNULLED").contains(status))return;
         String analysis=text(r.answerAnalysis()).toLowerCase(Locale.ROOT);
         String strategy=text(r.similarQuestionStrategy()).toLowerCase(Locale.ROOT);
         var tips=cleanPoints(r.fixationTips());
-        String completeGuide=String.join(" ",text(r.detailedTopic()),text(r.conceptExplanation()),
+        String completeGuide=String.join(" ",detailedTopic,text(r.conceptExplanation()),
           text(r.decisiveEvidence()),text(r.answerAnalysis()),text(r.examTrap()),
           text(r.similarQuestionStrategy()),String.join(" ",tips));
-        if(!GuideContentQuality.followsHierarchy(r.detailedTopic(),r.category(),r.topic()))
+        if(!GuideContentQuality.followsHierarchy(detailedTopic,taxonomy.subjectName(),taxonomy.topicName()))
           throw new IllegalArgumentException("O assunto detalhado deve começar por Disciplina → Assunto catalogado");
         if(GuideContentQuality.anticipatesAnswer(r.decisiveEvidence()))
           throw new IllegalArgumentException("O ponto decisivo deve apresentar a regra ou evidência sem antecipar o gabarito");
@@ -278,8 +353,8 @@ public class AdminContentController {
           throw new IllegalArgumentException("Substitua a análise automática por uma explicação específica desta questão");
         if(GuideContentQuality.containsEditorialArtifact(completeGuide))
           throw new IllegalArgumentException("Remova resíduos de geração, emojis, marcação interna ou caracteres alheios ao conteúdo didático");
-        if(!GuideContentQuality.hasOneOfficialAnswerConfirmation(r.answerAnalysis()))
-          throw new IllegalArgumentException("Confirme o gabarito oficial uma única vez, somente ao concluir a análise");
+        if(!GuideContentQuality.hasConcludingAnswerConfirmation(r.answerAnalysis()))
+          throw new IllegalArgumentException("Conclua a análise confirmando claramente se o item está certo ou errado");
         if(GuideContentQuality.admitsSourceOrAnswerConflict(completeGuide))
           throw new IllegalArgumentException("A fonte ou o gabarito apresenta conflito; mantenha a questão como rascunho para revisão editorial");
         if(List.of("isole a afirmação central","identifique o mecanismo técnico afirmado","localize o trecho cobrado",
