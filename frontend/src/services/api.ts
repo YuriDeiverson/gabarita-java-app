@@ -749,6 +749,10 @@ export const adminApi = {
   },
   createSharedSubject: (data:{title:string;discipline:string;studyGroup:string;studyObjective:string;reviewSummary:string[]}) =>
     jsonRequest<{id:string;title:string;discipline:string;studyGroup:string}>('/admin/catalog/subjects', {method:'POST',body:JSON.stringify(data)}),
+  importSharedSubjects: (subjects:Array<{title:string;discipline:string;studyGroup:string;studyObjective:string;reviewSummary:string[]}>) =>
+    jsonRequest<{imported:number;skippedExisting:number;skippedRepeated:number;synchronizedPlans:number;ids:string[]}>(
+      '/admin/catalog/subjects/batch', {method:'POST',body:JSON.stringify({subjects})}
+    ),
   updateSharedSubject: (id:string,data:{discipline:string;studyGroup:string;studyObjective:string;reviewSummary:string[]}) =>
     jsonRequest<{id:string;title:string;synchronizedPlans:number}>(`/admin/catalog/subjects/${id}`, {method:'PUT',body:JSON.stringify(data)}),
   deleteSharedSubject: (id:string) => jsonRequest<void>(`/admin/catalog/subjects/${id}`, {method:'DELETE'}),

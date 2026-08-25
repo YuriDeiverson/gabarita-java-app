@@ -42,6 +42,12 @@ import {
   questionsApi,
 } from '../services/api';
 import { normalizeStudySubjectTitle, normalizeStudyText } from '../studyContext';
+import {
+  StudyGroup,
+  SubjectBatchDraft,
+  draftSubjectGuidance,
+  parseSubjectBatch,
+} from '../subjectBatch';
 
 export type AdminSection = 'contests' | 'roles' | 'passages' | 'questions' | 'subjects' | 'materials';
 type Difficulty = 'Fácil' | 'Médio' | 'Difícil';
@@ -514,6 +520,7 @@ export default function AdminPanel({
   const [contests, setContests] = useState<CatalogContest[]>([]);
   const [sharedStudyLibrary, setSharedStudyLibrary] = useState<SharedStudySubject[]>([]);
   const [sharedSubjectForm, setSharedSubjectForm] = useState(emptySharedSubjectForm);
+  const [sharedSubjectFormError, setSharedSubjectFormError] = useState('');
   const [editingSharedSubject, setEditingSharedSubject] = useState('');
   const [sharedSubjectFilter, setSharedSubjectFilter] = useState('');
   const [sharedSubjectGroupFilter, setSharedSubjectGroupFilter] = useState<
@@ -522,6 +529,13 @@ export default function AdminPanel({
   const [sharedSubjectSort, setSharedSubjectSort] = useState<'alphabetical' | 'numeric'>('alphabetical');
   const [sharedSubjectSortMenuOpen, setSharedSubjectSortMenuOpen] = useState(false);
   const [expandedSharedSubjectGroups, setExpandedSharedSubjectGroups] = useState<Set<string>>(() => new Set());
+  const [sharedSubjectBatchOpen, setSharedSubjectBatchOpen] = useState(false);
+  const [sharedSubjectBatchSource, setSharedSubjectBatchSource] = useState('');
+  const [sharedSubjectBatchDiscipline, setSharedSubjectBatchDiscipline] = useState('');
+  const [sharedSubjectBatchGroup, setSharedSubjectBatchGroup] = useState<StudyGroup>('Conhecimentos Gerais');
+  const [sharedSubjectBatchDrafts, setSharedSubjectBatchDrafts] = useState<SubjectBatchDraft[]>([]);
+  const [sharedSubjectBatchStats, setSharedSubjectBatchStats] = useState({ repeated: 0, existing: 0 });
+  const [sharedSubjectBatchError, setSharedSubjectBatchError] = useState('');
   const [passages, setPassages] = useState<AdminPassage[]>([]);
   const [questions, setQuestions] = useState<AdminQuestion[]>([]);
   const [questionTaxonomy, setQuestionTaxonomy] = useState<QuestionTaxonomyDiscipline[]>([]);
@@ -1102,9 +1116,108 @@ export default function AdminPanel({
   const resetSharedSubjectEditor = () => {
     setSharedSubjectForm(emptySharedSubjectForm);
     setEditingSharedSubject('');
+    setSharedSubjectFormError('');
+  };
+  const prepareSharedSubjectBatch = () => {
+    setError('');
+    setSharedSubjectBatchError('');
+    const parsed = parseSubjectBatch(
+      sharedSubjectBatchSource,
+      sharedSubjectBatchDiscipline || sharedSubjectForm.discipline,
+      sharedSubjectBatchGroup
+    );
+    if (parsed.errors.length) {
+      setSharedSubjectBatchDrafts([]);
+      setSharedSubjectBatchError(
+        `${parsed.errors[0]}${parsed.errors.length > 1 ? ` Há mais ${parsed.errors.length - 1} linha(s) sem disciplina.` : ''}`
+      );
+      return;
+    }
+    if (parsed.items.length > 500) {
+      setSharedSubjectBatchDrafts([]);
+      setSharedSubjectBatchError(
+        `A lista contém ${parsed.items.length} assuntos. Divida-a em lotes de até 500 itens.`
+      );
+      return;
+    }
+    let existing = 0;
+    const drafts = parsed.items
+      .map(item => ({
+        ...item,
+        studyGroup:
+          (inferredStudyGroupByDiscipline.get(normalizeStudyText(item.discipline)) as StudyGroup | undefined) ||
+          item.studyGroup,
+      }))
+      .filter(item => {
+        const found = sharedStudyLibrary.some(
+          subject =>
+            normalizeStudySubjectTitle(subject.title) === normalizeStudySubjectTitle(item.title) &&
+            normalizeStudyText(subject.discipline) === normalizeStudyText(item.discipline)
+        );
+        if (found) existing++;
+        return !found;
+      })
+      .map(draftSubjectGuidance);
+    setSharedSubjectBatchStats({ repeated: parsed.skippedRepeated, existing });
+    setSharedSubjectBatchDrafts(drafts);
+    if (!drafts.length) {
+      setSharedSubjectBatchError(
+        parsed.items.length
+          ? 'Todos os assuntos informados já existem na biblioteca.'
+          : 'Cole ao menos um assunto para preparar a importação.'
+      );
+      return;
+    }
+    window.requestAnimationFrame(() =>
+      document.getElementById('shared-subject-batch-preview')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    );
+  };
+  const updateSharedSubjectBatchDraft = (key: string, values: Partial<SubjectBatchDraft>) =>
+    setSharedSubjectBatchDrafts(current =>
+      current.map(item => (item.key === key ? { ...item, ...values } : item))
+    );
+  const submitSharedSubjectBatch = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!sharedSubjectBatchDrafts.length) return;
+    if (
+      sharedSubjectBatchDrafts.some(
+        item => !item.title.trim() || !item.discipline.trim() || !item.studyObjective.trim()
+      )
+    ) {
+      setError('Revise os rascunhos: assunto, disciplina e objetivo são obrigatórios.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const result = await adminApi.importSharedSubjects(
+        sharedSubjectBatchDrafts.map(item => ({
+          title: item.title.trim(),
+          discipline: item.discipline.trim(),
+          studyGroup: item.studyGroup,
+          studyObjective: item.studyObjective.trim(),
+          reviewSummary: item.reviewSummary.map(point => point.trim()).filter(Boolean),
+        }))
+      );
+      setSharedSubjectBatchSource('');
+      setSharedSubjectBatchDrafts([]);
+      setSharedSubjectBatchStats({ repeated: 0, existing: 0 });
+      setSharedSubjectBatchError('');
+      setSharedSubjectBatchOpen(false);
+      await load();
+      const skipped = result.skippedExisting + result.skippedRepeated;
+      notify(
+        `${result.imported} assunto(s) importado(s)${skipped ? `; ${skipped} duplicado(s) ignorado(s)` : ''}.`
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível importar os assuntos.');
+    } finally {
+      setSaving(false);
+    }
   };
   const submitSharedSubject = (event: FormEvent) => {
     event.preventDefault();
+    setSharedSubjectFormError('');
     const payload = {
       discipline: sharedSubjectForm.discipline.trim(),
       studyGroup: sharedSubjectForm.studyGroup,
@@ -1112,7 +1225,18 @@ export default function AdminPanel({
       reviewSummary: subjectLines(sharedSubjectForm.reviewSummary),
     };
     if (!editingSharedSubject && !sharedSubjectForm.title.trim()) {
-      setError('Informe o nome do assunto.');
+      setSharedSubjectFormError('Informe o nome do assunto.');
+      return;
+    }
+    if (
+      !editingSharedSubject &&
+      sharedStudyLibrary.some(
+        subject =>
+          normalizeStudySubjectTitle(subject.title) === normalizeStudySubjectTitle(sharedSubjectForm.title) &&
+          normalizeStudyText(subject.discipline) === normalizeStudyText(sharedSubjectForm.discipline)
+      )
+    ) {
+      setSharedSubjectFormError('Este assunto já existe nesta disciplina. Use a busca ao lado para localizá-lo.');
       return;
     }
     void run(
@@ -2615,12 +2739,258 @@ export default function AdminPanel({
       )}
 
       {section === 'subjects' && (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,.9fr)]">
+        <div className="space-y-6">
+          <button
+            type="button"
+            aria-expanded={sharedSubjectBatchOpen}
+            aria-controls="shared-subject-batch-importer"
+            onClick={() => setSharedSubjectBatchOpen(open => !open)}
+            className={`flex w-full items-center justify-between gap-4 rounded-2xl border px-5 py-4 text-left shadow-sm transition ${sharedSubjectBatchOpen ? 'border-indigo-200 bg-indigo-50 text-indigo-950' : 'border-slate-200 bg-white text-slate-900 hover:border-indigo-300 hover:bg-indigo-50/50'}`}
+          >
+            <span className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white">
+                <Upload className="h-5 w-5" />
+              </span>
+              <span>
+                <strong className="block text-sm font-black">Importar assuntos em lote</strong>
+                <small className="mt-0.5 block text-xs font-medium text-slate-500">
+                  Cole a lista; objetivos e resumos serão preparados como rascunhos
+                </small>
+              </span>
+            </span>
+            <span className="flex items-center gap-2 text-xs font-extrabold text-indigo-700">
+              {sharedSubjectBatchOpen ? 'Recolher' : 'Importar'}
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${sharedSubjectBatchOpen ? 'rotate-180' : ''}`}
+              />
+            </span>
+          </button>
+
+          {sharedSubjectBatchOpen && (
+            <div id="shared-subject-batch-importer">
+              <AdminCard
+                title="Preparar importação em lote"
+                description="Use uma disciplina padrão ou separe a lista com cabeçalhos. Nada é salvo antes da conferência dos rascunhos."
+              >
+                <form onSubmit={submitSharedSubjectBatch} className="space-y-5">
+                  <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-xs leading-5 text-indigo-900">
+                    <strong className="block font-black">Formato simples</strong>
+                    <p className="mt-1">
+                      Marcadores como <code>- ⬜</code> são removidos automaticamente. Para várias disciplinas, use
+                      cabeçalhos como <code>[Direito Constitucional]</code> ou{' '}
+                      <code>[Conhecimentos Específicos &gt; Direito Tributário]</code>. Também é aceito{' '}
+                      <code>Disciplina | Assunto</code> em cada linha.
+                    </p>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Grupo padrão">
+                      <select
+                        className={inputClass}
+                        value={sharedSubjectBatchGroup}
+                        onChange={event => setSharedSubjectBatchGroup(event.target.value as StudyGroup)}
+                      >
+                        <option>Conhecimentos Gerais</option>
+                        <option>Conhecimentos Específicos</option>
+                      </select>
+                    </Field>
+                    <Field label="Disciplina padrão — opcional com cabeçalhos">
+                      <CreatableSelect<SelectOption, false>
+                        inputId="shared-subject-batch-discipline"
+                        classNamePrefix="admin-react-select"
+                        options={sharedDisciplineOptionsByGroup.get(sharedSubjectBatchGroup) || []}
+                        value={
+                          sharedSubjectBatchDiscipline
+                            ? { value: sharedSubjectBatchDiscipline, label: sharedSubjectBatchDiscipline }
+                            : null
+                        }
+                        onChange={option => setSharedSubjectBatchDiscipline(option?.value || '')}
+                        onCreateOption={discipline => setSharedSubjectBatchDiscipline(discipline.trim())}
+                        formatCreateLabel={discipline => `Usar disciplina “${discipline}”`}
+                        placeholder="Selecione ou digite"
+                        noOptionsMessage={() => 'Digite para usar uma nova disciplina'}
+                        isClearable
+                        isSearchable
+                        menuPosition="fixed"
+                        menuPortalTarget={document.body}
+                        styles={{ menuPortal: base => ({ ...base, zIndex: 80 }) }}
+                      />
+                    </Field>
+                    <Field label="Lista de assuntos" wide>
+                      <textarea
+                        required
+                        rows={12}
+                        className={`${inputClass} font-mono text-xs leading-5`}
+                        value={sharedSubjectBatchSource}
+                        onChange={event => {
+                          setSharedSubjectBatchSource(event.target.value);
+                          setSharedSubjectBatchDrafts([]);
+                          setSharedSubjectBatchError('');
+                        }}
+                        placeholder={'[Matemática Financeira]\n- ⬜ Regra de três simples e composta\n- ⬜ Porcentagem\n\n[Direito Constitucional]\n- ⬜ Constituição Federal de 1988'}
+                      />
+                    </Field>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-slate-500">
+                      Limite de 500 assuntos por importação. Itens repetidos são ignorados.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={saving || !sharedSubjectBatchSource.trim()}
+                      className={buttonSecondary}
+                      onClick={prepareSharedSubjectBatch}
+                    >
+                      <Eye className="h-4 w-4" />
+                      Preparar e conferir
+                    </button>
+                  </div>
+
+                  {sharedSubjectBatchError && (
+                    <div
+                      className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold leading-6 text-rose-700"
+                      role="alert"
+                      aria-live="assertive"
+                    >
+                      {sharedSubjectBatchError}
+                    </div>
+                  )}
+
+                  {sharedSubjectBatchDrafts.length > 0 && (
+                    <section
+                      id="shared-subject-batch-preview"
+                      className="scroll-mt-6 space-y-3 border-t border-slate-200 pt-5"
+                      aria-label="Rascunhos da importação"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h4 className="text-sm font-black text-slate-950">
+                            {sharedSubjectBatchDrafts.length} assunto(s) prontos para importar
+                          </h4>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {sharedSubjectBatchStats.existing} já existente(s) e {sharedSubjectBatchStats.repeated}{' '}
+                            repetido(s) na lista foram retirados da prévia.
+                          </p>
+                        </div>
+                        <button type="submit" disabled={saving} className={buttonPrimary}>
+                          {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                          {saving ? 'Importando…' : `Importar ${sharedSubjectBatchDrafts.length} assunto(s)`}
+                        </button>
+                      </div>
+                      <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
+                        Os textos abaixo são rascunhos automáticos e podem ser ajustados agora ou depois na biblioteca.
+                      </p>
+                      <div className="max-h-[720px] space-y-2 overflow-y-auto pr-1">
+                        {sharedSubjectBatchDrafts.map((item, index) => (
+                          <details key={item.key} className="rounded-2xl border border-slate-200 bg-slate-50">
+                            <summary className="cursor-pointer list-none px-4 py-3">
+                              <span className="flex items-center justify-between gap-3">
+                                <span>
+                                  <strong className="block text-sm text-slate-900">
+                                    {index + 1}. {item.title}
+                                  </strong>
+                                  <small className="mt-0.5 block text-xs text-slate-500">
+                                    {item.studyGroup} · {item.discipline}
+                                  </small>
+                                </span>
+                                <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+                              </span>
+                            </summary>
+                            <div className="grid gap-3 border-t border-slate-200 bg-white p-4 sm:grid-cols-2">
+                              <Field label="Grupo">
+                                <select
+                                  className={inputClass}
+                                  value={item.studyGroup}
+                                  onChange={event =>
+                                    updateSharedSubjectBatchDraft(item.key, {
+                                      studyGroup: event.target.value as StudyGroup,
+                                    })
+                                  }
+                                >
+                                  <option>Conhecimentos Gerais</option>
+                                  <option>Conhecimentos Específicos</option>
+                                </select>
+                              </Field>
+                              <Field label="Disciplina">
+                                <input
+                                  required
+                                  className={inputClass}
+                                  value={item.discipline}
+                                  onChange={event =>
+                                    updateSharedSubjectBatchDraft(item.key, { discipline: event.target.value })
+                                  }
+                                />
+                              </Field>
+                              <Field label="Nome do assunto" wide>
+                                <input
+                                  required
+                                  className={inputClass}
+                                  value={item.title}
+                                  onChange={event =>
+                                    updateSharedSubjectBatchDraft(item.key, { title: event.target.value })
+                                  }
+                                />
+                              </Field>
+                              <Field label="Objetivo do estudo" wide>
+                                <textarea
+                                  required
+                                  rows={3}
+                                  className={inputClass}
+                                  value={item.studyObjective}
+                                  onChange={event =>
+                                    updateSharedSubjectBatchDraft(item.key, { studyObjective: event.target.value })
+                                  }
+                                />
+                              </Field>
+                              <Field label="Resumo para revisão — um item por linha" wide>
+                                <textarea
+                                  rows={4}
+                                  className={inputClass}
+                                  value={item.reviewSummary.join('\n')}
+                                  onChange={event =>
+                                    updateSharedSubjectBatchDraft(item.key, {
+                                      reviewSummary: subjectLines(event.target.value),
+                                    })
+                                  }
+                                />
+                              </Field>
+                              <div className="flex justify-end sm:col-span-2">
+                                <button
+                                  type="button"
+                                  className={buttonSecondary}
+                                  onClick={() =>
+                                    setSharedSubjectBatchDrafts(current =>
+                                      current.filter(draft => draft.key !== item.key)
+                                    )
+                                  }
+                                >
+                                  <Trash2 className="h-4 w-4" /> Remover da importação
+                                </button>
+                              </div>
+                            </div>
+                          </details>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                </form>
+              </AdminCard>
+            </div>
+          )}
+
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,.9fr)]">
           <AdminCard
             title={editingSharedSubject ? 'Editar assunto da biblioteca' : 'Novo assunto da biblioteca'}
             description="Cadastre o assunto, seu objetivo e o resumo de revisão uma única vez. Depois, ele poderá ser selecionado em qualquer edital compatível."
           >
             <form onSubmit={submitSharedSubject} className="grid gap-4 sm:grid-cols-2">
+              {sharedSubjectFormError && (
+                <div
+                  className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold leading-6 text-rose-700 sm:col-span-2"
+                  role="alert"
+                >
+                  {sharedSubjectFormError}
+                </div>
+              )}
               <Field label="Grupo">
                 <select
                   className={inputClass}
@@ -2831,6 +3201,7 @@ export default function AdminPanel({
               {!groupedSharedSubjects.length && <Empty text="Nenhum assunto encontrado neste grupo." />}
             </div>
           </AdminCard>
+          </div>
         </div>
       )}
 
