@@ -158,7 +158,7 @@ public class AdminContentController {
         String answer;String metadata;String fixationTips;String comparisonHeaders;String comparisonRows;
         try{answer=json.writeValueAsString(r.correct().trim());var metadataValues=new LinkedHashMap<String,Object>();
             metadataValues.put("category",taxonomy.subjectName());metadataValues.put("topic",taxonomy.topicName());
-            metadataValues.put("reference",text(r.reference()));metadata=json.writeValueAsString(metadataValues);
+            metadataValues.put("reference",cleanReference(r.reference()));metadata=json.writeValueAsString(metadataValues);
             fixationTips=json.writeValueAsString(cleanPoints(r.fixationTips()));
             comparisonHeaders=json.writeValueAsString(cleanComparisonHeaders(r.comparisonHeaders()));
             comparisonRows=json.writeValueAsString(cleanComparisonRows(r.comparisonRows()));}
@@ -325,12 +325,12 @@ public class AdminContentController {
         if(text(r.explanation()).length()<40)throw new IllegalArgumentException("O gabarito resumido deve explicar o motivo da resposta (mínimo de 40 caracteres)");
         if(text(r.detailedTopic()).length()<8)throw new IllegalArgumentException("Informe o assunto exato do gabarito completo");
         if(text(r.decisiveEvidence()).length()<40)throw new IllegalArgumentException("Informe o trecho ou a regra decisiva da questão");
-        if(text(r.conceptExplanation()).length()<300)throw new IllegalArgumentException("Ensine a base conceitual necessária para resolver a questão (mínimo de 300 caracteres)");
-        if(text(r.answerAnalysis()).length()<400)throw new IllegalArgumentException("Apresente uma resolução comentada e específica, ligando o conceito ao item (mínimo de 400 caracteres)");
-        if(text(r.examTrap()).length()<120)throw new IllegalArgumentException("Diagnostique por que a questão pode induzir ao erro ou qual distinção a banca testa (mínimo de 120 caracteres)");
-        if(text(r.similarQuestionStrategy()).length()<160)throw new IllegalArgumentException("Ensine um método reutilizável para resolver questões parecidas (mínimo de 160 caracteres)");
+        if(text(r.conceptExplanation()).length()<100)throw new IllegalArgumentException("Ensine a base conceitual necessária para resolver a questão (mínimo de 100 caracteres)");
+        if(text(r.answerAnalysis()).length()<160)throw new IllegalArgumentException("Apresente uma resolução comentada e específica, ligando o conceito ao item (mínimo de 160 caracteres)");
+        if(!text(r.examTrap()).isBlank()&&text(r.examTrap()).length()<40)throw new IllegalArgumentException("Quando informada, a pegadinha deve explicar concretamente o risco de erro (mínimo de 40 caracteres)");
+        if(text(r.similarQuestionStrategy()).length()<40)throw new IllegalArgumentException("Ensine um método reutilizável para resolver questões parecidas (mínimo de 40 caracteres)");
         int fixationCount=cleanPoints(r.fixationTips()).size();
-        if(fixationCount<3||fixationCount>4)throw new IllegalArgumentException("Informe três ou quatro conclusões úteis em Síntese para revisão");
+        if(fixationCount<2||fixationCount>4)throw new IllegalArgumentException("Informe de duas a quatro conclusões úteis em Síntese para revisão");
         int comparisonCount=cleanComparisonRows(r.comparisonRows()).size();
         if(comparisonCount>0&&comparisonCount<2)throw new IllegalArgumentException("Quando útil, a tabela comparativa deve ter ao menos duas linhas");
         if(comparisonCount>0&&r.comparisonHeaders()==null)throw new IllegalArgumentException("Informe os cabeçalhos da tabela comparativa");
@@ -353,8 +353,6 @@ public class AdminContentController {
           throw new IllegalArgumentException("Substitua a análise automática por uma explicação específica desta questão");
         if(GuideContentQuality.containsEditorialArtifact(completeGuide))
           throw new IllegalArgumentException("Remova resíduos de geração, emojis, marcação interna ou caracteres alheios ao conteúdo didático");
-        if(!GuideContentQuality.hasConcludingAnswerConfirmation(r.answerAnalysis()))
-          throw new IllegalArgumentException("Conclua a análise confirmando claramente se o item está certo ou errado");
         if(GuideContentQuality.admitsSourceOrAnswerConflict(completeGuide))
           throw new IllegalArgumentException("A fonte ou o gabarito apresenta conflito; mantenha a questão como rascunho para revisão editorial");
         if(List.of("isole a afirmação central","identifique o mecanismo técnico afirmado","localize o trecho cobrado",
@@ -426,6 +424,10 @@ public class AdminContentController {
     }
     private List<Map<String,String>> cleanComparisonRows(List<ComparisonRowRequest> rows){
       if(rows==null)return List.of();return rows.stream().map(row->Map.of("criterion",row.criterion().trim(),"left",row.left().trim(),"right",row.right().trim())).toList();
+    }
+    static String cleanReference(String value){
+      String cleaned=trimmed(value).replaceFirst("(?iu)\\s*[—-]\\s*(undefined|null)\\s*$","").trim();
+      return cleaned.matches("(?iu)undefined|null")?"":cleaned;
     }
     private String text(String value){return value==null?"":value.trim();}private String fallback(String value,String fallback){String text=text(value);return text.isBlank()?fallback:text;}
 }

@@ -25,4 +25,11 @@ class AdminContentControllerTest {
         assertEquals("gerenciamento-eletronico-de-documentos",
                 AdminContentController.slug("Gerenciamento Eletrônico de Documentos"));
     }
+
+    @Test
+    void removesUndefinedSuffixFromImportedReferences() {
+        assertEquals("CEBRASPE", AdminContentController.cleanReference("CEBRASPE — undefined"));
+        assertEquals("", AdminContentController.cleanReference("null"));
+        assertEquals("CEBRASPE — AgSUS — 2026", AdminContentController.cleanReference("CEBRASPE — AgSUS — 2026"));
+    }
 }

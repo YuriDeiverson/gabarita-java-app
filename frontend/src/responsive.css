@@ -204,37 +204,6 @@ body { overflow-x: clip; overscroll-behavior-x: none; }
   .career-filter-sheet-fields select { width: 100%; min-height: 48px; padding-inline: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
   .career-filter-sheet > footer { position: sticky; bottom: calc(-18px - env(safe-area-inset-bottom)); padding: 12px 0 calc(18px + env(safe-area-inset-bottom)); display: grid !important; grid-template-columns: 1fr 1.5fr; gap: 9px; background: var(--surface); }
   .career-filter-sheet > footer button { min-height: 48px; }
-  .agenda-mobile-view { padding: 18px; display: grid; gap: 16px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow-soft); }
-  .agenda-mobile-view > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .agenda-mobile-view > header div { min-width: 0; }
-  .agenda-mobile-view > header span { display: block; color: var(--accent); font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
-  .agenda-mobile-view > header h2 { margin: 4px 0 0; overflow: hidden; font-size: 17px; text-overflow: ellipsis; white-space: nowrap; }
-  .agenda-mobile-view > header button { min-height: 44px; padding: 0 11px; display: flex; align-items: center; gap: 6px; flex: none; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); font-size: 10px; font-weight: 750; }
-  .agenda-mobile-view > header button svg { width: 16px; }
-  .agenda-mobile-week { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 5px; }
-  .agenda-mobile-week button { position: relative; min-width: 0; min-height: 62px; padding: 7px 2px; display: grid; place-items: center; align-content: center; gap: 3px; border: 1px solid transparent; border-radius: 11px; background: var(--surface-2); color: var(--muted); }
-  .agenda-mobile-week button span { overflow: hidden; max-width: 100%; font-size: 8px; font-weight: 750; text-overflow: clip; text-transform: uppercase; }
-  .agenda-mobile-week button strong { font-size: 14px; }
-  .agenda-mobile-week button i { width: 4px; height: 4px; border-radius: 50%; background: transparent; }
-  .agenda-mobile-week button.has-study i { background: var(--accent); }
-  .agenda-mobile-week button.is-selected { border-color: var(--ink); background: var(--ink); color: white; }
-  .agenda-mobile-week button.is-selected i { background: white; }
-  .agenda-mobile-day-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
-  .agenda-mobile-day-list article { min-width: 0; min-height: 88px; padding: 12px; display: grid; grid-template-columns: 32px minmax(0,1fr) 34px; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-  .agenda-mobile-status { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; background: var(--accent-soft); color: var(--accent); }
-  .agenda-mobile-status svg { width: 15px; }
-  .agenda-mobile-day-list article div { min-width: 0; }
-  .agenda-mobile-day-list article small { display: block; color: var(--muted); font-size: 8px; font-weight: 700; text-transform: uppercase; }
-  .agenda-mobile-day-list article strong { display: block; margin-top: 3px; font-size: 12px; line-height: 1.3; }
-  .agenda-mobile-day-list article p { margin: 2px 0 0; color: var(--muted); font-size: 9px; }
-  .agenda-mobile-day-list article > button { width: 34px; min-height: 44px; display: grid; place-items: center; border: 0; border-radius: 9px; background: var(--surface-2); }
-  .agenda-mobile-day-list article > button svg { width: 16px; transform: rotate(-90deg); }
-  .agenda-mobile-empty { grid-column: 1/-1; padding: 24px 16px; display: grid; justify-items: center; gap: 5px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); text-align: center; }
-  .agenda-mobile-empty svg { width: 24px; }
-  .agenda-mobile-empty strong { color: var(--ink); font-size: 12px; }
-  .agenda-mobile-empty p { margin: 0; font-size: 10px; }
-  .agenda-calendar-card { display: none; }
-  .agenda-calendar-card.is-mobile-open { display: block; }
   .quiz-mobile-filter-trigger {
     width: 100%; min-height: 50px; padding: 0 14px;
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -370,6 +339,270 @@ body { overflow-x: clip; overscroll-behavior-x: none; }
 
   .app-content :where(input, select, textarea) {
     max-width: 100%;
+  }
+
+  .agenda-mobile-view {
+    padding: 18px;
+    display: grid;
+    gap: 16px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: var(--surface);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .agenda-mobile-view > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .agenda-mobile-heading {
+    min-width: 0;
+  }
+
+  .agenda-mobile-heading > span {
+    display: block;
+    color: var(--accent);
+    font-size: 9px;
+    font-weight: 850;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+
+  .agenda-mobile-heading > h2 {
+    margin: 4px 0 0;
+    font-size: 17px;
+    line-height: 1.25;
+    text-transform: capitalize;
+  }
+
+  .agenda-mobile-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+    flex: none;
+  }
+
+  .agenda-mobile-actions > button {
+    min-height: 44px;
+    padding: 0 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface-2);
+    color: var(--ink);
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .agenda-mobile-actions > .agenda-go-today {
+    border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+    background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+    color: var(--accent);
+  }
+
+  .agenda-mobile-actions svg {
+    width: 16px;
+  }
+
+  .agenda-mobile-week {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .agenda-mobile-week button {
+    position: relative;
+    min-width: 0;
+    min-height: 66px;
+    padding: 9px 2px 7px;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 3px;
+    border: 1px solid transparent;
+    border-radius: 11px;
+    background: var(--surface-2);
+    color: var(--muted);
+  }
+
+  .agenda-mobile-week button > b {
+    position: absolute;
+    top: -7px;
+    left: 50%;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: white;
+    font-size: 7px;
+    font-weight: 900;
+    line-height: 1.25;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    transform: translateX(-50%);
+  }
+
+  .agenda-mobile-week button span {
+    overflow: hidden;
+    max-width: 100%;
+    font-size: 8px;
+    font-weight: 750;
+    text-overflow: clip;
+    text-transform: uppercase;
+  }
+
+  .agenda-mobile-week button strong {
+    font-size: 14px;
+  }
+
+  .agenda-mobile-week button i {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: transparent;
+  }
+
+  .agenda-mobile-week button.has-study i {
+    background: var(--accent);
+  }
+
+  .agenda-mobile-week button.is-today {
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+    color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
+    animation: agenda-today-pulse 2.4s ease-in-out infinite;
+  }
+
+  .agenda-mobile-week button.is-selected {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: white;
+    box-shadow: none;
+  }
+
+  .agenda-mobile-week button.is-selected.is-today {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+
+  .agenda-mobile-week button.is-selected i {
+    background: white;
+  }
+
+  .agenda-mobile-day-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .agenda-mobile-day-list article {
+    min-width: 0;
+    min-height: 88px;
+    padding: 12px;
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) 44px;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+
+  .agenda-mobile-status {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    border-radius: 9px;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  .agenda-mobile-status svg {
+    width: 15px;
+  }
+
+  .agenda-mobile-day-list article div {
+    min-width: 0;
+  }
+
+  .agenda-mobile-day-list article small {
+    display: block;
+    color: var(--muted);
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 1.35;
+    text-transform: uppercase;
+  }
+
+  .agenda-mobile-day-list article strong {
+    display: block;
+    margin-top: 3px;
+    font-size: 12px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  .agenda-mobile-day-list article p {
+    margin: 3px 0 0;
+    color: var(--muted);
+    font-size: 9px;
+    line-height: 1.4;
+  }
+
+  .agenda-mobile-day-list article > button {
+    width: 44px;
+    min-height: 44px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 9px;
+    background: var(--surface-2);
+  }
+
+  .agenda-mobile-day-list article > button svg {
+    width: 16px;
+    transform: rotate(-90deg);
+  }
+
+  .agenda-mobile-empty {
+    grid-column: 1 / -1;
+    padding: 24px 16px;
+    display: grid;
+    justify-items: center;
+    gap: 5px;
+    border: 1px dashed var(--line);
+    border-radius: 12px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .agenda-mobile-empty svg {
+    width: 24px;
+  }
+
+  .agenda-mobile-empty strong {
+    color: var(--ink);
+    font-size: 12px;
+  }
+
+  .agenda-mobile-empty p {
+    margin: 0;
+    font-size: 10px;
+  }
+
+  .agenda-calendar-card {
+    display: none;
+  }
+
+  .agenda-calendar-card.is-mobile-open {
+    display: block;
   }
 
   .course-grid,
@@ -687,6 +920,22 @@ body { overflow-x: clip; overscroll-behavior-x: none; }
     padding: 14px 10px;
   }
 
+  .agenda-mobile-view > header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 11px;
+  }
+
+  .agenda-mobile-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .agenda-mobile-actions > .agenda-month-toggle:only-child {
+    grid-column: 1 / -1;
+  }
+
   .agenda-mobile-week {
     gap: 2px;
   }
@@ -701,13 +950,18 @@ body { overflow-x: clip; overscroll-behavior-x: none; }
   }
 
   .finish-modal,
-  .agenda-modal,
   .career-modal,
   .question-note-modal,
   .admin-material-preview-modal {
     width: 100% !important;
     padding: 18px 14px calc(16px + env(safe-area-inset-bottom)) !important;
     border-radius: 20px 20px 10px 10px !important;
+  }
+
+  .agenda-modal {
+    width: 100% !important;
+    padding: 0 !important;
+    border-radius: 20px 20px 0 0 !important;
   }
 
   .profile-study-grid,

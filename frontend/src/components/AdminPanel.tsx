@@ -415,7 +415,7 @@ const questionBatchFields = [
   },
   {
     name: 'topic',
-    description: 'Assunto específico dentro da disciplina, por exemplo: Interpretação de textos. É opcional.',
+    description: 'Assunto específico dentro da disciplina, por exemplo: Interpretação de textos. É obrigatório.',
   },
   {
     name: 'board',
@@ -446,12 +446,12 @@ const questionBatchFields = [
   {
     name: 'detailedTopic / conceptExplanation / decisiveEvidence / answerAnalysis / examTrap / similarQuestionStrategy',
     description:
-      'Aula completa: assunto em hierarquia, base conceitual obrigatória, ponto decisivo, resolução comentada e método para questões semelhantes. Não copie o enunciado nem o comentário curto. examTrap é opcional.',
+      'Aula completa: assunto em hierarquia (8+ caracteres), conceito (100+), evidência (40+), análise (160+) e estratégia (40+). examTrap é opcional; quando usado, precisa de 40+ caracteres.',
   },
   {
     name: 'fixationTips / comparisonHeaders / comparisonRows',
     description:
-      'Use de duas a quatro conclusões realmente úteis e diferentes da estratégia. Só inclua comparisonHeaders/comparisonRows quando uma comparação facilitar a compreensão.',
+      'Use de duas a quatro conclusões realmente úteis. Se incluir uma comparação, informe os cabeçalhos e pelo menos duas linhas.',
   },
   {
     name: 'reference',
@@ -468,6 +468,107 @@ const questionBatchFields = [
       'Situação da questão. Normalmente use ACTIVE. Se o gabarito for Anulada, o sistema a marcará como anulada.',
   },
 ];
+
+const questionBatchFieldLabel: Record<string, string> = {
+  category: 'category',
+  topic: 'topic',
+  board: 'board',
+  type: 'type',
+  text: 'text',
+  correct: 'correct',
+  explanation: 'explanation',
+  detailedTopic: 'detailedTopic',
+  conceptExplanation: 'conceptExplanation',
+  decisiveEvidence: 'decisiveEvidence',
+  answerAnalysis: 'answerAnalysis',
+  examTrap: 'examTrap',
+  similarQuestionStrategy: 'similarQuestionStrategy',
+  fixationTips: 'fixationTips',
+};
+
+const questionBatchText = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+
+const questionBatchValidationError = (question: Record<string, unknown>, index: number) => {
+  const prefix = `Questão ${index + 1}`;
+  const required = ['category', 'topic', 'board', 'type', 'text', 'correct', 'explanation'];
+  const missing = required.find(field => !questionBatchText(question[field]));
+  if (missing) return `${prefix}: o campo “${questionBatchFieldLabel[missing]}” é obrigatório.`;
+
+  const type = questionBatchText(question.type).toUpperCase();
+  const correct = questionBatchText(question.correct);
+  if (!['TRUE_FALSE', 'MULTIPLE_CHOICE'].includes(type)) {
+    return `${prefix}: “type” deve ser TRUE_FALSE ou MULTIPLE_CHOICE.`;
+  }
+  if (type === 'TRUE_FALSE' && !['Certo', 'Errado', 'Anulada'].includes(correct)) {
+    return `${prefix}: questões de certo/errado devem usar “Certo”, “Errado” ou “Anulada” em “correct”.`;
+  }
+  if (type === 'MULTIPLE_CHOICE') {
+    if (!Array.isArray(question.options) || question.options.length < 2) {
+      return `${prefix}: questões de múltipla escolha precisam de pelo menos duas alternativas.`;
+    }
+    const invalidOption = question.options.find(
+      option =>
+        !option ||
+        typeof option !== 'object' ||
+        Array.isArray(option) ||
+        !questionBatchText((option as Record<string, unknown>).label) ||
+        !questionBatchText((option as Record<string, unknown>).text)
+    );
+    if (invalidOption) return `${prefix}: cada alternativa precisa de “label” e “text”.`;
+    const hasCorrectOption = question.options.some(
+      option =>
+        questionBatchText((option as Record<string, unknown>).label).toLocaleLowerCase('pt-BR') ===
+        correct.toLocaleLowerCase('pt-BR')
+    );
+    if (correct !== 'Anulada' && !hasCorrectOption) {
+      return `${prefix}: o gabarito em “correct” deve corresponder ao “label” de uma alternativa.`;
+    }
+  }
+
+  const status = correct.toLocaleLowerCase('pt-BR') === 'anulada'
+    ? 'ANNULLED'
+    : (questionBatchText(question.status) || 'ACTIVE').toUpperCase();
+  if (!['ACTIVE', 'ANNULLED', 'DRAFT'].includes(status)) {
+    return `${prefix}: “status” deve ser ACTIVE, ANNULLED ou DRAFT.`;
+  }
+  if (status === 'DRAFT') return '';
+
+  const minimumLengths: Array<[string, number]> = [
+    ['explanation', 40],
+    ['detailedTopic', 8],
+    ['conceptExplanation', 100],
+    ['decisiveEvidence', 40],
+    ['answerAnalysis', 160],
+    ['similarQuestionStrategy', 40],
+  ];
+  for (const [field, minimum] of minimumLengths) {
+    const length = questionBatchText(question[field]).length;
+    if (length < minimum) {
+      return `${prefix}: “${questionBatchFieldLabel[field]}” tem ${length} caracteres; o mínimo é ${minimum}.`;
+    }
+  }
+  const examTrapLength = questionBatchText(question.examTrap).length;
+  if (examTrapLength > 0 && examTrapLength < 40) {
+    return `${prefix}: “examTrap” tem ${examTrapLength} caracteres; quando informado, o mínimo é 40.`;
+  }
+  if (!Array.isArray(question.fixationTips) || question.fixationTips.length < 2 || question.fixationTips.length > 4) {
+    return `${prefix}: “fixationTips” deve conter de duas a quatro conclusões.`;
+  }
+  if (question.fixationTips.some(tip => !questionBatchText(tip))) {
+    return `${prefix}: “fixationTips” não pode conter itens vazios.`;
+  }
+  const comparisonRows = Array.isArray(question.comparisonRows) ? question.comparisonRows : [];
+  if (comparisonRows.length === 1) {
+    return `${prefix}: “comparisonRows” precisa de pelo menos duas linhas quando informado.`;
+  }
+  if (comparisonRows.length > 0 && (!question.comparisonHeaders || typeof question.comparisonHeaders !== 'object')) {
+    return `${prefix}: informe “comparisonHeaders” junto com “comparisonRows”.`;
+  }
+  if (comparisonRows.length === 0 && question.comparisonHeaders) {
+    return `${prefix}: remova “comparisonHeaders” ou informe pelo menos duas linhas em “comparisonRows”.`;
+  }
+  return '';
+};
 
 function Field({
   label,
@@ -1680,19 +1781,12 @@ export default function AdminPanel({
         setError(`Questão ${index + 1}: cada item deve ser um objeto JSON.`);
         return;
       }
-      const question = item as Record<string, unknown>;
-      const missing = ['category', 'board', 'type', 'text', 'correct'].find(
-        field => typeof question[field] !== 'string' || !String(question[field]).trim()
-      );
-      if (missing) {
-        setError(`Questão ${index + 1}: o campo “${missing}” é obrigatório.`);
-        return;
-      }
-      if (
-        String(question.type).toUpperCase() === 'MULTIPLE_CHOICE' &&
-        (!Array.isArray(question.options) || question.options.length < 2)
-      ) {
-        setError(`Questão ${index + 1}: questões de múltipla escolha precisam de pelo menos duas alternativas.`);
+      const validationError = questionBatchValidationError(item as Record<string, unknown>, index);
+      if (validationError) {
+        setError(validationError);
+        requestAnimationFrame(() =>
+          document.getElementById('question-batch-importer')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        );
         return;
       }
     }

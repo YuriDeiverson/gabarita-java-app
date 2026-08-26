@@ -398,6 +398,12 @@ export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions
     const month=firstOfMonth(localDate(value));
     if(monthKey(month)!==monthKey(activeMonth))setActiveMonth(month);
   };
+  const goToToday = () => {
+    selectFirstPlannedMonthRef.current = null;
+    setSelectedDate(today);
+    setActiveMonth(firstOfMonth(localDate(today)));
+    setMobileCalendarOpen(false);
+  };
   const toggleModalItem = (id: string) =>
     setExpandedModalItems((current) =>
       current.includes(id)
@@ -449,9 +455,49 @@ export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions
       )}
 
       <section className="agenda-mobile-view" aria-label="Agenda semanal">
-        <header><div><span>Próximos estudos</span><h2>{longDate(selectedDate)}</h2></div><button type="button" onClick={()=>setMobileCalendarOpen(value=>!value)} aria-expanded={mobileCalendarOpen}><CalendarDays/>{mobileCalendarOpen?'Fechar mês':'Ver mês'}</button></header>
+        <header>
+          <div className="agenda-mobile-heading">
+            <span>{selectedDate === today ? "Hoje · você está aqui" : "Agenda selecionada"}</span>
+            <h2>{longDate(selectedDate)}</h2>
+          </div>
+          <div className="agenda-mobile-actions">
+            {selectedDate !== today && (
+              <button type="button" className="agenda-go-today" onClick={goToToday}>
+                Hoje
+              </button>
+            )}
+            <button
+              type="button"
+              className="agenda-month-toggle"
+              onClick={() => setMobileCalendarOpen((value) => !value)}
+              aria-expanded={mobileCalendarOpen}
+              aria-controls="agenda-month-calendar"
+            >
+              <CalendarDays />
+              {mobileCalendarOpen ? "Fechar mês" : "Ver mês"}
+            </button>
+          </div>
+        </header>
         <div className="agenda-mobile-week" role="list" aria-label="Dias da semana">
-          {mobileWeekDays.map(day=><button type="button" role="listitem" key={day.value} className={`${day.value===selectedDate?'is-selected':''} ${day.agenda?.items.length?'has-study':''}`} onClick={()=>selectMobileDay(day.value)}><span>{day.date.toLocaleDateString('pt-BR',{weekday:'short'}).replace('.','')}</span><strong>{day.date.getDate()}</strong><i aria-hidden="true"/></button>)}
+          {mobileWeekDays.map((day) => {
+            const isToday = day.value === today;
+            return (
+              <button
+                type="button"
+                role="listitem"
+                key={day.value}
+                className={`${day.value === selectedDate ? "is-selected" : ""} ${day.agenda?.items.length ? "has-study" : ""} ${isToday ? "is-today" : ""}`}
+                onClick={() => selectMobileDay(day.value)}
+                aria-current={isToday ? "date" : undefined}
+                aria-label={`${isToday ? "Hoje, " : ""}${longDate(day.value)}`}
+              >
+                {isToday && <b>Hoje</b>}
+                <span>{day.date.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")}</span>
+                <strong>{day.date.getDate()}</strong>
+                <i aria-hidden="true" />
+              </button>
+            );
+          })}
         </div>
         <div className="agenda-mobile-day-list">
           {selectedAgendaDay?.items.length?selectedAgendaDay.items.map(item=><article key={String(item.id)}><span className={`agenda-mobile-status status-${item.status.toLowerCase()}`}><BookOpen/></span><div><small>{activityLabel[item.activity_type]||item.activity_type} · {duration(number(item.planned_minutes))}</small><strong>{item.title}</strong><p>{item.subject_name}</p></div><button type="button" onClick={()=>openAgendaDay(selectedDate)} aria-label={`Abrir detalhes de ${item.title}`}><ChevronDown/></button></article>):<div className="agenda-mobile-empty"><CalendarDays/><strong>Dia livre no planejamento</strong><p>Selecione outro dia ou abra o calendário mensal.</p></div>}
@@ -460,6 +506,7 @@ export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions
 
       <div className="agenda-layout">
         <section
+          id="agenda-month-calendar"
           className={`agenda-calendar-card ${mobileCalendarOpen?'is-mobile-open':''}`}
           aria-label="Calendário mensal de estudos"
         >
@@ -489,40 +536,51 @@ export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions
             }
             tileClassName={({ date, view }) => {
               if (view !== "month") return undefined;
-              const day = agendaByDate.get(isoDate(date));
-              return day
-                ? `agenda-calendar-day status-${day.status.toLowerCase()}`
-                : undefined;
+              const value = isoDate(date);
+              const day = agendaByDate.get(value);
+              return [
+                day ? `agenda-calendar-day status-${day.status.toLowerCase()}` : "",
+                value === today ? "agenda-calendar-today" : "",
+              ].filter(Boolean).join(" ") || undefined;
             }}
             tileContent={({ date, view }) => {
               if (view !== "month") return null;
-              const day = agendaByDate.get(isoDate(date));
-              if (!day) return null;
+              const value = isoDate(date);
+              const day = agendaByDate.get(value);
               return (
-                <span
-                  className="agenda-day-subjects"
-                  aria-label={`${day.items.length} assuntos neste dia`}
-                >
-                  {day.items.slice(0, 3).map((item) => (
-                    <span
-                      key={String(item.id)}
-                      className={`agenda-calendar-event status-${item.status.toLowerCase()}`}
-                      title={`${item.subject_name}: ${item.title}`}
-                    >
-                      {item.title}
+                <>
+                  {value === today && (
+                    <span className="agenda-calendar-today-label" aria-hidden="true">
+                      Hoje
                     </span>
-                  ))}
-                  <em
-                    className={`agenda-day-overflow agenda-day-overflow-wide ${day.items.length > 3 ? "is-overflow" : ""}`}
-                  >
-                    +{day.items.length - 3}
-                  </em>
-                  <em
-                    className={`agenda-day-overflow agenda-day-overflow-mobile ${day.items.length > 2 ? "is-overflow" : ""}`}
-                  >
-                    +{day.items.length - 2}
-                  </em>
-                </span>
+                  )}
+                  {day && (
+                    <span
+                      className="agenda-day-subjects"
+                      aria-label={`${day.items.length} assuntos neste dia`}
+                    >
+                      {day.items.slice(0, 3).map((item) => (
+                        <span
+                          key={String(item.id)}
+                          className={`agenda-calendar-event status-${item.status.toLowerCase()}`}
+                          title={`${item.subject_name}: ${item.title}`}
+                        >
+                          {item.title}
+                        </span>
+                      ))}
+                      <em
+                        className={`agenda-day-overflow agenda-day-overflow-wide ${day.items.length > 3 ? "is-overflow" : ""}`}
+                      >
+                        +{day.items.length - 3}
+                      </em>
+                      <em
+                        className={`agenda-day-overflow agenda-day-overflow-mobile ${day.items.length > 2 ? "is-overflow" : ""}`}
+                      >
+                        +{day.items.length - 2}
+                      </em>
+                    </span>
+                  )}
+                </>
               );
             }}
           />
@@ -555,7 +613,7 @@ export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions
                   <CalendarDays />
                 </div>
                 <div>
-                  <span>AGENDA DO DIA</span>
+                  <span>{modalDate === today ? "AGENDA DE HOJE" : "AGENDA DO DIA"}</span>
                   <h2 id="agenda-modal-title">{longDate(modalDate)}</h2>
                   <p>
                     {modalDay?.items.length || 0}{" "}
