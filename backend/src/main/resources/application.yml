@@ -19,6 +19,11 @@ spring:
       connection-timeout: 10000
   flyway:
     enabled: true
+    # O pooler do banco pode encerrar uma tentativa TLS durante reinicios ou
+    # trocas de instancia. Como o Flyway roda antes da API subir, repita apenas
+    # a abertura da conexao em vez de derrubar o deploy na primeira falha.
+    connect-retries: ${DATABASE_CONNECT_RETRIES:12}
+    connect-retries-interval: ${DATABASE_CONNECT_RETRY_INTERVAL:5s}
   servlet:
     multipart:
       max-file-size: 15MB

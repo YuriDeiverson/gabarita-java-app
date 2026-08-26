@@ -20,6 +20,19 @@ DATABASE_USER=postgres
 DATABASE_PASSWORD=sua-senha
 CORS_ORIGINS=http://localhost:3000
 SUPABASE_URL=https://xxxxxxxxxxxxx.supabase.co
+DATABASE_CONNECT_RETRIES=12
+DATABASE_CONNECT_RETRY_INTERVAL=5s
+```
+
+Em provedores com rede IPv4, como o Render, use a string **Session pooler**
+exibida em Supabase > Connect (porta `5432`). Um backend Spring e o Flyway
+mantêm conexões persistentes; portanto, não use a conexão direta IPv6 nem o
+Transaction pooler da porta `6543` nesse deploy:
+
+```env
+DATABASE_URL=jdbc:postgresql://aws-0-REGIAO.pooler.supabase.com:5432/postgres?sslmode=require
+DATABASE_USER=postgres.PROJECT_REF
+DATABASE_PASSWORD=sua-senha
 ```
 
 No frontend, configure apenas a URL pública e a publishable key do Supabase Auth:
@@ -97,6 +110,8 @@ O Vite faz proxy de `/api` para `http://localhost:3001` durante o desenvolviment
 - `DATABASE_URL`: URL do PostgreSQL. No Railway, normalmente vem do servico PostgreSQL.
 - `DATABASE_USER`: usuario do banco, opcional quando `DATABASE_URL` ja contem credenciais.
 - `DATABASE_PASSWORD`: senha do banco, opcional quando `DATABASE_URL` ja contem credenciais.
+- `DATABASE_CONNECT_RETRIES`: tentativas do Flyway diante de falhas transitorias de conexao (padrao: `12`).
+- `DATABASE_CONNECT_RETRY_INTERVAL`: intervalo maximo entre tentativas do Flyway (padrao: `5s`).
 - `CORS_ORIGINS`: origens permitidas para o frontend, separadas por virgula.
 - `PORT`: porta HTTP. Padrao local: `3001`.
 - `SUPABASE_URL`: URL pública do projeto, usada como issuer do JWT.

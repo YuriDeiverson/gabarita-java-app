@@ -110,6 +110,19 @@ SUPABASE_JWT_SECRET=
 
 DATABASE_POOL_SIZE=5
 DATABASE_MIN_IDLE=1
+DATABASE_CONNECT_RETRIES=12
+DATABASE_CONNECT_RETRY_INTERVAL=5s
+```
+
+No Render ou em outro provedor IPv4, copie do painel do Supabase a conexão
+**Session pooler** (porta `5432`). Para um backend Spring persistente, ela é
+mais adequada que o Transaction pooler (`6543`) e evita depender do endpoint
+direto do projeto, que normalmente é IPv6:
+
+```env
+DATABASE_URL=jdbc:postgresql://aws-0-REGIAO.pooler.supabase.com:5432/postgres?sslmode=require
+DATABASE_USER=postgres.PROJECT_REF
+DATABASE_PASSWORD=troque-esta-senha
 ```
 
 `SUPABASE_JWKS_URL` normalmente pode ficar vazio, pois a API deriva o endpoint a partir de `SUPABASE_URL`. `SUPABASE_JWT_SECRET` existe apenas para compatibilidade com projetos legados que ainda utilizam HS256; prefira chaves assimétricas e validação por JWKS.

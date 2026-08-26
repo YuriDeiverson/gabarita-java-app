@@ -161,8 +161,13 @@ export default function App() {
   const completedBreakAlertedRef = useRef('');
   const globalAutomaticCompletionRef = useRef('');
   const audioContextRef = useRef<AudioContext | null>(null);
+  const audioUnlockedRef = useRef(false);
 
-  const ensureAudioContext = useCallback(() => {
+  const ensureAudioContext = useCallback((allowCreate = false) => {
+    // Browsers block AudioContext creation/resume before a user gesture.
+    // Timer effects may request a chime while the page is still locked, so
+    // silently skip it until pointerdown/keydown unlocks audio.
+    if (!audioUnlockedRef.current && !allowCreate) return null;
     try {
       const context = audioContextRef.current || new AudioContext();
       audioContextRef.current = context;
@@ -373,7 +378,8 @@ export default function App() {
 
   useEffect(() => {
     const unlockAudio = () => {
-      const context = ensureAudioContext();
+      audioUnlockedRef.current = true;
+      const context = ensureAudioContext(true);
       if (!context) return;
       const prime = () => {
         const oscillator = context.createOscillator();
