@@ -24,11 +24,6 @@ interface Props {
   initialData?: StudyDashboardData | null;
 }
 
-const duration = (minutes: number) => {
-  const hours = Math.floor(minutes / 60),
-    rest = minutes % 60;
-  return hours ? `${hours}h${rest ? ` ${rest}min` : ''}` : `${rest}min`;
-};
 const clock = (seconds: number) =>
   `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 const number = (value: unknown) => Number(value || 0);
@@ -303,25 +298,6 @@ export default function StudyDashboard({
           </button>
         </div>
       )}
-
-      <section className="adaptive-plan-bar" aria-label="Capacidade do plano de hoje">
-        <div className="adaptive-plan-copy">
-          <span className="adaptive-plan-icon"><ShieldCheck /></span>
-          <div>
-            <span className="eyebrow">Planejamento adaptativo</span>
-            <strong>
-              {isStudyDay
-                ? `${duration(number(data.today.planned_minutes))} planejados dentro de ${duration(number(data.planning?.declared_minutes || data.today.goal_minutes))} disponíveis`
-                : 'Hoje é um dia livre no seu cronograma'}
-            </strong>
-            <p>
-              {isStudyDay
-                ? 'Sessões fixas de 50+10 conforme a disponibilidade definida no plano. O treino de questões é opcional e fica fora dessa carga.'
-                : 'Nenhuma sessão de estudo será movida para hoje. Você pode fazer questões sem alterar a próxima data planejada.'}
-            </p>
-          </div>
-        </div>
-      </section>
 
       <div className="daily-main-grid daily-main-grid-single">
         <section className="focus-card">

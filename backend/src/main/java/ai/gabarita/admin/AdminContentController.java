@@ -154,6 +154,7 @@ public class AdminContentController {
         validateQuestion(r);
         validateDetailedGuide(r);
         TaxonomySelection taxonomy=resolveTaxonomy(r);
+        String statement=canonicalStatement(r.text());
         String detailedTopic=canonicalDetailedTopic(r.detailedTopic(),r.category(),r.topic(),taxonomy.subjectName(),taxonomy.topicName());
         String answer;String metadata;String fixationTips;String comparisonHeaders;String comparisonRows;
         try{answer=json.writeValueAsString(r.correct().trim());var metadataValues=new LinkedHashMap<String,Object>();
@@ -164,12 +165,17 @@ public class AdminContentController {
             comparisonRows=json.writeValueAsString(cleanComparisonRows(r.comparisonRows()));}
         catch(Exception error){throw new IllegalArgumentException("Questão inválida");}
         String status="Anulada".equalsIgnoreCase(r.correct())?"ANNULLED":fallback(r.status(),"ACTIVE").toUpperCase(Locale.ROOT);
-        if(!update){
-            var existing=jdbc.sql("""
-              SELECT id FROM questions WHERE md5(regexp_replace(lower(statement),'[^[:alnum:]]','','g'))
-                =md5(regexp_replace(lower(:statement),'[^[:alnum:]]','','g')) LIMIT 1
-            """).param("statement",r.text().trim()).query(UUID.class).list();
-            if(!existing.isEmpty()){attachCourse(existing.getFirst(),r.courseId());return existing.getFirst();}
+        var existing=jdbc.sql("""
+          SELECT id FROM questions
+          WHERE id<>:id AND status IN('ACTIVE','ANNULLED')
+            AND md5(regexp_replace(lower(regexp_replace(statement,
+              '[[:space:]]*[(]?[[:space:]]*ref[[:space:]]*:[^)]*[)]?[.[:space:]]*$','','i')),'[^[:alnum:]]','','g'))
+              =md5(regexp_replace(lower(:statement),'[^[:alnum:]]','','g'))
+          LIMIT 1
+        """).param("id",id).param("statement",statement).query(UUID.class).list();
+        if(!existing.isEmpty()){
+            if(update)throw new IllegalArgumentException("Já existe uma questão com o mesmo enunciado; a referência não cria uma questão nova");
+            attachCourse(existing.getFirst(),r.courseId());return existing.getFirst();
         }
         validateGuideSpecificity(id,r,detailedTopic,taxonomy);
         UUID passageId=resolvePassage(r);
@@ -181,7 +187,7 @@ public class AdminContentController {
                 detailed_topic=:detailedTopic,concept_explanation=:concept,decisive_evidence=:evidence,
                 answer_analysis=:analysis,exam_trap=:trap,similar_question_strategy=:strategy,fixation_tips=CAST(:fixationTips AS jsonb),
                 comparison_headers=CAST(:comparisonHeaders AS jsonb),comparison_rows=CAST(:comparisonRows AS jsonb),updated_at=now() WHERE id=:id
-              """).param("board",r.board().trim()).param("type",questionType(r)).param("statement",r.text().trim())
+              """).param("board",r.board().trim()).param("type",questionType(r)).param("statement",statement)
               .param("explanation",text(r.explanation())).param("status",status).param("answer",answer).param("metadata",metadata)
               .param("subjectId",taxonomy.subjectId()).param("topicId",taxonomy.topicId())
               .param("passage",passageId,Types.OTHER).param("detailedTopic",detailedTopic).param("concept",text(r.conceptExplanation()))
@@ -195,7 +201,7 @@ public class AdminContentController {
                 detailed_topic,concept_explanation,decisive_evidence,answer_analysis,exam_trap,similar_question_strategy,fixation_tips,comparison_headers,comparison_rows)
               VALUES(:id,:board,:type,:statement,:explanation,:status,CAST(:answer AS jsonb),CAST(:metadata AS jsonb),:passage,:subjectId,:topicId,
                 :detailedTopic,:concept,:evidence,:analysis,:trap,:strategy,CAST(:fixationTips AS jsonb),CAST(:comparisonHeaders AS jsonb),CAST(:comparisonRows AS jsonb))
-              """).param("id",id).param("board",r.board().trim()).param("type",questionType(r)).param("statement",r.text().trim())
+              """).param("id",id).param("board",r.board().trim()).param("type",questionType(r)).param("statement",statement)
               .param("explanation",text(r.explanation())).param("status",status).param("answer",answer).param("metadata",metadata)
               .param("subjectId",taxonomy.subjectId()).param("topicId",taxonomy.topicId())
               .param("passage",passageId,Types.OTHER).param("detailedTopic",detailedTopic).param("concept",text(r.conceptExplanation()))
@@ -428,6 +434,9 @@ public class AdminContentController {
     static String cleanReference(String value){
       String cleaned=trimmed(value).replaceFirst("(?iu)\\s*[—-]\\s*(undefined|null)\\s*$","").trim();
       return cleaned.matches("(?iu)undefined|null")?"":cleaned;
+    }
+    static String canonicalStatement(String value){
+      return trimmed(value).replaceFirst("(?iu)\\s*\\(?\\s*ref\\s*:\\s*[^)]*\\)?[.\\s]*$","").trim();
     }
     private String text(String value){return value==null?"":value.trim();}private String fallback(String value,String fallback){String text=text(value);return text.isBlank()?fallback:text;}
 }

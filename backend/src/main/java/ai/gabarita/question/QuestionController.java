@@ -181,6 +181,7 @@ public class QuestionController {
       int imported=0,updated=0,linked=0;
       for(var q:questions){
         String legacyId=String.valueOf(q.id());
+        String statement=canonicalStatement(q.text());
         var existing=jdbc.sql("SELECT question_id FROM question_course_legacy_ids WHERE course_id=:course AND legacy_id=:legacy LIMIT 1")
           .param("course",courseId).param("legacy",legacyId).query(UUID.class).list();
         String answer;try{answer=json.writeValueAsString(q.correct());}catch(Exception e){throw new IllegalArgumentException("Gabarito inválido");}
@@ -190,21 +191,27 @@ public class QuestionController {
         String status="DRAFT";
         if(existing.isEmpty()){
           var sameStatement=jdbc.sql("""
-            SELECT id FROM questions WHERE md5(regexp_replace(lower(statement),'[^[:alnum:]]','','g'))
-              =md5(regexp_replace(lower(:statement),'[^[:alnum:]]','','g')) LIMIT 1
-            """).param("statement",q.text()).query(UUID.class).list();
+            SELECT id FROM questions WHERE status IN('ACTIVE','ANNULLED','DRAFT')
+              AND md5(regexp_replace(lower(regexp_replace(statement,
+                '[[:space:]]*[(]?[[:space:]]*ref[[:space:]]*:[^)]*[)]?[.[:space:]]*$','','i')),'[^[:alnum:]]','','g'))
+                =md5(regexp_replace(lower(:statement),'[^[:alnum:]]','','g')) LIMIT 1
+            """).param("statement",statement).query(UUID.class).list();
           UUID questionId;
           if(sameStatement.isEmpty()){
             questionId=jdbc.sql("INSERT INTO questions(id,board,type,statement,explanation,status,correct_answer,metadata) VALUES(gen_random_uuid(),'CEBRASPE','TRUE_FALSE',:text,:explanation,:status,CAST(:answer AS jsonb),CAST(:metadata AS jsonb)) RETURNING id")
-              .param("text",q.text()).param("explanation",q.explanation()).param("status",status).param("answer",answer).param("metadata",metadata).query(UUID.class).single();imported++;
+              .param("text",statement).param("explanation",q.explanation()).param("status",status).param("answer",answer).param("metadata",metadata).query(UUID.class).single();imported++;
           }else{questionId=sameStatement.getFirst();linked++;}
           attachCourse(questionId,courseId,legacyId);
         }else{
           jdbc.sql("UPDATE questions SET statement=:text,explanation=:explanation,correct_answer=CAST(:answer AS jsonb),metadata=CAST(:metadata AS jsonb),updated_at=now() WHERE id=:id")
-            .param("text",q.text()).param("explanation",q.explanation()).param("answer",answer).param("metadata",metadata).param("id",existing.getFirst()).update();updated++;
+            .param("text",statement).param("explanation",q.explanation()).param("answer",answer).param("metadata",metadata).param("id",existing.getFirst()).update();updated++;
         }
       }
       return Map.of("imported",imported,"linked",linked,"updated",updated,"total",questions.size());
+    }
+
+    private static String canonicalStatement(String value){
+      return value==null?"":value.replaceFirst("(?iu)\\s*\\(?\\s*ref\\s*:\\s*[^)]*\\)?[.\\s]*$","").trim();
     }
 
     private void attachCourse(UUID questionId,String courseId,String legacyId){

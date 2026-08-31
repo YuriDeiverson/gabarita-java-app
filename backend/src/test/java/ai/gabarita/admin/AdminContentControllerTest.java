@@ -32,4 +32,11 @@ class AdminContentControllerTest {
         assertEquals("", AdminContentController.cleanReference("null"));
         assertEquals("CEBRASPE — AgSUS — 2026", AdminContentController.cleanReference("CEBRASPE — AgSUS — 2026"));
     }
+
+    @Test
+    void removesInlineReferenceBeforeComparingImportedStatements() {
+        String expected="[CEBRASPE - TI Básica e Avançada] Para atingir a Terceira Forma Normal (3FN), a tabela não pode possuir dependências transitivas.";
+        assertEquals(expected,AdminContentController.canonicalStatement(expected+" (Ref: INF-108)."));
+        assertEquals(expected,AdminContentController.canonicalStatement(expected+" (Ref: INF-198)"));
+    }
 }
