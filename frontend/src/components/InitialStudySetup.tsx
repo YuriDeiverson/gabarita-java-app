@@ -214,6 +214,15 @@ export default function InitialStudySetup({ initial, onSave }: Props) {
           </small>
         </div>
 
+        <div className="availability-block-size" aria-label="Ritmo fixo das sessões">
+          <div>
+            <span>
+              <strong>Pomodoro fixo de 1 hora</strong>
+              <small>Cada assunto terá 50 minutos de foco e 10 minutos de descanso antes do próximo.</small>
+            </span>
+          </div>
+        </div>
+
         <fieldset className="availability-days">
           <legend>Escolha os dias e revise as horas</legend>
           <div className="availability-days-grid">

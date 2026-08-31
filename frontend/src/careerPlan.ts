@@ -206,6 +206,7 @@ export async function createAutomaticCareerPlan(
       targetRole: role.label,
       selectedWeekdays: preferences.selectedWeekdays,
       hoursByWeekday: preferences.hoursByWeekday,
+      blockMinutes,
       hasDiscursiveExam: Boolean(role.includeDiscursive),
       automaticCurriculum: true,
       creationRequestId,

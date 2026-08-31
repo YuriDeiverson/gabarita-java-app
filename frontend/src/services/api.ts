@@ -114,6 +114,7 @@ export interface StudyPlan {
   is_active?: boolean | number;
   total_topics?: number;
   completed_topics?: number;
+  block_minutes?: number;
   created_at?: string;
   updated_at?: string;
   settings?: Record<string, unknown> | string;
@@ -180,6 +181,7 @@ export interface DailyTask {
   questions_answered: number; correct_answers: number; minimum_accuracy: number; achieved_accuracy?: number;
   priority: number; status: string; topic_title: string; subject_name: string; objective?: string;
   topic_status: string; mastery: number; is_optional: boolean; outside_planned_hours: boolean;
+  planning_reason?: string;
 }
 
 export interface StudySession {
@@ -195,6 +197,9 @@ export interface StudyDashboardData {
   today: { date: string; goal_minutes: number; planned_minutes: number; completed_minutes: number; remaining_minutes: number;
     progress_percentage: number; total_tasks: number; completed_tasks: number; question_goal: number; questions_answered: number };
   tasks: DailyTask[]; active_session: Partial<StudySession>; streak: Record<string, any>;
+  planning: { declared_minutes:number; planned_capacity_minutes:number; reserve_minutes:number;
+    practice_minutes:number; window_days:number; window_end:string; strategy:string;
+    is_study_day:boolean; next_study_date:string|null };
   experience: { total_xp: number; level: number; level_name: string; current_level_xp: number; next_level_xp: number };
   reviews: Record<string, any>[]; next: Record<string, any>; roadmap: Record<string, any>[];
   notifications: Record<string, any>[]; unread_notifications: number;
@@ -784,9 +789,17 @@ export const adminApi = {
       let message=GENERIC_ACTION_ERROR;
       if(response.status===400){
         try{
-          const body=await response.json() as {code?:unknown;error?:unknown};
-          if(body.code==='QUESTION_IMPORT_INVALID'&&typeof body.error==='string'&&body.error.length<=360)
+          const body=await response.json() as {code?:unknown;error?:unknown;fields?:unknown};
+          if(body.code==='QUESTION_IMPORT_INVALID'&&typeof body.error==='string'&&body.error.length<=500)
             message=body.error;
+          else if(body.error==='Dados inválidos'&&body.fields&&typeof body.fields==='object'&&!Array.isArray(body.fields)){
+            const first=Object.entries(body.fields as Record<string,unknown>)
+              .find(([field,detail])=>/^questions\[\d+]\.[A-Za-z][A-Za-z0-9]*$/.test(field)&&typeof detail==='string');
+            if(first){
+              const match=/^questions\[(\d+)]\.([A-Za-z][A-Za-z0-9]*)$/.exec(first[0]);
+              if(match)message=`Questão ${Number(match[1])+1}: o campo “${match[2]}” não atende ao formato ou limite permitido.`;
+            }
+          }
         }catch{/* A resposta inválida permanece oculta. */}
       }
       throw new ApiRequestError(message,response.status,isRetryableResponseStatus(response.status));
@@ -813,7 +826,6 @@ export const dailyStudyApi = {
   finish: (id: string, data: { questionsAnswered: number; correctAnswers: number; notes?: string }) =>
     jsonRequest<{ session: StudySession; feedback: string[]; experience: StudyDashboardData['experience'] }>(`/study/sessions/${id}/finish`, { method: 'POST', body: JSON.stringify(data) }),
   cancel: (id: string, notes?: string) => jsonRequest<StudySession>(`/study/sessions/${id}/cancel`, { method: 'POST', body: JSON.stringify({ notes }) }),
-  rebalance: (availableMinutes: number) => jsonRequest<StudyDashboardData>('/study/today/rebalance', { method: 'POST', body: JSON.stringify({ availableMinutes }) }),
   active: () => jsonRequest<Partial<StudySession>>('/study/sessions/active'),
   startQuestionPractice: (planId:string,data:{mode:'FREE'|'POMODORO';focusMinutes:number;dailyTaskId?:string|null}) => jsonRequest<StudySession>('/study/sessions/questions', {
     method:'POST',body:JSON.stringify({planId,...data,device:navigator.userAgent.slice(0,150)})

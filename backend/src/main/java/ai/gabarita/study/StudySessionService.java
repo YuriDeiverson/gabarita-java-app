@@ -36,15 +36,14 @@ public class StudySessionService {
             throw new IllegalStateException("Já existe um timer ativo. Pause ou finalize a sessão atual.");
         }
         UUID sessionId = UUID.randomUUID();
-        boolean pomodoroMode="POMODORO".equalsIgnoreCase(mode);
         jdbc.sql("""
             INSERT INTO study_sessions(id,user_id,plan_id,daily_task_id,roadmap_topic_id,started_at,active_since,
               status,mode,pomodoro,device)
             VALUES(:id,:u,:p,:task,:topic,now(),now(),'RUNNING',:mode,CAST(:pomodoro AS jsonb),:device)
             """).param("id", sessionId).param("u", userId).param("p", task.get("plan_id"))
                 .param("task", taskId).param("topic", task.get("roadmap_topic_id"))
-                .param("mode",pomodoroMode?"POMODORO":"FREE")
-                .param("pomodoro",pomodoroMode?studyPomodoroConfig():"{}").param("device", device).update();
+                .param("mode","POMODORO")
+                .param("pomodoro",studyPomodoroConfig()).param("device", device).update();
         jdbc.sql("UPDATE daily_tasks SET status='IN_PROGRESS',updated_at=now() WHERE id=:id AND status IN('PENDING','AVAILABLE')")
                 .param("id", taskId).update();
         jdbc.sql("UPDATE topic_progress SET status='IN_PROGRESS',started_at=COALESCE(started_at,now()),updated_at=now() WHERE user_id=:u AND roadmap_topic_id=:t AND status='AVAILABLE'")
@@ -211,6 +210,8 @@ public class StudySessionService {
         var session = one(userId, id);
         if ("RUNNING".equals(session.get("status"))) return session;
         requireStatus(session, "PAUSED");
+        if("STUDY".equals(session.get("session_kind"))&&"POMODORO_FOCUS_COMPLETE".equals(session.get("pause_reason")))
+            throw new IllegalStateException("O foco terminou. Conclua os 10 minutos de descanso antes de seguir para o próximo assunto.");
         jdbc.sql("""
             UPDATE session_pauses SET ended_at=now() WHERE id=(SELECT id FROM session_pauses WHERE session_id=:s AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1)
             """).param("s", id).update();
@@ -229,12 +230,19 @@ public class StudySessionService {
             throw new IllegalStateException("Esta não é uma sessão Pomodoro de conteúdo.");
         if(!List.of("RUNNING","PAUSED").contains(session.get("status")))
             throw new IllegalStateException("Esta sessão não pode mais ser concluída.");
-        if("RUNNING".equals(session.get("status")))jdbc.sql("""
-            UPDATE study_sessions SET effective_seconds=LEAST(:limit,effective_seconds+
-              GREATEST(0,EXTRACT(EPOCH FROM(now()-COALESCE(active_since,now())))::int)),active_since=now()
-            WHERE id=:id
-            """).param("limit",STUDY_FOCUS_MINUTES*60).param("id",id).update();
-        return finish(userId,id,0,0,"POMODORO_FOCUS_COMPLETED");
+        if("RUNNING".equals(session.get("status"))){
+            int effective=number(session,"elapsed_seconds");
+            if(effective<STUDY_FOCUS_MINUTES*60)
+                throw new IllegalStateException("Complete os 50 minutos de foco antes de iniciar o descanso.");
+            return pause(userId,id,"POMODORO_FOCUS_COMPLETE");
+        }
+        if(!"POMODORO_FOCUS_COMPLETE".equals(session.get("pause_reason")))
+            throw new IllegalStateException("A sessão está pausada manualmente; retome o foco antes de concluí-la.");
+        long breakSeconds=session.get("paused_at") == null ? 0
+                : Duration.between(instant(session.get("paused_at")),Instant.now()).toSeconds();
+        if(breakSeconds<10*60)
+            throw new IllegalStateException("Complete os 10 minutos de descanso antes de seguir para o próximo assunto.");
+        return finish(userId,id,0,0,"POMODORO_CYCLE_COMPLETED");
     }
 
     @Transactional
@@ -245,6 +253,9 @@ public class StudySessionService {
             throw new IllegalStateException("Esta sessão não pode mais ser finalizada.");
         if (questionsAnswered < 0 || correctAnswers < 0 || correctAnswers > questionsAnswered)
             throw new IllegalArgumentException("O resultado das questões é inválido");
+        if("STUDY".equals(session.get("session_kind"))&&"POMODORO".equals(session.get("mode"))
+                &&!"POMODORO_CYCLE_COMPLETED".equals(notes))
+            throw new IllegalStateException("A sessão de estudo só termina após 50 minutos de foco e 10 minutos de descanso.");
 
         if ("RUNNING".equals(session.get("status"))) {
             jdbc.sql("UPDATE study_sessions SET effective_seconds=effective_seconds+EXTRACT(EPOCH FROM(now()-active_since))::int WHERE id=:id")
@@ -264,7 +275,8 @@ public class StudySessionService {
         var task = ownedTask(userId, (UUID) session.get("daily_task_id"));
         int totalQuestions = number(task, "questions_answered") + questionsAnswered;
         int totalCorrect = number(task, "correct_answers") + correctAnswers;
-        int totalMinutes = number(task, "completed_minutes") + Math.max(1, effective / 60);
+        int totalMinutes = number(task, "completed_minutes") + ("STUDY".equals(session.get("session_kind"))
+                ? number(task,"planned_minutes") : Math.max(1, effective / 60));
         double accuracy = totalQuestions == 0 ? 0 : totalCorrect * 100d / totalQuestions;
         boolean criteriaMet = LearningRules.taskCompleted(totalMinutes * 60, number(task,"planned_minutes"),
                 totalQuestions, number(task,"question_goal"));
@@ -298,9 +310,14 @@ public class StudySessionService {
                 .param("u", userId).param("t", topicId).update();
 
         var feedback = new ArrayList<String>();
+        boolean review="REVIEW".equals(task.get("activity_type"));
+        if(review)jdbc.sql("""
+            UPDATE reviews SET status='COMPLETED',completed_at=now()
+            WHERE user_id=:u AND roadmap_topic_id=:t AND scheduled_date<=:today
+              AND status IN('SCHEDULED','AVAILABLE','OVERDUE')
+            """).param("u",userId).param("t",topicId).param("today",bootstrap.userToday(userId)).update();
         if (questionsAnswered > 0)
             scheduleReviews(userId, topicId, accuracy, lowPerformance || !criteriaMet);
-        boolean review="REVIEW".equals(task.get("activity_type"));
         if(!review){
             unlockNext(userId, topicId);
             releaseNextTask(userId,(UUID)task.get("plan_id"),localDate(task.get("task_date")));
@@ -364,13 +381,9 @@ public class StudySessionService {
             """).param("u",userId).param("today",today).update();
         var elapsedPomodoro=jdbc.sql("""
             SELECT ss.id FROM study_sessions ss JOIN daily_tasks dt ON dt.id=ss.daily_task_id
-            WHERE ss.user_id=:u AND ss.status IN('RUNNING','PAUSED') AND ss.session_kind='STUDY' AND ss.mode='POMODORO'
-              AND dt.task_date=:today AND (
-                (ss.status='RUNNING' AND ss.effective_seconds+
-                  GREATEST(0,EXTRACT(EPOCH FROM(now()-COALESCE(ss.active_since,now())))::int)>=:limit)
-                OR (ss.status='PAUSED' AND EXISTS(
-                  SELECT 1 FROM session_pauses pause WHERE pause.session_id=ss.id
-                    AND pause.ended_at IS NULL AND pause.reason='POMODORO_FOCUS_COMPLETE')))
+            WHERE ss.user_id=:u AND ss.status='RUNNING' AND ss.session_kind='STUDY' AND ss.mode='POMODORO'
+              AND dt.task_date=:today AND ss.effective_seconds+
+                GREATEST(0,EXTRACT(EPOCH FROM(now()-COALESCE(ss.active_since,now())))::int)>=:limit
             LIMIT 1
             """).param("u",userId).param("today",today).param("limit",STUDY_FOCUS_MINUTES*60)
                 .query(UUID.class).list();

@@ -1,6 +1,7 @@
 package ai.gabarita.schedule;
 
 import ai.gabarita.auth.CurrentUser;
+import ai.gabarita.study.AdaptivePlanningService;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -15,7 +16,10 @@ import org.springframework.web.bind.annotation.*;
 public class ScheduleController {
     private final ScheduleEngine engine; private final JdbcClient jdbc;
     private final CurrentUser currentUser;
-    public ScheduleController(ScheduleEngine engine, JdbcClient jdbc,CurrentUser currentUser){this.engine=engine;this.jdbc=jdbc;this.currentUser=currentUser;}
+    private final AdaptivePlanningService planner;
+    public ScheduleController(ScheduleEngine engine, JdbcClient jdbc,CurrentUser currentUser,AdaptivePlanningService planner){
+        this.engine=engine;this.jdbc=jdbc;this.currentUser=currentUser;this.planner=planner;
+    }
 
     public record StudyDay(@NotBlank String day, @Positive double hours) {}
     public record GenerateRequest(String courseId, @NotNull LocalDate examDate, @NotEmpty List<StudyDay> studyDays,
@@ -26,7 +30,7 @@ public class ScheduleController {
         return Map.of("scheduleWeeks",engine.generateLegacy(request));
     }
     @PostMapping("/plans/{planId}/regenerate") public Map<String,Object> regenerate(@PathVariable UUID planId) {
-        return engine.regeneratePlan(planId,currentUser.id());
+        return planner.regenerate(planId,currentUser.id());
     }
     @GetMapping("/agenda/{planId}") public Map<String,Object> agenda(@PathVariable UUID planId,
             @RequestParam LocalDate start,@RequestParam LocalDate end) {

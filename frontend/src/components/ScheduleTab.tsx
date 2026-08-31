@@ -293,8 +293,11 @@ export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions
       const response = await dailyStudyApi.today();
       setDashboard(response);
       const current = String(response.today.date || today);
-      setSelectedDate(current);
-      setActiveMonth(firstOfMonth(localDate(current)));
+      const plannedDate = !response.planning?.is_study_day && response.planning?.next_study_date
+        ? String(response.planning.next_study_date)
+        : current;
+      setSelectedDate(plannedDate);
+      setActiveMonth(firstOfMonth(localDate(plannedDate)));
       setError("");
     } catch (requestError) {
       setError(
@@ -366,6 +369,9 @@ export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions
     });
   },[agendaByDate,selectedDate]);
   const selectedAgendaDay=agendaByDate.get(selectedDate);
+  const preferredPlanDate = !dashboard?.planning?.is_study_day && dashboard?.planning?.next_study_date
+    ? String(dashboard.planning.next_study_date)
+    : today;
   const monthStats = useMemo(
     () =>
       monthDays.reduce(
@@ -400,8 +406,8 @@ export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions
   };
   const goToToday = () => {
     selectFirstPlannedMonthRef.current = null;
-    setSelectedDate(today);
-    setActiveMonth(firstOfMonth(localDate(today)));
+    setSelectedDate(preferredPlanDate);
+    setActiveMonth(firstOfMonth(localDate(preferredPlanDate)));
     setMobileCalendarOpen(false);
   };
   const toggleModalItem = (id: string) =>
@@ -457,13 +463,13 @@ export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions
       <section className="agenda-mobile-view" aria-label="Agenda semanal">
         <header>
           <div className="agenda-mobile-heading">
-            <span>{selectedDate === today ? "Hoje · você está aqui" : "Agenda selecionada"}</span>
+            <span>{selectedDate === today ? "Hoje · você está aqui" : selectedDate === preferredPlanDate ? "Próximo dia de estudo" : "Agenda selecionada"}</span>
             <h2>{longDate(selectedDate)}</h2>
           </div>
           <div className="agenda-mobile-actions">
-            {selectedDate !== today && (
+            {selectedDate !== preferredPlanDate && (
               <button type="button" className="agenda-go-today" onClick={goToToday}>
-                Hoje
+                {preferredPlanDate === today ? "Hoje" : "Próximo estudo"}
               </button>
             )}
             <button

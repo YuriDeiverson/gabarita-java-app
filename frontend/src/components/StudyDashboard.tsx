@@ -9,6 +9,7 @@ import {
   TimerReset,
   X,
   ListChecks,
+  ShieldCheck,
 } from 'lucide-react';
 import { dailyStudyApi, StudyDashboardData, StudySession } from '../services/api';
 import { ActiveStudyContext } from '../studyContext';
@@ -136,9 +137,7 @@ export default function StudyDashboard({
     active.status === 'PAUSED' &&
     active.pause_reason === 'POMODORO_FOCUS_COMPLETE' &&
     Boolean(pomo);
-  const selectedFocusMinutes = currentTask?.planned_minutes && currentTask.planned_minutes <= 30
-    ? currentTask.planned_minutes
-    : 50;
+  const selectedFocusMinutes = 50;
   const focusSeconds = Math.max(1, number(pomo?.focusMinutes) * 60);
   const focusElapsed = pomo ? Math.max(0, elapsed - cycle * focusSeconds) : 0;
   const focusRemaining = pomo ? Math.max(0, focusSeconds - focusElapsed) : selectedFocusMinutes * 60;
@@ -188,18 +187,15 @@ export default function StudyDashboard({
       void Notification.requestPermission().catch(() => {});
     }
     void action(async () => {
-      const freeTime = currentTask.planned_minutes <= 30;
       const started = await dailyStudyApi.start(currentTask.id, {
-        mode: freeTime ? 'FREE' : 'POMODORO',
-        pomodoro: freeTime
-          ? undefined
-          : {
-              focusMinutes: selectedFocusMinutes,
-              shortBreakMinutes: 10,
-              longBreakMinutes: 10,
-              cycles: 1,
-              targetCycles: 1,
-            },
+        mode: 'POMODORO',
+        pomodoro: {
+          focusMinutes: 50,
+          shortBreakMinutes: 10,
+          longBreakMinutes: 10,
+          cycles: 1,
+          targetCycles: 1,
+        },
         device: navigator.userAgent.slice(0, 150),
       });
       onOpenStudy({
@@ -272,6 +268,7 @@ export default function StudyDashboard({
   if (!data) return null;
 
   const progress = Math.min(100, number(data.today.progress_percentage));
+  const isStudyDay = data.planning?.is_study_day !== false;
 
   return (
     <div className="daily-dashboard">
@@ -307,6 +304,25 @@ export default function StudyDashboard({
         </div>
       )}
 
+      <section className="adaptive-plan-bar" aria-label="Capacidade do plano de hoje">
+        <div className="adaptive-plan-copy">
+          <span className="adaptive-plan-icon"><ShieldCheck /></span>
+          <div>
+            <span className="eyebrow">Planejamento adaptativo</span>
+            <strong>
+              {isStudyDay
+                ? `${duration(number(data.today.planned_minutes))} planejados dentro de ${duration(number(data.planning?.declared_minutes || data.today.goal_minutes))} disponíveis`
+                : 'Hoje é um dia livre no seu cronograma'}
+            </strong>
+            <p>
+              {isStudyDay
+                ? 'Sessões fixas de 50+10 conforme a disponibilidade definida no plano. O treino de questões é opcional e fica fora dessa carga.'
+                : 'Nenhuma sessão de estudo será movida para hoje. Você pode fazer questões sem alterar a próxima data planejada.'}
+            </p>
+          </div>
+        </div>
+      </section>
+
       <div className="daily-main-grid daily-main-grid-single">
         <section className="focus-card">
           <div className="focus-card-top">
@@ -323,7 +339,7 @@ export default function StudyDashboard({
                         ? 'Questões extras do dia'
                         : 'Revisão semanal com questões'
                       : 'Questões de fechamento'
-                    : currentTask?.topic_title || 'Meta diária concluída'}
+                    : currentTask?.topic_title || (isStudyDay ? 'Meta diária concluída' : 'Dia livre no cronograma')}
               </h3>
               <p>
                 {questionPractice
@@ -334,7 +350,7 @@ export default function StudyDashboard({
                         ? 'Opcional e fora da carga planejada.'
                         : 'Obrigatória no encerramento da semana.'
                       : 'Encerramento obrigatório do estudo de hoje.'
-                    : currentTask?.subject_name || 'Seu progresso de hoje foi salvo.'}
+                    : currentTask?.subject_name || (isStudyDay ? 'Seu progresso de hoje foi salvo.' : 'Seu próximo estudo permanece na data escolhida no planejamento.')}
               </p>
             </div>
             {currentTask && !questionPractice && (
@@ -355,6 +371,11 @@ export default function StudyDashboard({
                     : currentTask.objective || 'Consolidar o conteúdo e praticar com questões.'}
                 </p>
               </div>
+              {currentTask.planning_reason && (
+                <p className="planning-rationale">
+                  <ShieldCheck /> <span><strong>Por que agora?</strong>{currentTask.planning_reason}</span>
+                </p>
+              )}
               <div className="timer-stage">
                 <div
                   className={`timer-ring ${active?.status === 'PAUSED' ? 'is-paused' : ''}`}
@@ -389,9 +410,7 @@ export default function StudyDashboard({
               {!active && (
                 <div className="timer-mode" aria-label="Duração da sessão">
                   <strong>
-                    {currentTask.planned_minutes <= 30
-                      ? `Tempo livre de ${currentTask.planned_minutes} min`
-                      : `${selectedFocusMinutes} min de foco + 10 min de descanso`}
+                    50 min de foco + 10 min de descanso
                   </strong>
                 </div>
               )}
@@ -416,8 +435,9 @@ export default function StudyDashboard({
                   </button>
                 )}
                 {active?.status === 'PAUSED' && (
-                  <button className="primary-study-action" disabled={busy} onClick={resumeActive}>
-                    <Play /> {isPomoBreak && breakRemaining > 0 ? 'Pular descanso' : 'Continuar'}
+                  <button className="primary-study-action" disabled={busy || (isPomoBreak && breakRemaining > 0)}
+                    onClick={isPomoBreak ? () => void action(() => dailyStudyApi.completeFocus(active.id)) : resumeActive}>
+                    <Play /> {isPomoBreak ? 'Ir para o próximo assunto' : 'Continuar'}
                   </button>
                 )}
                 {active && (
@@ -443,8 +463,8 @@ export default function StudyDashboard({
               <ListChecks /> Continuar questões
             </button>
           ) : (
-            <button className="primary-study-action" onClick={() => onOpenStudy()}>
-              <BookOpen /> Revisar conteúdos
+            <button className="primary-study-action" onClick={() => isStudyDay ? onOpenStudy() : onOpenQuestions()}>
+              {isStudyDay ? <BookOpen /> : <ListChecks />} {isStudyDay ? 'Revisar conteúdos' : 'Fazer apenas questões'}
             </button>
           )}
         </section>

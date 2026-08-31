@@ -162,6 +162,21 @@
   font-weight: 750;
 }
 
+.availability-block-size { min-width: 0; margin: 0; padding: 0; border: 0; }
+.availability-block-size legend { margin-bottom: 7px; color: var(--muted); font-size: 10px; font-weight: 750; }
+.availability-block-size > div {
+  display: flex; align-items: center; gap: 8px; padding: 13px 15px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2);
+}
+.availability-block-size > div > span { min-width: 0; margin-right: auto; display: grid; gap: 2px; }
+.availability-block-size strong { font-size: 12px; }
+.availability-block-size small { color: var(--muted); font-size: 10px; }
+.availability-block-size button {
+  min-width: 74px; min-height: 40px; border: 1px solid var(--line-strong); border-radius: 9px;
+  background: var(--surface); color: var(--muted); font-size: 11px; font-weight: 750;
+}
+.availability-block-size button.is-selected { border-color: #506456; background: #506456; color: #fff; }
+
 .availability-days { min-width: 0; margin: 0; padding: 0; border: 0; }
 .availability-days legend { margin-bottom: 10px; color: var(--muted); font-size: 10px; font-weight: 750; }
 .availability-days-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 9px; }
@@ -263,6 +278,9 @@
   .availability-bulk-editor { grid-template-columns: minmax(0, 1fr) 112px; padding: 14px; }
   .availability-bulk-editor > div:first-child { grid-column: 1 / -1; }
   .availability-bulk-editor > button { grid-column: auto; min-height: 48px; padding-inline: 10px; }
+  .availability-block-size > div { flex-wrap: wrap; }
+  .availability-block-size > div > span { width: 100%; margin: 0 0 5px; }
+  .availability-block-size button { flex: 1; }
   .availability-days-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .availability-day-card { min-height: 158px; }
   .availability-day-toggle small { font-size: 9px; }

@@ -268,6 +268,53 @@
 .completion-feedback p { margin: 0; color: var(--ink-soft); font-size: 0.86rem; }
 .completion-feedback > button { margin-left: auto; }
 
+.adaptive-plan-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  background: var(--accent-wash);
+  border: 1px solid rgba(92,107,76,0.25);
+  border-radius: var(--radius-md);
+}
+.adaptive-plan-copy { display: flex; align-items: flex-start; gap: var(--space-4); }
+.adaptive-plan-icon {
+  width: 42px; height: 42px; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: var(--surface); color: var(--accent-deep);
+}
+.adaptive-plan-copy .eyebrow { margin-bottom: var(--space-1); }
+.adaptive-plan-copy strong { display: block; font-size: .95rem; }
+.adaptive-plan-copy p { margin: var(--space-1) 0 0; color: var(--ink-soft); font-size: .82rem; }
+.adaptive-plan-control { display: flex; align-items: flex-end; gap: var(--space-3); flex: 0 0 auto; }
+.adaptive-plan-control label > span { display: block; margin-bottom: var(--space-1); color: var(--ink-soft); font-size: .72rem; }
+.adaptive-plan-control label > div {
+  display: flex; align-items: center; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+}
+.adaptive-plan-control input {
+  width: 78px; padding: var(--space-3); border: 0; outline: 0;
+  background: transparent; color: var(--ink); font: 600 .9rem var(--font-body);
+}
+.adaptive-plan-control label > div > span { padding-right: var(--space-3); color: var(--ink-soft); font-size: .8rem; }
+.adaptive-plan-control button {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-3) var(--space-4); border: 1px solid var(--accent-deep);
+  border-radius: var(--radius-sm); background: var(--accent-deep); color: var(--surface);
+  font: 600 .84rem var(--font-body); cursor: pointer;
+}
+.adaptive-plan-control button:disabled { opacity: .5; cursor: not-allowed; }
+.adaptive-plan-control button svg { width: 17px; height: 17px; }
+
+.planning-rationale {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  margin: calc(-1 * var(--space-3)) 0 0; color: var(--ink-soft); font-size: .82rem;
+}
+.planning-rationale svg { width: 17px; color: var(--accent); flex: 0 0 auto; }
+.planning-rationale span { display: flex; flex-direction: column; gap: 2px; }
+.planning-rationale strong { color: var(--ink); }
+
 /* ============================================================
    KPI STRIP
    ============================================================ */
@@ -605,6 +652,8 @@
   .daily-secondary-grid { grid-template-columns: 1fr; }
   .timer-stage { flex-direction: column; gap: var(--space-4); }
   .timer-details { flex-direction: row; flex-wrap: wrap; gap: var(--space-5); width: 100%; justify-content: center; }
+  .adaptive-plan-bar { align-items: stretch; flex-direction: column; }
+  .adaptive-plan-control { justify-content: flex-end; }
 }
 
 @media (max-width: 640px) {
@@ -626,6 +675,10 @@
   .notification-popover { position: fixed; top: auto; bottom: 0; left: 0; right: 0; width: 100%; max-width: 100%; border-radius: var(--radius-lg) var(--radius-lg) 0 0; max-height: 70vh; }
   .focus-card-top { flex-direction: column; }
   .focus-duration { align-self: flex-start; }
+  .adaptive-plan-control { align-items: stretch; flex-direction: column; }
+  .adaptive-plan-control input { width: 100%; }
+  .adaptive-plan-control label > div { width: 100%; }
+  .adaptive-plan-control button { justify-content: center; }
 }
 
 @media (max-width: 400px) {

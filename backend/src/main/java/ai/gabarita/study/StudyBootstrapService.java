@@ -20,8 +20,11 @@ public class StudyBootstrapService {
     private static final Pattern CONSTRAINT_PATTERN = Pattern.compile("constraint \\\"([a-zA-Z0-9_]+)\\\"");
     private final JdbcClient jdbc;
     private final ObjectMapper json;
+    private final AdaptivePlanningService planner;
 
-    public StudyBootstrapService(JdbcClient jdbc,ObjectMapper json) { this.jdbc = jdbc;this.json=json; }
+    public StudyBootstrapService(JdbcClient jdbc,ObjectMapper json,AdaptivePlanningService planner) {
+        this.jdbc = jdbc;this.json=json;this.planner=planner;
+    }
 
     @Transactional
     public void synchronize(UUID planId, UUID userId, JsonNode sections, int blockMinutes, Integer hoursPerDay) {
@@ -85,7 +88,7 @@ public class StudyBootstrapService {
                       AND prerequisite.status IN('COMPLETED','MASTERED'))
                 """).param("u", userId).param("p", planId).update();
             stage = "gerar as atividades iniciais";
-            ensureToday(planId, userId, hoursPerDay == null ? 120 : Math.max(30, hoursPerDay * 60));
+            planner.initialize(planId,userId);
             stage = "criar a notificação inicial";
             createWelcomeNotification(planId, userId);
         } catch (DataIntegrityViolationException ex) {
@@ -96,6 +99,8 @@ public class StudyBootstrapService {
     @Transactional
     public List<Map<String,Object>> ensureToday(UUID planId, UUID userId, int goalMinutes) {
         LocalDate date = userToday(userId);
+        planner.ensureWindow(planId,userId);
+        if(!planner.isStudyDay(planId,userId,date)) return List.of();
         var existing = tasks(userId, planId, date);
         if (!existing.isEmpty()) {
             jdbc.sql("UPDATE daily_tasks SET status='PENDING',updated_at=now() WHERE user_id=:u AND plan_id=:p AND task_date=:date AND status='MOVED'")
@@ -154,13 +159,12 @@ public class StudyBootstrapService {
             """).param("u", userId).param("p", planId).query().listOfRows();
         var candidates = learningPathCandidates(rawCandidates);
 
-        int dailyGoal = Math.max(60, goalMinutes);
-        boolean mandatoryQuestions = lastStudyDayOfWeek(planId,date);
-        int questionsMinutes = mandatoryQuestions ? 60 : 30;
+        int dailyGoal = Math.max(60, goalMinutes / 60 * 60);
+        int questionsMinutes = 30;
         int remaining = dailyGoal, position = 0;
         for (var topic : candidates) {
             if (remaining <= 0 && position > 0) break;
-            int planned = Math.min(number(topic, "planned_minutes"), Math.max(60, remaining));
+            int planned = 60;
             String type = "NEEDS_REVIEW".equals(topic.get("status")) ? "REVIEW" : "THEORY";
             jdbc.sql("""
                 INSERT INTO daily_tasks(id,user_id,plan_id,roadmap_topic_id,task_date,position,activity_type,
@@ -185,7 +189,7 @@ public class StudyBootstrapService {
                     .param("date", date).param("pos", position).param("minutes", questionsMinutes)
                     .param("questions", Math.max(10, questionsMinutes / 3)).param("accuracy", reference.get("minimum_accuracy"))
                     .param("priority", reference.get("score")).param("status", position == 0 ? "AVAILABLE" : "PENDING")
-                    .param("optional",!mandatoryQuestions).update();
+                    .param("optional",true).update();
         }
         return tasks(userId, planId, date);
     }
@@ -199,7 +203,12 @@ public class StudyBootstrapService {
     public List<Map<String,Object>> tasks(UUID userId, UUID planId, LocalDate date) {
         return jdbc.sql("""
             SELECT dt.*,rt.title topic_title,rt.subject_name,rt.objective,rt.description,
-                   rt.content,rt.difficulty,tp.status topic_status,tp.mastery
+                   rt.content,rt.difficulty,tp.status topic_status,tp.mastery,
+                   CASE WHEN dt.activity_type IN('REVIEW','REVISION') THEN 'Revisão priorizada pelo seu histórico de estudo.'
+                        WHEN dt.activity_type='QUESTIONS' THEN 'Treino opcional fora da carga planejada; você escolhe o tempo no cronômetro de questões.'
+                        WHEN tp.attempts>0 AND tp.mastery<rt.minimum_accuracy THEN 'Reforço porque seu domínio está abaixo da meta deste assunto.'
+                        WHEN tp.attempts=0 THEN 'Próximo assunto da sua rota, equilibrado pelo peso no edital.'
+                        ELSE 'Prioridade calculada por peso, proximidade da prova e domínio atual.' END planning_reason
             FROM daily_tasks dt JOIN roadmap_topics rt ON rt.id=dt.roadmap_topic_id
             JOIN topic_progress tp ON tp.roadmap_topic_id=rt.id AND tp.user_id=dt.user_id
             WHERE dt.user_id=:u AND dt.plan_id=:p AND dt.task_date=:date ORDER BY dt.position
@@ -280,31 +289,8 @@ public class StudyBootstrapService {
     private int number(Map<String,Object> row, String key) { return ((Number) row.get(key)).intValue(); }
     private int difficulty(String value) { String v = value.toLowerCase(); return v.contains("dif") ? 4 : v.contains("fácil") ? 2 : 3; }
     private double weight(String value) { try { return Double.parseDouble(value.replace("%", "").trim()); } catch (Exception ignored) { return 1; } }
-    private int plannedMinutes(JsonNode section, JsonNode card, int preferredMinutes) { return 60; }
-    private boolean lastStudyDayOfWeek(UUID planId,LocalDate date) {
-        try {
-            String value=jdbc.sql("SELECT settings::text FROM study_plans WHERE id=:p")
-                    .param("p",planId).query(String.class).single();
-            JsonNode root=json.readTree(value);
-            LocalDate week=date.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-            for(JsonNode scheduleWeek:root.path("legacyScheduleWeeks")) for(JsonNode block:scheduleWeek.path("blocks")) {
-                String raw=block.path("isoDate").asText();
-                if(raw.isBlank())continue;
-                LocalDate other=LocalDate.parse(raw);
-                if(other.isAfter(date)&&other.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).equals(week))return false;
-            }
-            JsonNode weekdays=root.path("preferences").path("selectedWeekdays");
-            if(weekdays.isArray()&&!weekdays.isEmpty()) {
-                int current=date.getDayOfWeek().getValue();
-                int last=0;
-                for(JsonNode weekday:weekdays) {
-                    int javascriptDay=weekday.asInt();
-                    last=Math.max(last,javascriptDay==0?7:javascriptDay);
-                }
-                return current==last;
-            }
-        } catch(Exception ignored) { /* Em planos antigos, domingo encerra a semana. */ }
-        return date.getDayOfWeek()==DayOfWeek.SUNDAY;
+    private int plannedMinutes(JsonNode section, JsonNode card, int preferredMinutes) {
+        return 60;
     }
     private int createTasksFromSchedule(UUID planId,UUID userId,LocalDate date){
         var plans=jdbc.sql("SELECT settings::text settings_json FROM study_plans WHERE id=:p AND user_id=:u")
@@ -328,9 +314,9 @@ public class StudyBootstrapService {
                 if(topic==null&&!topics.isEmpty())topic=topics.getFirst();
                 if(topic==null)continue;
                 boolean question="QUESTIONS".equals(activity);
-                boolean optional=block.path("isOptional").asBoolean(question&&!lastStudyDayOfWeek(planId,date));
-                boolean outside=block.path("outsidePlannedHours").asBoolean(false);
-                int minutes=block.path("durationMinutes").asInt(60);
+                boolean optional=question;
+                boolean outside=question;
+                int minutes=question?Math.max(5,block.path("durationMinutes").asInt(30)):60;
                 seeds.add(new ScheduleTaskSeed(topic,activity,minutes,optional,outside,seeds.size()));
             }
         }catch(Exception ignored){return 0;}

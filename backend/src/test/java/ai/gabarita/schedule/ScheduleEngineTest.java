@@ -1,184 +1,97 @@
 package ai.gabarita.schedule;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class ScheduleEngineTest {
     private final ObjectMapper json = new ObjectMapper();
-    private final ScheduleEngine engine = new ScheduleEngine(null, json);
-    private final List<ScheduleController.StudyDay> everyDay = List.of(
-            day("segunda-feira",3),day("terça-feira",3),day("quarta-feira",3),day("quinta-feira",3),
-            day("sexta-feira",3),day("sábado",3),day("domingo",3));
+    private final ScheduleEngine engine = new ScheduleEngine(null,json);
 
     @Test
-    void buildsFifteenDaySprintWithMappingParetoAndFourDayClosing() {
-        var sections=json.createArrayNode()
-                .add(section("portugues","Língua Portuguesa","25%","Fácil","Interpretação de textos"))
-                .add(section("direito","Direito","10%","Difícil","Atos administrativos"));
+    void usesFixedPomodoroBlocksAndKeepsQuestionsOutsideDeclaredTime() {
+        var sections=json.createArrayNode().add(section("specific","Conhecimentos Específicos","50%","Redes"));
+        var blocks=blocks(engine.generateLegacy(request(sections,2,20)));
+        var content=blocks.stream().filter(block->"THEORY".equals(block.get("activityType"))).toList();
+        var questions=blocks.stream().filter(block->"QUESTIONS".equals(block.get("activityType"))).toList();
 
-        var blocks=blocks(engine.generateLegacy(new ScheduleController.GenerateRequest(
-                "seplag_informatica",LocalDate.now().plusDays(15),everyDay,sections,60)));
-        var byDate=blocks.stream().collect(java.util.stream.Collectors.groupingBy(
-                block->(LocalDate)block.get("isoDate"),java.util.LinkedHashMap::new,java.util.stream.Collectors.toList()));
-        var dates=byDate.keySet().stream().toList();
-
-        assertEquals("READING",byDate.get(dates.get(0)).getFirst().get("activityType"));
-        assertEquals("READING",byDate.get(dates.get(1)).getFirst().get("activityType"));
-        var paretoDay=byDate.get(dates.get(2));
-        assertEquals(120,paretoDay.stream().filter(block->"THEORY".equals(block.get("activityType")))
+        assertTrue(content.stream().allMatch(block->Integer.valueOf(60).equals(block.get("durationMinutes"))));
+        assertTrue(questions.stream().allMatch(block->Integer.valueOf(30).equals(block.get("durationMinutes"))));
+        assertTrue(questions.stream().allMatch(block->Boolean.TRUE.equals(block.get("isOptional"))));
+        assertTrue(questions.stream().allMatch(block->Boolean.TRUE.equals(block.get("outsidePlannedHours"))));
+        assertEquals(120,content.stream().filter(block->LocalDate.now().equals(block.get("isoDate")))
                 .mapToInt(block->(Integer)block.get("durationMinutes")).sum());
-        assertEquals(60,paretoDay.stream().filter(block->"QUESTIONS".equals(block.get("activityType")))
-                .mapToInt(block->(Integer)block.get("durationMinutes")).sum());
-        assertEquals("QUESTIONS",paretoDay.getLast().get("activityType"));
-        assertTrue(paretoDay.stream().anyMatch(block->"HIGH".equals(block.get("priorityBand"))));
-        assertTrue(paretoDay.stream().anyMatch(block->"LIGHT".equals(block.get("priorityBand"))));
-        assertTrue(paretoDay.stream().allMatch(block->Boolean.FALSE.equals(block.get("outsidePlannedHours"))));
-
-        assertEquals(List.of("FLASHCARDS","SIMULATION","REVIEW","FLASHCARDS"),dates.stream().skip(dates.size()-4L)
-                .map(date->String.valueOf(byDate.get(date).getFirst().get("activityType"))).toList());
-        assertTrue(String.valueOf(byDate.get(dates.get(dates.size()-2)).getFirst().get("title")).contains("colchão"));
     }
 
     @Test
-    void oneMonthPlanMapsFirstThenUsesWholeLastWeekForReviewAndSimulations() {
+    void distributesSessionsProportionallyToExamWeight() {
         var sections=json.createArrayNode()
-                .add(section("sus","SUS","25%","Médio","Leis 8.080 e 8.142"))
-                .add(section("portugues","Português","15%","Fácil","Interpretação"));
+                .add(section("specific","Conhecimentos Específicos","50%","Redes"))
+                .add(section("general","Conhecimentos Gerais","30%","Português"));
+        var content=blocks(engine.generateLegacy(request(sections,4,30))).stream()
+                .filter(block->"THEORY".equals(block.get("activityType"))).toList();
+        long specific=countSubject(content,"Conhecimentos Específicos");
+        long general=countSubject(content,"Conhecimentos Gerais");
 
-        var blocks=blocks(engine.generateLegacy(new ScheduleController.GenerateRequest(
-                "tecnico_enfermagem",LocalDate.now().plusDays(30),everyDay,sections,60)));
-        var dates=blocks.stream().map(block->(LocalDate)block.get("isoDate")).distinct().toList();
-        assertEquals("READING",blocks.stream().filter(block->dates.getFirst().equals(block.get("isoDate"))).findFirst().orElseThrow().get("activityType"));
-
-        var finalWeek=blocks.stream().filter(block->!((LocalDate)block.get("isoDate")).isBefore(LocalDate.now().plusDays(23))).toList();
-        assertFalse(finalWeek.isEmpty());
-        assertTrue(finalWeek.stream().noneMatch(block->"THEORY".equals(block.get("activityType"))||"READING".equals(block.get("activityType"))));
-        assertTrue(finalWeek.stream().anyMatch(block->"SIMULATION".equals(block.get("activityType"))));
-        assertTrue(finalWeek.stream().anyMatch(block->String.valueOf(block.get("title")).contains("colchão")));
+        assertTrue(specific>general);
+        assertTrue(Math.abs((double)specific/general-(50d/30d))<.25);
     }
 
     @Test
-    void shortPlanCutsToHighestReturnTwentyPercentOfSubtopics() {
+    void lowWeightSubjectsStillAppearButReceiveFewerSessions() {
         var sections=json.createArrayNode()
-                .add(section("high","Peso alto","40%","Fácil","Prioridade máxima"))
-                .add(section("low1","Peso baixo 1","5%","Difícil","Baixo 1"))
-                .add(section("low2","Peso baixo 2","5%","Difícil","Baixo 2"))
-                .add(section("low3","Peso baixo 3","5%","Difícil","Baixo 3"))
-                .add(section("low4","Peso baixo 4","5%","Difícil","Baixo 4"));
+                .add(section("high","Peso alto","50%","Assunto principal"))
+                .add(section("low","Peso baixo","5%","Assunto de apoio"));
+        var content=blocks(engine.generateLegacy(request(sections,4,30))).stream()
+                .filter(block->"THEORY".equals(block.get("activityType"))).toList();
+        long high=countSubject(content,"Peso alto");
+        long low=countSubject(content,"Peso baixo");
 
-        var blocks=blocks(engine.generateLegacy(new ScheduleController.GenerateRequest(
-                "jornalismo",LocalDate.now().plusDays(15),everyDay,sections,60)));
-        var pareto=blocks.stream().filter(block->"HIGH".equals(block.get("priorityBand"))).toList();
-        assertFalse(pareto.isEmpty());
-        assertTrue(pareto.stream().allMatch(block->"Prioridade máxima".equals(block.get("topicTitle"))));
+        assertTrue(low>0,"Assuntos de baixo peso não podem desaparecer do cronograma");
+        assertTrue(high>=low*7,"O assunto de 5% deve receber muito menos sessões que o de 50%");
     }
 
     @Test
-    void twoHourDeadlineDayHasOnePriorityBlockAndOneQuestionBlock(){
-        var sections=json.createArrayNode()
-                .add(section("high","Peso alto","40%","Fácil","Prioridade máxima"))
-                .add(section("light","Peso leve","5%","Médio","Apoio"));
-        var byDate=blocks(engine.generateLegacy(new ScheduleController.GenerateRequest(
-                "jornalismo",LocalDate.now().plusDays(10),twoHoursEveryDay(),sections,60))).stream()
-                .collect(java.util.stream.Collectors.groupingBy(block->(LocalDate)block.get("isoDate")));
+    void excludesWeekdaysNotSelectedByTheStudent() {
+        var settings=json.createObjectNode();
+        var preferences=settings.putObject("preferences");
+        preferences.putArray("selectedWeekdays").add(1).add(2).add(3).add(4).add(5);
+        var hours=preferences.putObject("hoursByWeekday");
+        for(int day=1;day<=5;day++)hours.put(String.valueOf(day),2);
 
-        byDate.values().forEach(day->{
-            assertEquals(2,day.size());
-            assertEquals(120,day.stream().mapToInt(block->(Integer)block.get("durationMinutes")).sum());
-            assertEquals("HIGH",day.getFirst().get("priorityBand"));
-            assertEquals("QUESTIONS",day.getLast().get("activityType"));
-            assertEquals(60,day.getLast().get("durationMinutes"));
-        });
+        assertTrue(ScheduleEngine.availableOn(settings,LocalDate.of(2026,8,31)));
+        assertTrue(!ScheduleEngine.availableOn(settings,LocalDate.of(2026,9,5)));
     }
 
-    @Test
-    void oneHourDeadlineDayUsesTwentyFiveMinuteFocusThenQuestions(){
-        var sections=json.createArrayNode().add(section("high","Peso alto","40%","Fácil","Prioridade"));
-        var day=blocks(engine.generateLegacy(new ScheduleController.GenerateRequest(
-                "jornalismo",LocalDate.now().plusDays(5),oneHourEveryDay(),sections,60))).stream()
-                .collect(java.util.stream.Collectors.groupingBy(block->(LocalDate)block.get("isoDate")))
-                .values().iterator().next();
-
-        assertEquals(List.of(35,25),day.stream().map(block->(Integer)block.get("durationMinutes")).toList());
-        assertEquals("QUESTIONS",day.getLast().get("activityType"));
-        assertTrue(String.valueOf(day.getFirst().get("methodology")).contains("25 minutos"));
+    private ScheduleController.GenerateRequest request(JsonNode sections,double hours,int days){
+        return new ScheduleController.GenerateRequest("curso",LocalDate.now().plusDays(days),
+                List.of(day("segunda-feira",hours),day("terça-feira",hours),day("quarta-feira",hours),
+                        day("quinta-feira",hours),day("sexta-feira",hours),day("sábado",hours),day("domingo",hours)),
+                sections,60);
     }
 
-    @Test
-    void thirtyMinuteDeadlineDayUsesFlexibleTimeAndStillEndsWithQuestions(){
-        var sections=json.createArrayNode().add(section("high","Peso alto","40%","Fácil","Prioridade"));
-        var halfHour=everyDay.stream().map(item->day(item.day(),.5)).toList();
-        var day=blocks(engine.generateLegacy(new ScheduleController.GenerateRequest(
-                "jornalismo",LocalDate.now().plusDays(5),halfHour,sections,60))).stream()
-                .collect(java.util.stream.Collectors.groupingBy(block->(LocalDate)block.get("isoDate")))
-                .values().iterator().next();
-
-        assertEquals(30,day.stream().mapToInt(block->(Integer)block.get("durationMinutes")).sum());
-        assertEquals("QUESTIONS",day.getLast().get("activityType"));
-        assertTrue(String.valueOf(day.getLast().get("methodology")).contains("Tempo livre"));
-    }
-
-    @Test
-    void longPlanStartsWithDiagnosticAddsSpacedReviewsAndConvergesToFinalSprint() {
-        var sections=json.createArrayNode()
-                .add(section("portugues","Língua Portuguesa","25%","Fácil","Interpretação","Sintaxe"))
-                .add(section("ti","Tecnologia da Informação","20%","Médio","Segurança","Banco de dados"));
-
-        var blocks=blocks(engine.generateLegacy(new ScheduleController.GenerateRequest(
-                "seplag_informatica",LocalDate.now().plusDays(60),everyDay,sections,60)));
-        var firstDate=blocks.stream().map(block->(LocalDate)block.get("isoDate")).min(LocalDate::compareTo).orElseThrow();
-        assertEquals("SIMULATION",blocks.stream().filter(block->firstDate.equals(block.get("isoDate"))).findFirst().orElseThrow().get("activityType"));
-        for(int offset:List.of(1,7,30))assertTrue(blocks.stream().anyMatch(block->
-                !((LocalDate)block.get("isoDate")).isBefore(firstDate.plusDays(offset))&&"REVIEW".equals(block.get("activityType"))));
-        var closing=blocks.stream().filter(block->!((LocalDate)block.get("isoDate")).isBefore(LocalDate.now().plusDays(56))).toList();
-        assertTrue(closing.stream().allMatch(block->!"THEORY".equals(block.get("activityType"))));
-    }
-
-    @Test
-    void keepsThePoliceThirtyHourWorkweekOutsideTheDeadlineSprint() {
-        var sections=json.createArrayNode()
-                .add(section("portugues","Língua Portuguesa","10%","Médio","Interpretação"))
-                .add(section("pc_ti_seguranca_cibernetica","Tecnologia da Informação e Segurança Cibernética","10%","Médio","Segurança"))
-                .add(section("pc_direito_penal","Noções de Direito Penal","10%","Difícil","Lei penal"));
-        var weekdays=List.of(day("segunda-feira",6),day("terça-feira",6),day("quarta-feira",6),
-                day("quinta-feira",6),day("sexta-feira",6));
-
-        var blocks=blocks(engine.generateLegacy(new ScheduleController.GenerateRequest(
-                "policial_civil",LocalDate.now().plusDays(60),weekdays,sections,60)));
-        LocalDate monday=LocalDate.now().plusWeeks(1).with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY));
-        var workweek=blocks.stream().filter(block->{LocalDate date=(LocalDate)block.get("isoDate");
-            return !date.isBefore(monday)&&!date.isAfter(monday.plusDays(4));}).toList();
-
-        assertEquals(1_980,workweek.stream().mapToInt(block->(Integer)block.get("durationMinutes")).sum());
-        assertEquals(180,workweek.stream().filter(block->"QUESTIONS".equals(block.get("activityType")))
-                .mapToInt(block->(Integer)block.get("durationMinutes")).sum());
-        assertTrue(workweek.stream().filter(block->!"QUESTIONS".equals(block.get("activityType")))
-                .allMatch(block->(Integer)block.get("durationMinutes")==60));
+    private long countSubject(List<Map<String,Object>> blocks,String subject){
+        return blocks.stream().filter(block->subject.equals(block.get("subjectTitle"))).count();
     }
 
     private List<Map<String,Object>> blocks(List<Map<String,Object>> weeks){
         return weeks.stream().flatMap(week->{
-            @SuppressWarnings("unchecked") var values=(List<Map<String,Object>>)week.get("blocks");return values.stream();
+            @SuppressWarnings("unchecked") var values=(List<Map<String,Object>>)week.get("blocks");
+            return values.stream();
         }).toList();
     }
 
     private ScheduleController.StudyDay day(String name,double hours){return new ScheduleController.StudyDay(name,hours);}
-    private List<ScheduleController.StudyDay> twoHoursEveryDay(){return everyDay.stream().map(item->day(item.day(),2)).toList();}
-    private List<ScheduleController.StudyDay> oneHourEveryDay(){return everyDay.stream().map(item->day(item.day(),1)).toList();}
 
-    private com.fasterxml.jackson.databind.node.ObjectNode section(
-            String id,String title,String weight,String difficulty,String... topics){
+    private com.fasterxml.jackson.databind.node.ObjectNode section(String id,String title,String weight,String topic){
         var section=json.createObjectNode();section.put("id",id);section.put("title",title);section.put("weight",weight);
-        section.put("difficulty",difficulty);section.put("learningTrack","specific");section.put("learningOrder",0);
-        var cards=section.putArray("cards");for(String topic:topics)cards.add(json.createObjectNode().put("title",topic));return section;
+        section.put("difficulty","Médio");section.put("learningTrack","specific");section.put("learningOrder",0);
+        section.putArray("cards").add(json.createObjectNode().put("title",topic));return section;
     }
 }

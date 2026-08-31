@@ -488,6 +488,35 @@ const questionBatchFieldLabel: Record<string, string> = {
 
 const questionBatchText = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
 
+const questionBatchGuideFields: Array<[string, string]> = [
+  ['conceptExplanation', 'base conceitual'],
+  ['answerAnalysis', 'análise da resposta'],
+  ['examTrap', 'pegadinha da banca'],
+  ['similarQuestionStrategy', 'estratégia para questões parecidas'],
+];
+
+const questionBatchRepeatedGuideError = (
+  question: Record<string, unknown>,
+  index: number,
+  seen: Map<string, Map<string, number>>
+) => {
+  const correct = questionBatchText(question.correct).toLocaleLowerCase('pt-BR');
+  const status = correct === 'anulada' ? 'ANNULLED' : (questionBatchText(question.status) || 'ACTIVE').toUpperCase();
+  if (status === 'DRAFT') return '';
+  for (const [field, label] of questionBatchGuideFields) {
+    const value = questionBatchText(question[field]);
+    if (!value) continue;
+    const values = seen.get(field) ?? new Map<string, number>();
+    const previousIndex = values.get(value);
+    if (previousIndex !== undefined) {
+      return `Questão ${index + 1}: a ${label} repete literalmente a questão ${previousIndex + 1}. Escreva um conteúdo específico para este item.`;
+    }
+    values.set(value, index);
+    seen.set(field, values);
+  }
+  return '';
+};
+
 const questionBatchValidationError = (question: Record<string, unknown>, index: number) => {
   const prefix = `Questão ${index + 1}`;
   const required = ['category', 'topic', 'board', 'type', 'text', 'correct', 'explanation'];
@@ -525,6 +554,22 @@ const questionBatchValidationError = (question: Record<string, unknown>, index: 
     }
   }
 
+  const maximumLengths: Array<[string, number]> = [
+    ['explanation', 4000],
+    ['detailedTopic', 240],
+    ['conceptExplanation', 8000],
+    ['decisiveEvidence', 5000],
+    ['answerAnalysis', 8000],
+    ['examTrap', 5000],
+    ['similarQuestionStrategy', 3000],
+  ];
+  for (const [field, maximum] of maximumLengths) {
+    const length = questionBatchText(question[field]).length;
+    if (length > maximum) {
+      return `${prefix}: “${questionBatchFieldLabel[field]}” tem ${length} caracteres; o máximo é ${maximum}.`;
+    }
+  }
+
   const status = correct.toLocaleLowerCase('pt-BR') === 'anulada'
     ? 'ANNULLED'
     : (questionBatchText(question.status) || 'ACTIVE').toUpperCase();
@@ -556,6 +601,10 @@ const questionBatchValidationError = (question: Record<string, unknown>, index: 
   }
   if (question.fixationTips.some(tip => !questionBatchText(tip))) {
     return `${prefix}: “fixationTips” não pode conter itens vazios.`;
+  }
+  const longTipIndex = question.fixationTips.findIndex(tip => questionBatchText(tip).length > 600);
+  if (longTipIndex >= 0) {
+    return `${prefix}: o item ${longTipIndex + 1} de “fixationTips” ultrapassa o máximo de 600 caracteres.`;
   }
   const comparisonRows = Array.isArray(question.comparisonRows) ? question.comparisonRows : [];
   if (comparisonRows.length === 1) {
@@ -1775,6 +1824,7 @@ export default function AdminPanel({
       setError('Cada importação pode conter no máximo 500 questões.');
       return;
     }
+    const seenGuideValues = new Map<string, Map<string, number>>();
     for (let index = 0; index < parsed.length; index++) {
       const item = parsed[index];
       if (!item || typeof item !== 'object' || Array.isArray(item)) {
@@ -1784,6 +1834,18 @@ export default function AdminPanel({
       const validationError = questionBatchValidationError(item as Record<string, unknown>, index);
       if (validationError) {
         setError(validationError);
+        requestAnimationFrame(() =>
+          document.getElementById('question-batch-importer')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        );
+        return;
+      }
+      const repeatedGuideError = questionBatchRepeatedGuideError(
+        item as Record<string, unknown>,
+        index,
+        seenGuideValues
+      );
+      if (repeatedGuideError) {
+        setError(repeatedGuideError);
         requestAnimationFrame(() =>
           document.getElementById('question-batch-importer')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         );

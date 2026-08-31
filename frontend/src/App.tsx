@@ -652,11 +652,7 @@ export default function App() {
         item => item.roadmap_topic_id === studyContext?.roadmapTopicId && item.status === 'COMPLETED'
       );
       if (!task && !alreadyCompleted) throw new Error('Não foi possível localizar a sessão deste assunto.');
-      if (task)
-        session = await dailyStudyApi.start(task.id, {
-          mode: 'FREE',
-          device: navigator.userAgent.slice(0, 150),
-        });
+      if (task) throw new Error('Inicie e conclua o Pomodoro de 50+10 para finalizar este assunto.');
     }
     if (session.id) {
       if (session.session_kind === 'QUESTIONS')
@@ -1011,10 +1007,14 @@ export default function App() {
     setCompletedBreakBusy(true);
     setCompletedBreakError('');
     try {
-      const updated = await dailyStudyApi.resume(completedBreakPrompt.sessionId);
-      setHeaderStudyData(current => (current ? { ...current, active_session: updated } : current));
+      await dailyStudyApi.completeFocus(completedBreakPrompt.sessionId);
+      const updated = await dailyStudyApi.today();
+      setHeaderStudyData(updated);
       setHeaderTimerLoadedAt(Date.now());
       setCompletedBreakPrompt(null);
+      const next = updated.tasks.find(item => ['AVAILABLE', 'IN_PROGRESS'].includes(item.status));
+      if(next)updateStudyContext({roadmapTopicId:next.roadmap_topic_id,topicTitle:next.topic_title,
+        subjectName:next.subject_name,source:'daily-plan'});
       setDashboardVersion(value => value + 1);
     } catch (error) {
       setCompletedBreakError(error instanceof Error ? error.message : 'Não foi possível iniciar a próxima sessão.');

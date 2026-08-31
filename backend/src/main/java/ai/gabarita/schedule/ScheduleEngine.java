@@ -9,7 +9,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ScheduleEngine {
@@ -72,7 +71,7 @@ public class ScheduleEngine {
                 else if(!shortDate.isBlank())for(int year=start.getYear();year<=end.getYear();year++)
                     try{candidates.add(LocalDate.parse(shortDate+"/"+year,DateTimeFormatter.ofPattern("dd/MM/uuuu")));}catch(Exception ignored){}
                 for(LocalDate date:candidates){
-                    if(date.isBefore(start)||date.isAfter(end)||actualDates.contains(date))continue;
+                    if(date.isBefore(start)||date.isAfter(end)||actualDates.contains(date)||!availableOn(root,date))continue;
                     String topicTitle=block.path("topicTitle").asText(block.path("title").asText());
                     var topic=topicsByTitle.get(normalize(topicTitle));
                     String activityType=block.path("activityType").asText("PLANNED");
@@ -119,6 +118,17 @@ public class ScheduleEngine {
         return Map.of("plan_id",planId,"start",start,"end",end,"days",dayList);
     }
 
+    static boolean availableOn(JsonNode settings, LocalDate date) {
+        JsonNode preferences=settings.path("preferences");
+        var weekdays=new LinkedHashSet<Integer>();
+        preferences.path("selectedWeekdays").forEach(day->weekdays.add(day.asInt()));
+        if(weekdays.isEmpty())weekdays.addAll(List.of(1,2,3,4,5));
+        int javascriptDay=date.getDayOfWeek()==DayOfWeek.SUNDAY?0:date.getDayOfWeek().getValue();
+        if(!weekdays.contains(javascriptDay))return false;
+        JsonNode hours=preferences.path("hoursByWeekday").path(String.valueOf(javascriptDay));
+        return hours.isMissingNode()||hours.asDouble()>0;
+    }
+
     public List<Map<String,Object>> generateLegacy(ScheduleController.GenerateRequest r) {
         var hours=new HashMap<DayOfWeek,Double>();
         r.studyDays().forEach(d->hours.put(day(d.day()),d.hours()));
@@ -131,32 +141,22 @@ public class ScheduleEngine {
         if(sections.isEmpty()) throw new IllegalArgumentException("Informe ao menos um assunto");
         var dates=LocalDate.now().datesUntil(r.examDate()).filter(d->hours.containsKey(d.getDayOfWeek())).toList();
         if(dates.isEmpty()) throw new IllegalArgumentException("Não há dias disponíveis até a prova");
-        long daysToExam=ChronoUnit.DAYS.between(LocalDate.now(),r.examDate());
-        if(daysToExam<=30) return generateDeadlineSchedule(dates,hours,sections,daysToExam);
-        int preferredBlock=60;
-        if("policial_civil".equals(r.courseId())) return applyLongRangeStrategy(
-                generatePoliceSchedule(dates,hours,sections,preferredBlock),dates,hours,sections,r.examDate());
-        double weightSum=sections.stream().mapToDouble(Section::weight).sum();
-        int totalMinutes=dates.stream().mapToInt(d->availableMinutes(hours.get(d.getDayOfWeek()))).sum();
         var assigned=new HashMap<String,Double>(); var pointers=new HashMap<String,Integer>();
         sections.forEach(s->{assigned.put(s.id(),0d);pointers.put(s.id(),0);});
         var byWeek=new LinkedHashMap<LocalDate,List<Map<String,Object>>>(); int counter=0;
         for(var date:dates){
             int dailyMinutes=availableMinutes(hours.get(date.getDayOfWeek()));
-            int questionsMinutes=extraQuestionMinutes(date,dates);
-            boolean mandatoryQuestions=lastStudyDayOfWeek(date,dates);
-            int remaining=dailyMinutes; String lastSection=null;
+            int questionsMinutes=30;
+            int remaining=dailyMinutes;
             var studiedSubjects=new LinkedHashSet<String>();
-            while(remaining>0){
+            while(remaining>=60){
                 var ranked=sections.stream().sorted(Comparator.comparingDouble((Section s)->
-                      (s.weight()/weightSum*totalMinutes)-assigned.get(s.id())).reversed()).toList();
+                      assigned.get(s.id())/Math.max(.01,s.weight()))).toList();
                 Section chosen=ranked.getFirst();
-                if(ranked.size()>1&&Objects.equals(chosen.id(),lastSection)) chosen=ranked.get(1);
                 int pointer=pointers.merge(chosen.id(),1,Integer::sum)-1;
                 JsonNode card=chosen.cards().isEmpty()?null:chosen.cards().get(pointer%chosen.cards().size());
-                int duration=Math.min(blockMinutes(chosen,card,preferredBlock),remaining);
-                if(duration<60)break;
-                lastSection=chosen.id(); assigned.merge(chosen.id(),(double)duration,Double::sum);
+                int duration=60;
+                assigned.merge(chosen.id(),(double)duration,Double::sum);
                 var takeaways=new ArrayList<String>();
                 if(card!=null){
                     takeaways.add(card.path("title").asText());
@@ -175,22 +175,20 @@ public class ScheduleEngine {
                 studiedSubjects.add(chosen.title());
                 remaining-=duration;
             }
-            if(questionsMinutes>0){
+            if(questionsMinutes>0&&!studiedSubjects.isEmpty()){
                 var exercise=new LinkedHashMap<String,Object>();exercise.put("id","block-"+counter++);exercise.put("day",weekday(date.getDayOfWeek()));
                 exercise.put("date",date.format(BR));exercise.put("isoDate",date);exercise.put("title","Questões dos assuntos do dia");
                 exercise.put("subjectTitle","Treinamento diário");exercise.put("topicTitle","");exercise.put("activityType","QUESTIONS");
                 exercise.put("duration",formatMinutes(questionsMinutes));exercise.put("durationMinutes",questionsMinutes);
                 exercise.put("questionGoal",Math.max(10,questionsMinutes/3));
-                exercise.put("isOptional",!mandatoryQuestions);exercise.put("outsidePlannedHours",true);
-                exercise.put("methodology",mandatoryQuestions
-                    ?"Revisão semanal obrigatória: 50 minutos de questões e 10 minutos para corrigir os erros"
-                    :"Treino extra opcional: 30 minutos de questões da banca e correção dos erros");
+                exercise.put("isOptional",true);exercise.put("outsidePlannedHours",true);
+                exercise.put("methodology","Treino extra opcional: escolha o tempo no cronômetro de questões e corrija os erros.");
                 exercise.put("subtopics",new ArrayList<>(studiedSubjects));exercise.put("done",false);
                 byWeek.computeIfAbsent(date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)),k->new ArrayList<>()).add(exercise);
             }
         }
         var result=new ArrayList<Map<String,Object>>(); int i=0;
-        for(var e:byWeek.entrySet()){var w=new LinkedHashMap<String,Object>();w.put("id","week-"+i);w.put("title","Semana "+(++i));w.put("dateRange",e.getKey().format(BR)+" - "+e.getKey().plusDays(6).format(BR));w.put("focus","Plano equilibrado conforme suas prioridades");w.put("blocks",e.getValue());result.add(w);} return applyLongRangeStrategy(result,dates,hours,sections,r.examDate());
+        for(var e:byWeek.entrySet()){var w=new LinkedHashMap<String,Object>();w.put("id","week-"+i);w.put("title","Semana "+(++i));w.put("dateRange",e.getKey().format(BR)+" - "+e.getKey().plusDays(6).format(BR));w.put("focus","Distribuição proporcional ao peso do edital, com cobertura de todos os assuntos");w.put("blocks",e.getValue());result.add(w);} return result;
     }
 
     private List<Map<String,Object>> generateDeadlineSchedule(List<LocalDate> dates,Map<DayOfWeek,Double> hours,
@@ -387,9 +385,8 @@ public class ScheduleEngine {
         LocalDate firstWeek=dates.getFirst().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         for(LocalDate date:dates){
             int dailyMinutes=availableMinutes(hours.get(date.getDayOfWeek()));
-            int questionsMinutes=extraQuestionMinutes(date,dates);
-            boolean mandatoryQuestions=lastStudyDayOfWeek(date,dates);
-            int studyMinutes=dailyMinutes;
+            int questionsMinutes=practiceMinutesWithinCapacity(date,dates,dailyMinutes);
+            int studyMinutes=dailyMinutes-questionsMinutes;
             var base=completeWorkweek&&policeDayTemplate().containsKey(date.getDayOfWeek())
                     ?policeDayTemplate().get(date.getDayOfWeek()):policeWeeklyTemplate();
             var supportedBase=base.stream().filter(allocation->!policeGroup(allocation.group(),sectionsById).isEmpty()).toList();
@@ -430,10 +427,10 @@ public class ScheduleEngine {
                 exercise.put("subjectTitle","Treinamento diário");exercise.put("topicTitle","");exercise.put("activityType","QUESTIONS");
                 exercise.put("duration",formatMinutes(questionsMinutes));exercise.put("durationMinutes",questionsMinutes);
                 exercise.put("questionGoal",Math.max(10,questionsMinutes/3));
-                exercise.put("isOptional",!mandatoryQuestions);exercise.put("outsidePlannedHours",true);
-                exercise.put("methodology",mandatoryQuestions
-                    ?"Revisão semanal obrigatória: 50 minutos de questões CEBRASPE e 10 minutos para corrigir os erros"
-                    :"Treino extra opcional: 30 minutos de questões CEBRASPE e correção dos erros");
+                exercise.put("isOptional",false);exercise.put("outsidePlannedHours",false);
+                exercise.put("methodology",lastStudyDayOfWeek(date,dates)
+                    ?"Fechamento semanal dentro da carga disponível: questões CEBRASPE e correção dos erros"
+                    :"Treino diário dentro da carga disponível: questões CEBRASPE e correção dos erros");
                 exercise.put("subtopics",new ArrayList<>(studiedSubjects));exercise.put("done",false);
                 byWeek.computeIfAbsent(date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)),key->new ArrayList<>()).add(exercise);
             }
@@ -455,6 +452,7 @@ public class ScheduleEngine {
     private PoliceAllocation pa(String group,int minutes){return new PoliceAllocation(group,minutes);}
     private List<PoliceAllocation> scaleAllocations(List<PoliceAllocation> base,int totalMinutes,int rotation){
         int baseTotal=base.stream().mapToInt(PoliceAllocation::minutes).sum();int units=Math.max(1,totalMinutes/60);
+        int residual=Math.max(0,totalMinutes-units*60);
         var scaled=new ArrayList<ScaledAllocation>();int used=0;
         for(int position=0;position<base.size();position++){var allocation=base.get(position);double exact=(double)allocation.minutes()/baseTotal*units;int floor=(int)Math.floor(exact);scaled.add(new ScaledAllocation(allocation.group(),floor,exact-floor,position));used+=floor;}
         scaled.sort(Comparator.comparingDouble(ScaledAllocation::remainder).reversed()
@@ -462,6 +460,10 @@ public class ScheduleEngine {
         for(int index=0;index<units-used;index++)scaled.get(index%scaled.size()).units++;
         scaled.sort(Comparator.comparingInt(ScaledAllocation::position));
         var result=new ArrayList<PoliceAllocation>();for(var item:scaled)if(item.units>0)result.add(pa(item.group(),item.units*60));
+        if(residual>0&&!result.isEmpty()){
+            int index=Math.floorMod(rotation,result.size());var current=result.get(index);
+            result.set(index,pa(current.group(),current.minutes()+residual));
+        }
         return result;
     }
     private List<Section> policeGroup(String group,Map<String,Section> sections){
@@ -475,34 +477,6 @@ public class ScheduleEngine {
         var result=new ArrayList<Section>();for(String id:ids)if(sections.containsKey(id))result.add(sections.get(id));return result;
     }
 
-    @Transactional public Map<String,Object> regeneratePlan(UUID planId,UUID userId) {
-        var plan=jdbc.sql("SELECT exam_date,block_minutes,break_minutes,final_sprint_days FROM study_plans WHERE id=:p AND user_id=:u").param("p",planId).param("u",userId).query().listOfRows().stream().findFirst().orElseThrow(()->new NoSuchElementException("Plano não encontrado"));
-        var availability=jdbc.sql("SELECT weekday,start_time,end_time,COALESCE(block_minutes,:default) block_minutes,COALESCE(break_minutes,:break) break_minutes FROM availability WHERE plan_id=:p ORDER BY weekday,start_time").param("default",plan.get("block_minutes")).param("break",plan.get("break_minutes")).param("p",planId).query().listOfRows();
-        if(availability.isEmpty()) throw new IllegalArgumentException("Configure a disponibilidade semanal antes de gerar o cronograma");
-        var topics=jdbc.sql("""
-          SELECT t.id,t.name,(COALESCE(pt.priority,t.weight*t.frequency*t.difficulty)) priority,
-          COALESCE((SELECT AVG(CASE WHEN a.correct THEN 1 ELSE 0 END) FROM answers a WHERE a.user_id=:u AND a.question_id IN(SELECT q.id FROM questions q WHERE q.topic_id=t.id)),0.5) performance
-          FROM plan_topics pt JOIN topics t ON t.id=pt.topic_id WHERE pt.plan_id=:p AND pt.enabled ORDER BY priority DESC
-          """).param("p",planId).param("u",userId).query().listOfRows();
-        if(topics.isEmpty()) throw new IllegalArgumentException("Selecione ao menos um assunto para gerar o cronograma");
-        jdbc.sql("DELETE FROM schedule_blocks WHERE plan_id=:p AND status='PENDING'").param("p",planId).update();
-        // Motor base: pontua prioridade e fraqueza individual, alterna assuntos e reserva revisões espaçadas.
-        LocalDate exam=(LocalDate)plan.get("exam_date"), cursor=LocalDate.now(); int position=0, topicCursor=0, created=0;
-        while(cursor.isBefore(exam)){
-            int weekday=cursor.getDayOfWeek().getValue()%7; LocalDate current=cursor;
-            for(var slot:availability.stream().filter(a->((Number)a.get("weekday")).intValue()==weekday).toList()){
-                var start=(LocalTime)slot.get("start_time"); var end=(LocalTime)slot.get("end_time"); int minutes=60;
-                for(var at=start;!at.plusMinutes(minutes).isAfter(end);at=at.plusMinutes(minutes)){
-                    var topic=topics.get(topicCursor++%topics.size()); String type=(position>0&&position%7==0)?"REVIEW":"STUDY";
-                    if(ChronoUnit.DAYS.between(current,exam)<=((Number)plan.get("final_sprint_days")).intValue() && position%5==0) type="SIMULATION";
-                    jdbc.sql("INSERT INTO schedule_blocks(id,plan_id,topic_id,block_type,starts_at,duration_minutes,position,title,methodology,details) VALUES(gen_random_uuid(),:p,:t,:type,:at,:duration,:pos,:title,:method,CAST(:details AS jsonb))")
-                      .param("p",planId).param("t",topic.get("id")).param("type",type).param("at",current.atTime(at).atZone(ZoneId.of("America/Maceio")).toOffsetDateTime()).param("duration",minutes).param("pos",position++).param("title",type.equals("SIMULATION")?"Simulado de reta final":topic.get("name")).param("method",type.equals("REVIEW")?"Pomodoro 50+10: repetição espaçada":"Pomodoro 50+10: teoria, exercícios e síntese").param("details","{\"generated\":true}").update(); created++;
-                }
-            } cursor=cursor.plusDays(1);
-        }
-        jdbc.sql("UPDATE study_plans SET updated_at=now(),version=version+1 WHERE id=:p").param("p",planId).update();
-        return Map.of("planId",planId,"blocksCreated",created,"warning",created<topics.size()?"Tempo insuficiente: reduza assuntos ou aumente a disponibilidade":"Cronograma recalculado com sucesso");
-    }
     private record Section(String id,String title,double weight,String difficulty,String learningTrack,int learningOrder,List<JsonNode> cards){}
     private record TopicChoice(Section section,JsonNode card,double score){private String title(){return card==null?section.title():card.path("title").asText(section.title());}}
     private record PoliceAllocation(String group,int minutes){}
@@ -521,6 +495,10 @@ public class ScheduleEngine {
     private int number(Object value){return value instanceof Number number?number.intValue():0;}
     private int blockMinutes(Section section,JsonNode card,int preferredMinutes){return 60;}
     private int extraQuestionMinutes(LocalDate date,List<LocalDate> dates){return lastStudyDayOfWeek(date,dates)?60:30;}
+    private int practiceMinutesWithinCapacity(LocalDate date,List<LocalDate> dates,int dailyMinutes){
+        if(dailyMinutes<45)return 0;
+        return Math.min(extraQuestionMinutes(date,dates),Math.max(15,dailyMinutes-30));
+    }
     private boolean lastStudyDayOfWeek(LocalDate date,List<LocalDate> dates){
         LocalDate week=date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         return dates.stream().noneMatch(other->other.isAfter(date)

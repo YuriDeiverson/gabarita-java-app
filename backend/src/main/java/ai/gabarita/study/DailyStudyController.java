@@ -15,11 +15,9 @@ public class DailyStudyController {
     public DailyStudyController(DailyStudyService daily,StudySessionService sessions,CurrentUser currentUser){this.daily=daily;this.sessions=sessions;this.currentUser=currentUser;}
     public record StartInput(String mode,com.fasterxml.jackson.databind.JsonNode pomodoro,String device){}
     public record ReviewResult(@Min(1) int questionsAnswered,@Min(0) int correctAnswers){}
-    public record RebalanceInput(@Min(15) @Max(720) int availableMinutes){}
 
     @GetMapping("/today") public Map<String,Object> today(){return daily.today();}
     @GetMapping("/next") public Map<String,Object> next(@RequestParam(required=false) UUID planId){return planId==null?daily.next():daily.next(planId);}
-    @PostMapping("/today/rebalance") public Map<String,Object> rebalance(@Valid @RequestBody RebalanceInput input){return daily.rebalance(input.availableMinutes());}
     @PostMapping("/tasks/{id}/skip-questions") public Map<String,Object> skipQuestions(@PathVariable UUID id){return daily.skipOptionalQuestions(id);}
     @PostMapping("/tasks/{id}/start") public Map<String,Object> start(@PathVariable UUID id,@RequestBody(required=false) StartInput input){
         var value=input==null?new StartInput("FREE",null,null):input;
