@@ -3,20 +3,22 @@ package ai.gabarita.study;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.*;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Deterministic rolling planner. The detailed, executable plan is deliberately
- * limited to a short window so it can follow the student's actual progress.
+ * Deterministic support for the fixed, verticalized schedule. The schedule is
+ * generated from the edital weights and availability, then remains stable;
+ * progress is recorded without moving future blocks after a missed session.
  */
 @Service
 public class AdaptivePlanningService {
     static final int WINDOW_DAYS = 14;
     static final int STUDY_BLOCK_MINUTES = 60;
-    static final int EXTRA_QUESTION_MINUTES = 30;
+    static final int EXTRA_QUESTION_MINUTES = 0;
 
     private final JdbcClient jdbc;
     private final ObjectMapper json;
@@ -30,60 +32,38 @@ public class AdaptivePlanningService {
     public Map<String,Object> regenerate(UUID planId, UUID userId) {
         PlanProfile profile = profile(planId, userId);
         LocalDate today = userToday(userId);
-        LocalDate start = hasStartedTasks(userId, planId, today) ? today.plusDays(1) : today;
-        int created = rebuild(planId, userId, profile, start);
         return Map.of(
                 "planId", planId,
-                "blocksCreated", created,
-                "windowStart", start,
-                "windowEnd", windowEnd(profile, today),
-                "warning", created == 0
-                        ? "Não há dias disponíveis na janela de planejamento."
-                        : "Próximos 14 dias recalculados conforme sua disponibilidade e desempenho."
+                "blocksCreated", 0,
+                "windowStart", today,
+                "windowEnd", profile.examDate().minusDays(1),
+                "warning", "O cronograma verticalizado é fixo. Nenhum dia futuro foi alterado."
         );
     }
 
     @Transactional
     public void initialize(UUID planId, UUID userId) {
-        PlanProfile profile = profile(planId, userId);
-        rebuild(planId, userId, profile, userToday(userId));
+        profile(planId,userId);
     }
 
     @Transactional
-    public boolean reorganizeMissed(UUID planId, UUID userId, LocalDate today) {
-        jdbc.sql("""
+    public int archiveMissed(UUID planId, UUID userId, LocalDate today) {
+        int optional=jdbc.sql("""
             UPDATE daily_tasks SET status='SKIPPED',updated_at=now()
             WHERE user_id=:u AND plan_id=:p AND task_date<:today
               AND activity_type='QUESTIONS' AND is_optional AND status NOT IN('COMPLETED','SKIPPED')
             """).param("u",userId).param("p",planId).param("today",today).update();
-        int missed = jdbc.sql("""
-            UPDATE daily_tasks SET status='MOVED',updated_at=now()
+        int missed=jdbc.sql("""
+            UPDATE daily_tasks SET status='SKIPPED',updated_at=now()
             WHERE user_id=:u AND plan_id=:p AND task_date<:today AND NOT outside_planned_hours
               AND status NOT IN('COMPLETED','SKIPPED','CANCELLED')
             """).param("u",userId).param("p",planId).param("today",today).update();
-        if (missed == 0) return false;
-        PlanProfile profile = profile(planId,userId);
-        rebuild(planId,userId,profile,today);
-        jdbc.sql("""
-            UPDATE daily_tasks SET status='SKIPPED',updated_at=now()
-            WHERE user_id=:u AND plan_id=:p AND task_date<:today AND status='MOVED'
-            """).param("u",userId).param("p",planId).param("today",today).update();
-        return true;
+        return optional+missed;
     }
 
     @Transactional
     public void ensureWindow(UUID planId, UUID userId) {
-        PlanProfile profile = profile(planId, userId);
-        LocalDate today = userToday(userId);
-        LocalDate end = windowEnd(profile, today);
-        Optional<LocalDate> lastStudyDate = studyDates(profile, today, end).stream().reduce((first, second) -> second);
-        if (lastStudyDate.isEmpty()) return;
-        int count = jdbc.sql("""
-            SELECT COUNT(*) FROM daily_tasks
-            WHERE user_id=:u AND plan_id=:p AND task_date=:date
-            """).param("u",userId).param("p",planId).param("date",lastStudyDate.get())
-                .query(Integer.class).single();
-        if (count == 0) rebuild(planId, userId, profile, today);
+        profile(planId,userId);
     }
 
     public boolean isStudyDay(UUID planId, UUID userId, LocalDate date) {
@@ -111,7 +91,6 @@ public class AdaptivePlanningService {
                   AND NOT EXISTS (SELECT 1 FROM study_sessions ss WHERE ss.daily_task_id=dt.id)
                 """).param("u",userId).param("p",planId).param("date",date).update();
         }
-        if (removed > 0) rebuild(planId, userId, profile, start);
         return removed > 0;
     }
 
@@ -133,11 +112,11 @@ public class AdaptivePlanningService {
         result.put("planned_capacity_minutes", capacity.plannedMinutes());
         result.put("reserve_minutes", capacity.reserveMinutes());
         result.put("practice_minutes", capacity.practiceMinutes());
-        result.put("window_days", WINDOW_DAYS);
-        result.put("window_end", windowEnd(profile, date));
+        result.put("window_days", Math.max(0,ChronoUnit.DAYS.between(date,profile.examDate())));
+        result.put("window_end", profile.examDate().minusDays(1));
         result.put("is_study_day", declared > 0);
         result.put("next_study_date", nextStudyDate);
-        result.put("strategy", "Sessões fixas de 50+10 distribuídas pelo peso do edital; questões ficam como treino extra.");
+        result.put("strategy", "Cronograma verticalizado fixo, com sessões de 50+10 distribuídas pelo peso do edital. Conteúdos perdidos ficam como não estudados e não alteram os dias seguintes.");
         return result;
     }
 

@@ -15,7 +15,7 @@ class AdaptivePlanningServiceTest {
         assertEquals(240,capacity.plannedMinutes());
         assertEquals(0,capacity.reserveMinutes());
         assertEquals(240,capacity.plannedMinutes()+capacity.reserveMinutes());
-        assertEquals(30,capacity.practiceMinutes());
+        assertEquals(0,capacity.practiceMinutes());
         var residualCapacity=AdaptivePlanningService.capacityFor(150);
         assertEquals(120,residualCapacity.plannedMinutes());
         assertEquals(30,residualCapacity.reserveMinutes());

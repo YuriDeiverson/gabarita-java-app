@@ -2021,11 +2021,6 @@ export default function App() {
                 studyContext={studyContext}
                 refreshVersion={dashboardVersion}
                 onOpenStudy={openStudyContext}
-                onOpenQuestions={() => {
-                  setQuestionDailyTask(null);
-                  setNotedQuestionId('');
-                  setActiveTab('questions');
-                }}
               />
             )}
             {hasPlan && (

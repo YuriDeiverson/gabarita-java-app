@@ -34,9 +34,7 @@ public class DailyStudyService {
         sessions.reconcileActiveSession(currentUser.id());
         LocalDate today = bootstrap.userToday(currentUser.id());
         planner.enforceAvailability(planId,currentUser.id(),today);
-        boolean reorganized = planner.reorganizeMissed(planId,currentUser.id(),today);
-        if(reorganized)engagement.createNotification(currentUser.id(),planId,"PLAN_REBALANCED","Cronograma reorganizado",
-                "As sessões não concluídas foram redistribuídas automaticamente nos próximos dias disponíveis.","NORMAL");
+        planner.archiveMissed(planId,currentUser.id(),today);
         engagement.protectYesterday(currentUser.id(), planId);
         var tasks = bootstrap.ensureToday(planId, currentUser.id(), goal);
         refreshReviews(today);

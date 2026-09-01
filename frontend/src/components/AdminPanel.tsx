@@ -148,6 +148,13 @@ const subjectLines = (value: string) =>
     .split('\n')
     .map(line => line.trim())
     .filter(Boolean);
+const studyContentForEditor = (value: string) => {
+  if (!value || typeof document === 'undefined') return value || '';
+  const container = document.createElement('div');
+  container.innerHTML = value;
+  return (container.innerText || container.textContent || '').trim();
+};
+const studyContentLength = (value: string) => value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().length;
 const normalizeStudyGroup = (value: string) =>
   ['Conhecimentos Básicos', 'Legislação'].includes(value.trim())
     ? 'Conhecimentos Gerais'
@@ -315,6 +322,8 @@ const emptySharedSubjectForm = {
   discipline: '',
   studyGroup: 'Conhecimentos Gerais',
   studyObjective: '',
+  content: '',
+  keyTakeaways: '',
   reviewSummary: '',
 };
 const emptyQuestion = {
@@ -1357,7 +1366,7 @@ export default function AdminPanel({
       await load();
       const skipped = result.skippedExisting + result.skippedRepeated;
       notify(
-        `${result.imported} assunto(s) importado(s)${skipped ? `; ${skipped} duplicado(s) ignorado(s)` : ''}.`
+        `${result.imported} assunto(s) importado(s) como rascunho editorial${skipped ? `; ${skipped} duplicado(s) ignorado(s)` : ''}. Complete as aulas antes de sincronizá-las com os planos.`
       );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível importar os assuntos.');
@@ -1372,10 +1381,22 @@ export default function AdminPanel({
       discipline: sharedSubjectForm.discipline.trim(),
       studyGroup: sharedSubjectForm.studyGroup,
       studyObjective: sharedSubjectForm.studyObjective,
+      content: sharedSubjectForm.content,
+      keyTakeaways: subjectLines(sharedSubjectForm.keyTakeaways),
       reviewSummary: subjectLines(sharedSubjectForm.reviewSummary),
     };
     if (!editingSharedSubject && !sharedSubjectForm.title.trim()) {
       setSharedSubjectFormError('Informe o nome do assunto.');
+      return;
+    }
+    if (studyContentLength(sharedSubjectForm.content) < 500) {
+      setSharedSubjectFormError(
+        'Desenvolva a aula com pelo menos 500 caracteres, explicando conceito, funcionamento e uma aplicação concreta.'
+      );
+      return;
+    }
+    if (payload.keyTakeaways.length < 3 || payload.reviewSummary.length < 3) {
+      setSharedSubjectFormError('Informe pelo menos três pontos-chave e três itens de revisão específicos do assunto.');
       return;
     }
     if (
@@ -1409,6 +1430,8 @@ export default function AdminPanel({
       discipline: subject.discipline,
       studyGroup: sharedSubjectStudyGroup(subject),
       studyObjective: subject.studyObjective,
+      content: studyContentForEditor(subject.content),
+      keyTakeaways: subject.keyTakeaways.join('\n'),
       reviewSummary: subject.reviewSummary.join('\n'),
     });
     setEditingSharedSubject(subject.id);
@@ -3136,7 +3159,7 @@ export default function AdminPanel({
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,.9fr)]">
           <AdminCard
             title={editingSharedSubject ? 'Editar assunto da biblioteca' : 'Novo assunto da biblioteca'}
-            description="Cadastre o assunto, seu objetivo e o resumo de revisão uma única vez. Depois, ele poderá ser selecionado em qualquer edital compatível."
+            description="Cadastre uma aula completa e específica uma única vez. Ela será sincronizada com todos os planos que usam este assunto."
           >
             <form onSubmit={submitSharedSubject} className="grid gap-4 sm:grid-cols-2">
               {sharedSubjectFormError && (
@@ -3233,6 +3256,33 @@ export default function AdminPanel({
                     }))
                   }
                   placeholder="Ex.: Compreender como identificar a ideia principal e as informações implícitas no texto."
+                />
+              </Field>
+              <Field label="Aula completa" wide>
+                <textarea
+                  required
+                  rows={14}
+                  className={inputClass}
+                  value={sharedSubjectForm.content}
+                  onChange={event =>
+                    setSharedSubjectForm(current => ({ ...current, content: event.target.value }))
+                  }
+                  placeholder={'Explique naturalmente o que é o assunto e por que ele existe.\n\nDesenvolva como funciona, seus elementos, relações e limites.\n\nFeche com um exemplo concreto e mostre como o conceito costuma aparecer em prova.'}
+                />
+                <span className="mt-1 block text-[11px] text-slate-500">
+                  {studyContentLength(sharedSubjectForm.content)} caracteres. Use parágrafos separados por uma linha em branco; mínimo de 500.
+                </span>
+              </Field>
+              <Field label="Pontos-chave da aula — um por linha" wide>
+                <textarea
+                  required
+                  rows={5}
+                  className={inputClass}
+                  value={sharedSubjectForm.keyTakeaways}
+                  onChange={event =>
+                    setSharedSubjectForm(current => ({ ...current, keyTakeaways: event.target.value }))
+                  }
+                  placeholder="Regra ou conceito essencial\nRelação importante entre os elementos\nLimite, exceção ou diferença que evita erro"
                 />
               </Field>
               <Field label="Resumo para revisão — um item por linha" wide>
@@ -3344,7 +3394,7 @@ export default function AdminPanel({
                             key={subject.id}
                             title={subject.title}
                             eyebrow={group.studyGroup}
-                            details={`${subject.reviewSummary.length} item(ns) de revisão · ${subject.studyObjective.trim() ? 'objetivo cadastrado' : 'objetivo pendente'}`}
+                            details={`${subject.reviewSummary.length} item(ns) de revisão · ${studyContentLength(subject.content) >= 500 && subject.keyTakeaways.length >= 3 ? 'aula completa' : 'aula pendente'}`}
                             onEdit={() => editSharedSubject(subject)}
                             onDelete={() => deleteSharedSubject(subject)}
                           />

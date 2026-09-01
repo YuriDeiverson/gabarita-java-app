@@ -97,10 +97,14 @@ public class StudyBootstrapService {
     }
 
     @Transactional
-    public List<Map<String,Object>> ensureToday(UUID planId, UUID userId, int goalMinutes) {
+    public List<Map<String,Object>> ensureToday(UUID planId, UUID userId, int ignoredGoalMinutes) {
         LocalDate date = userToday(userId);
         planner.ensureWindow(planId,userId);
-        if(!planner.isStudyDay(planId,userId,date)) return List.of();
+        removeUnstartedQuestionExtras(planId,userId,date);
+        boolean reconciled=reconcileFixedSchedule(planId,userId,date);
+        if(!planner.isStudyDay(planId,userId,date)) return tasks(userId,planId,date).stream()
+                .filter(task->Boolean.TRUE.equals(task.get("is_optional"))&&Boolean.TRUE.equals(task.get("outside_planned_hours"))).toList();
+        if(reconciled)createTasksFromSchedule(planId,userId,date);
         var existing = tasks(userId, planId, date);
         if (!existing.isEmpty()) {
             jdbc.sql("UPDATE daily_tasks SET status='PENDING',updated_at=now() WHERE user_id=:u AND plan_id=:p AND task_date=:date AND status='MOVED'")
@@ -113,19 +117,6 @@ public class StudyBootstrapService {
                 jdbc.sql("""
                     UPDATE daily_tasks SET status='PENDING',updated_at=now()
                     WHERE user_id=:u AND plan_id=:p AND task_date=:date AND status IN('AVAILABLE','IN_PROGRESS')
-                    """).param("u",userId).param("p",planId).param("date",date).update();
-                jdbc.sql("""
-                    WITH ordered AS (
-                      SELECT dt.id,ROW_NUMBER() OVER(ORDER BY
-                        CASE WHEN dt.status='COMPLETED' THEN 0 ELSE 1 END,
-                        CASE WHEN dt.status='COMPLETED' THEN dt.completed_at END,
-                        CASE WHEN dt.outside_planned_hours THEN 1 ELSE 0 END,
-                        CASE WHEN dt.activity_type='REVIEW' THEN 0 ELSE 1 END,
-                        rt.position,md5(rt.id::text||CAST(:p AS text)))-1 new_position
-                      FROM daily_tasks dt JOIN roadmap_topics rt ON rt.id=dt.roadmap_topic_id
-                      WHERE dt.user_id=:u AND dt.plan_id=:p AND dt.task_date=:date)
-                    UPDATE daily_tasks dt SET position=ordered.new_position,updated_at=now()
-                    FROM ordered WHERE dt.id=ordered.id
                     """).param("u",userId).param("p",planId).param("date",date).update();
                 jdbc.sql("""
                     UPDATE daily_tasks SET status='AVAILABLE',updated_at=now() WHERE id=(SELECT id FROM daily_tasks
@@ -141,57 +132,33 @@ public class StudyBootstrapService {
         }
 
         if (createTasksFromSchedule(planId,userId,date)>0) return tasks(userId,planId,date);
+        return List.of();
+    }
 
-        var rawCandidates = jdbc.sql("""
-            SELECT rt.id,rt.planned_minutes,rt.recommended_questions,rt.minimum_accuracy,
-                   rt.priority,tp.status,rt.subject_name,rt.title,
-                   COALESCE(rt.content->>'learningTrack','') learning_track,
-                   COALESCE((rt.content->>'learningOrder')::integer,rm.position) learning_order,
-                   rm.position module_position,rt.position topic_position,
-                   CASE WHEN tp.status='NEEDS_REVIEW' THEN 40 ELSE 0 END + rt.priority AS score
-            FROM roadmap_topics rt JOIN topic_progress tp ON tp.roadmap_topic_id=rt.id AND tp.user_id=:u
-            JOIN roadmap_modules rm ON rm.id=rt.module_id
-            WHERE rt.plan_id=:p AND rt.active AND (
-              tp.status IN('AVAILABLE','IN_PROGRESS','NEEDS_REVIEW') OR
-              (tp.status='LOCKED' AND rt.content->>'learningTrack' IN('basic','specific')))
-            ORDER BY CASE WHEN tp.status='NEEDS_REVIEW' THEN 0 ELSE 1 END,
-              rm.position,rt.position,md5(rt.id::text||CAST(:p AS text)),score DESC
-            """).param("u", userId).param("p", planId).query().listOfRows();
-        var candidates = learningPathCandidates(rawCandidates);
+    private boolean reconcileFixedSchedule(UUID planId,UUID userId,LocalDate date){
+        int marked=jdbc.sql("""
+            UPDATE study_plans SET settings=jsonb_set(settings,'{fixedScheduleReconciled}','true'::jsonb,true),updated_at=now()
+            WHERE id=:p AND user_id=:u AND NOT COALESCE((settings->>'fixedScheduleReconciled')::boolean,false)
+            """).param("p",planId).param("u",userId).update();
+        if(marked==0)return false;
+        jdbc.sql("""
+            DELETE FROM daily_tasks dt
+            WHERE dt.user_id=:u AND dt.plan_id=:p AND dt.task_date>=:date
+              AND dt.status IN('PENDING','AVAILABLE','BLOCKED','MOVED')
+              AND NOT (dt.is_optional AND dt.outside_planned_hours)
+              AND NOT EXISTS (SELECT 1 FROM study_sessions ss WHERE ss.daily_task_id=dt.id)
+            """).param("u",userId).param("p",planId).param("date",date).update();
+        return true;
+    }
 
-        int dailyGoal = Math.max(60, goalMinutes / 60 * 60);
-        int questionsMinutes = 30;
-        int remaining = dailyGoal, position = 0;
-        for (var topic : candidates) {
-            if (remaining <= 0 && position > 0) break;
-            int planned = 60;
-            String type = "NEEDS_REVIEW".equals(topic.get("status")) ? "REVIEW" : "THEORY";
-            jdbc.sql("""
-                INSERT INTO daily_tasks(id,user_id,plan_id,roadmap_topic_id,task_date,position,activity_type,
-                  planned_minutes,question_goal,minimum_accuracy,priority,status)
-                VALUES(gen_random_uuid(),:u,:p,:t,:date,:pos,:type,:minutes,:questions,:accuracy,:priority,:status)
-                ON CONFLICT(user_id,plan_id,task_date,roadmap_topic_id,activity_type,cycle_index) DO NOTHING
-                """).param("u", userId).param("p", planId).param("t", topic.get("id"))
-                    .param("date", date).param("pos", position).param("type", type).param("minutes", planned)
-                    .param("questions", topic.get("recommended_questions")).param("accuracy", topic.get("minimum_accuracy"))
-                    .param("priority", topic.get("score")).param("status", position == 0 ? "AVAILABLE" : "PENDING").update();
-            remaining -= planned;
-            position++;
-        }
-        if (!candidates.isEmpty() && questionsMinutes > 0) {
-            var reference = candidates.getFirst();
-            jdbc.sql("""
-                INSERT INTO daily_tasks(id,user_id,plan_id,roadmap_topic_id,task_date,position,activity_type,
-                  planned_minutes,question_goal,minimum_accuracy,priority,status,is_optional,outside_planned_hours)
-                VALUES(gen_random_uuid(),:u,:p,:t,:date,:pos,'QUESTIONS',:minutes,:questions,:accuracy,:priority,:status,:optional,true)
-                ON CONFLICT(user_id,plan_id,task_date,roadmap_topic_id,activity_type,cycle_index) DO NOTHING
-                """).param("u", userId).param("p", planId).param("t", reference.get("id"))
-                    .param("date", date).param("pos", position).param("minutes", questionsMinutes)
-                    .param("questions", Math.max(10, questionsMinutes / 3)).param("accuracy", reference.get("minimum_accuracy"))
-                    .param("priority", reference.get("score")).param("status", position == 0 ? "AVAILABLE" : "PENDING")
-                    .param("optional",true).update();
-        }
-        return tasks(userId, planId, date);
+    private void removeUnstartedQuestionExtras(UUID planId,UUID userId,LocalDate date){
+        jdbc.sql("""
+            DELETE FROM daily_tasks dt
+            WHERE dt.user_id=:u AND dt.plan_id=:p AND dt.task_date>=:date
+              AND dt.activity_type='QUESTIONS' AND dt.is_optional
+              AND dt.status IN('PENDING','AVAILABLE','BLOCKED','MOVED')
+              AND NOT EXISTS (SELECT 1 FROM study_sessions ss WHERE ss.daily_task_id=dt.id)
+            """).param("u",userId).param("p",planId).param("date",date).update();
     }
 
     public LocalDate userToday(UUID userId) {
@@ -211,7 +178,9 @@ public class StudyBootstrapService {
                         ELSE 'Prioridade calculada por peso, proximidade da prova e domínio atual.' END planning_reason
             FROM daily_tasks dt JOIN roadmap_topics rt ON rt.id=dt.roadmap_topic_id
             JOIN topic_progress tp ON tp.roadmap_topic_id=rt.id AND tp.user_id=dt.user_id
-            WHERE dt.user_id=:u AND dt.plan_id=:p AND dt.task_date=:date ORDER BY dt.position
+            WHERE dt.user_id=:u AND dt.plan_id=:p AND dt.task_date=:date
+              AND NOT (dt.activity_type='QUESTIONS' AND dt.is_optional)
+            ORDER BY dt.position
             """).param("u", userId).param("p", planId).param("date", date).query().listOfRows();
     }
 
@@ -302,16 +271,18 @@ public class StudyBootstrapService {
             FROM roadmap_topics rt JOIN topic_progress tp ON tp.roadmap_topic_id=rt.id AND tp.user_id=:u
             WHERE rt.plan_id=:p AND rt.active
             """).param("p",planId).param("u",userId).query().listOfRows();
-        var byTitle=new HashMap<String,Map<String,Object>>();topics.forEach(topic->byTitle.put(normalize(String.valueOf(topic.get("title"))),topic));
+        var bySubjectAndTitle=new HashMap<String,Map<String,Object>>();
+        topics.forEach(topic->bySubjectAndTitle.put(topicKey(String.valueOf(topic.get("subject_name")),String.valueOf(topic.get("title"))),topic));
         var seeds=new ArrayList<ScheduleTaskSeed>();
         try{
             JsonNode settings=json.readTree(String.valueOf(plans.getFirst().get("settings_json")));
             for(JsonNode week:settings.path("legacyScheduleWeeks"))for(JsonNode block:week.path("blocks")){
                 if(!date.toString().equals(block.path("isoDate").asText()))continue;
                 String activity=block.path("activityType").asText("THEORY");
+                if("QUESTIONS".equals(activity))continue;
                 String topicTitle=block.path("topicTitle").asText(block.path("title").asText());
-                var topic=byTitle.get(normalize(topicTitle));
-                if(topic==null&&!topics.isEmpty())topic=topics.getFirst();
+                String subjectTitle=block.path("subjectTitle").asText();
+                var topic=bySubjectAndTitle.get(topicKey(subjectTitle,topicTitle));
                 if(topic==null)continue;
                 boolean question="QUESTIONS".equals(activity);
                 boolean optional=question;
@@ -339,6 +310,7 @@ public class StudyBootstrapService {
     }
     private record ScheduleTaskSeed(Map<String,Object> topic,String activity,int minutes,boolean optional,boolean outside,int cycle){}
     private String normalize(String value){return java.text.Normalizer.normalize(value,java.text.Normalizer.Form.NFD).replaceAll("\\p{M}","").toLowerCase(Locale.ROOT).trim();}
+    private String topicKey(String subject,String topic){return normalize(subject)+"::"+normalize(topic);}
     private List<Map<String,Object>> learningPathCandidates(List<Map<String,Object>> raw) {
         var specific = raw.stream().filter(row -> "specific".equals(row.get("learning_track")))
                 .sorted(Comparator.comparingInt((Map<String,Object> row) -> number(row, "learning_order"))

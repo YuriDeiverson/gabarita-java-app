@@ -205,12 +205,18 @@ export interface StudyDashboardData {
   notifications: Record<string, any>[]; unread_notifications: number;
 }
 
+let studyPlanSummariesRequest:Promise<StudyPlan[]>|null=null;
+let todayStudyRequest:Promise<StudyDashboardData>|null=null;
+
 // Study Plans API
 export const studyPlansApi = {
-  getSummaries: async (): Promise<StudyPlan[]> => {
-    const response = await fetch(`${API_BASE_URL}/study-plans/summaries`);
-    if (!response.ok) throw await apiResponseError(response, GENERIC_LOAD_ERROR);
-    return response.json();
+  getSummaries: (): Promise<StudyPlan[]> => {
+    if(!studyPlanSummariesRequest)studyPlanSummariesRequest=(async()=>{
+      const response = await fetch(`${API_BASE_URL}/study-plans/summaries`);
+      if (!response.ok) throw await apiResponseError(response, GENERIC_LOAD_ERROR);
+      return response.json() as Promise<StudyPlan[]>;
+    })().finally(()=>{studyPlanSummariesRequest=null;});
+    return studyPlanSummariesRequest;
   },
   getAll: async (includeArchived = false): Promise<StudyPlan[]> => {
     const response = await fetch(`${API_BASE_URL}/study-plans?includeArchived=${includeArchived}`);
@@ -752,13 +758,13 @@ export const adminApi = {
   deleteBaseStudyMaterial: (roleId:string,sectionId:string,cardId:string) => {
     const params=new URLSearchParams({sectionId,cardId});return jsonRequest<void>(`/admin/catalog/roles/${roleId}/materials/base?${params}`, {method:'DELETE'});
   },
-  createSharedSubject: (data:{title:string;discipline:string;studyGroup:string;studyObjective:string;reviewSummary:string[]}) =>
+  createSharedSubject: (data:{title:string;discipline:string;studyGroup:string;studyObjective:string;reviewSummary:string[];content:string;keyTakeaways:string[]}) =>
     jsonRequest<{id:string;title:string;discipline:string;studyGroup:string}>('/admin/catalog/subjects', {method:'POST',body:JSON.stringify(data)}),
   importSharedSubjects: (subjects:Array<{title:string;discipline:string;studyGroup:string;studyObjective:string;reviewSummary:string[]}>) =>
-    jsonRequest<{imported:number;skippedExisting:number;skippedRepeated:number;synchronizedPlans:number;ids:string[]}>(
+    jsonRequest<{imported:number;skippedExisting:number;skippedRepeated:number;pendingEditorial:number;synchronizedPlans:number;ids:string[]}>(
       '/admin/catalog/subjects/batch', {method:'POST',body:JSON.stringify({subjects})}
     ),
-  updateSharedSubject: (id:string,data:{discipline:string;studyGroup:string;studyObjective:string;reviewSummary:string[]}) =>
+  updateSharedSubject: (id:string,data:{discipline:string;studyGroup:string;studyObjective:string;reviewSummary:string[];content:string;keyTakeaways:string[]}) =>
     jsonRequest<{id:string;title:string;synchronizedPlans:number}>(`/admin/catalog/subjects/${id}`, {method:'PUT',body:JSON.stringify(data)}),
   deleteSharedSubject: (id:string) => jsonRequest<void>(`/admin/catalog/subjects/${id}`, {method:'DELETE'}),
   createStudyDiscipline: (roleId:string,title:string) =>
@@ -815,7 +821,11 @@ export const adminApi = {
 };
 
 export const dailyStudyApi = {
-  today: () => jsonRequest<StudyDashboardData>('/study/today'),
+  today: () => {
+    if(!todayStudyRequest)todayStudyRequest=jsonRequest<StudyDashboardData>('/study/today')
+      .finally(()=>{todayStudyRequest=null;});
+    return todayStudyRequest;
+  },
   start: (taskId: string, data: { mode: 'FREE'|'POMODORO'; pomodoro?: Record<string, unknown>; device?: string }) =>
     jsonRequest<StudySession>(`/study/tasks/${taskId}/start`, { method: 'POST', body: JSON.stringify(data) }),
   startReview: (topicId: string, data: { mode: 'FREE'|'POMODORO'; pomodoro?: Record<string, unknown>; device?: string }) =>

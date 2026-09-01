@@ -20,19 +20,26 @@ public class ScheduleEngine {
     public Map<String,Object> agenda(UUID planId,UUID userId,LocalDate start,LocalDate end) {
         if(end.isBefore(start)||ChronoUnit.DAYS.between(start,end)>62)
             throw new IllegalArgumentException("Consulte um período de até 63 dias");
-        var plan=jdbc.sql("SELECT settings::text settings_json FROM study_plans WHERE id=:p AND user_id=:u")
+        var plan=jdbc.sql("""
+                SELECT sp.settings::text settings_json,COALESCE(u.timezone,'America/Maceio') user_timezone
+                FROM study_plans sp JOIN users u ON u.id=sp.user_id WHERE sp.id=:p AND sp.user_id=:u
+                """)
                 .param("p",planId).param("u",userId).query().listOfRows().stream().findFirst()
                 .orElseThrow(()->new NoSuchElementException("Plano não encontrado"));
+        JsonNode settings;
+        try { settings=json.readTree(String.valueOf(plan.get("settings_json"))); }
+        catch(Exception error) { throw new IllegalStateException("Não foi possível ler a disponibilidade deste plano.",error); }
+        LocalDate today=LocalDate.now(ZoneId.of(String.valueOf(plan.get("user_timezone"))));
         var topics=jdbc.sql("""
             SELECT rt.id,rt.title,rt.subject_name,rt.objective,rt.planned_minutes,rt.recommended_questions,
               rt.content::text content_json
             FROM roadmap_topics rt WHERE rt.plan_id=:p AND rt.active
             """).param("p",planId).query().listOfRows();
         var topicsByTitle=new HashMap<String,Map<String,Object>>();
-        topics.forEach(topic->topicsByTitle.put(normalize(String.valueOf(topic.get("title"))),topic));
+        topics.forEach(topic->topicsByTitle.put(topicKey(String.valueOf(topic.get("subject_name")),String.valueOf(topic.get("title"))),topic));
 
         var days=new TreeMap<LocalDate,List<Map<String,Object>>>();
-        var actualDates=new HashSet<LocalDate>();
+        var actualItems=new HashSet<String>();
         var actual=jdbc.sql("""
             SELECT dt.id,dt.task_date::text task_date,dt.roadmap_topic_id,dt.activity_type,dt.planned_minutes,dt.completed_minutes,
               dt.question_goal,dt.questions_answered,dt.correct_answers,dt.achieved_accuracy,dt.status,
@@ -40,10 +47,13 @@ public class ScheduleEngine {
               rt.title,rt.subject_name,rt.objective,rt.content::text content_json
             FROM daily_tasks dt JOIN roadmap_topics rt ON rt.id=dt.roadmap_topic_id
             WHERE dt.user_id=:u AND dt.plan_id=:p AND dt.task_date BETWEEN :start AND :end
+              AND NOT (dt.activity_type='QUESTIONS' AND dt.is_optional)
             ORDER BY dt.task_date,dt.position
             """).param("u",userId).param("p",planId).param("start",start).param("end",end).query().listOfRows();
         for(var task:actual){
-            LocalDate date=LocalDate.parse(String.valueOf(task.get("task_date"))); actualDates.add(date);
+            LocalDate date=LocalDate.parse(String.valueOf(task.get("task_date")));
+            if(!shouldDisplayTask(settings,date,String.valueOf(task.get("status"))))continue;
+            actualItems.add(scheduleKey(date,String.valueOf(task.get("subject_name")),String.valueOf(task.get("title")),String.valueOf(task.get("activity_type"))));
             boolean questionPractice="QUESTIONS".equals(String.valueOf(task.get("activity_type")));
             var item=new LinkedHashMap<String,Object>();
             item.put("id",task.get("id"));item.put("roadmap_topic_id",task.get("roadmap_topic_id"));
@@ -62,8 +72,7 @@ public class ScheduleEngine {
         }
 
         try{
-            JsonNode root=json.readTree(String.valueOf(plan.get("settings_json")));
-            for(JsonNode week:root.path("legacyScheduleWeeks")) for(JsonNode block:week.path("blocks")){
+            for(JsonNode week:settings.path("legacyScheduleWeeks")) for(JsonNode block:week.path("blocks")){
                 String shortDate=block.path("date").asText();
                 var candidates=new ArrayList<LocalDate>();
                 String fullDate=block.path("isoDate").asText();
@@ -71,10 +80,13 @@ public class ScheduleEngine {
                 else if(!shortDate.isBlank())for(int year=start.getYear();year<=end.getYear();year++)
                     try{candidates.add(LocalDate.parse(shortDate+"/"+year,DateTimeFormatter.ofPattern("dd/MM/uuuu")));}catch(Exception ignored){}
                 for(LocalDate date:candidates){
-                    if(date.isBefore(start)||date.isAfter(end)||actualDates.contains(date)||!availableOn(root,date))continue;
+                    if(date.isBefore(start)||date.isAfter(end)||!availableOn(settings,date))continue;
                     String topicTitle=block.path("topicTitle").asText(block.path("title").asText());
-                    var topic=topicsByTitle.get(normalize(topicTitle));
+                    String scheduledSubject=block.path("subjectTitle").asText();
+                    var topic=topicsByTitle.get(topicKey(scheduledSubject,topicTitle));
                     String activityType=block.path("activityType").asText("PLANNED");
+                    if("QUESTIONS".equals(activityType))continue;
+                    if(actualItems.contains(scheduleKey(date,scheduledSubject,topicTitle,activityType)))continue;
                     boolean questionPractice="QUESTIONS".equals(activityType);
                     String subjectTitle=block.path("subjectTitle").asText(topic==null?"Plano de estudos":String.valueOf(topic.get("subject_name")));
                     var item=new LinkedHashMap<String,Object>();
@@ -88,7 +100,7 @@ public class ScheduleEngine {
                     item.put("planned_minutes",block.path("durationMinutes").asInt(parseMinutes(block.path("duration").asText())));
                     item.put("studied_minutes",0);item.put("question_goal",block.path("questionGoal").asInt(topic==null?0:number(topic.get("recommended_questions"))));
                     item.put("questions_answered",0);item.put("correct_answers",0);item.put("accuracy",null);
-                    item.put("status",date.isBefore(LocalDate.now(ZoneId.of("America/Maceio")))?"MISSED":"PLANNED");
+                    item.put("status",date.isBefore(today)?"MISSED":"PLANNED");
                     item.put("is_optional",block.path("isOptional").asBoolean(false));
                     item.put("outside_planned_hours",block.path("outsidePlannedHours").asBoolean(false));
                     item.put("objective","QUESTIONS".equals(item.get("activity_type"))?"Consolidar os assuntos estudados no dia por meio de questões.":topic==null?"Cumprir o bloco previsto para este dia.":topic.get("objective"));
@@ -110,7 +122,7 @@ public class ScheduleEngine {
             int correct=items.stream().mapToInt(item->number(item.get("correct_answers"))).sum();
             boolean complete=items.stream().allMatch(item->"COMPLETED".equals(item.get("status"))
                     || Boolean.TRUE.equals(item.get("is_optional"))&&"SKIPPED".equals(item.get("status")));
-            String status=complete?"COMPLETED":studied>0||questions>0?"IN_PROGRESS":date.isBefore(LocalDate.now(ZoneId.of("America/Maceio")))?"MISSED":"PLANNED";
+            String status=complete?"COMPLETED":studied>0||questions>0?"IN_PROGRESS":date.isBefore(today)?"MISSED":"PLANNED";
             var day=new LinkedHashMap<String,Object>();day.put("date",date);day.put("status",status);day.put("items",items);
             day.put("planned_minutes",planned);day.put("extra_question_minutes",extraQuestions);day.put("studied_minutes",studied);day.put("questions_answered",questions);day.put("correct_answers",correct);
             dayList.add(day);
@@ -127,6 +139,18 @@ public class ScheduleEngine {
         if(!weekdays.contains(javascriptDay))return false;
         JsonNode hours=preferences.path("hoursByWeekday").path(String.valueOf(javascriptDay));
         return hours.isMissingNode()||hours.asDouble()>0;
+    }
+
+    static boolean shouldDisplayTask(JsonNode settings,LocalDate date,String status) {
+        return !"SKIPPED".equals(status)&&availableOn(settings,date);
+    }
+
+    private String scheduleKey(LocalDate date,String subject,String topic,String activity){
+        return date+"::"+topicKey(subject,topic)+"::"+activity;
+    }
+
+    private String topicKey(String subject,String topic){
+        return normalize(subject)+"::"+normalize(topic);
     }
 
     public List<Map<String,Object>> generateLegacy(ScheduleController.GenerateRequest r) {
@@ -146,9 +170,7 @@ public class ScheduleEngine {
         var byWeek=new LinkedHashMap<LocalDate,List<Map<String,Object>>>(); int counter=0;
         for(var date:dates){
             int dailyMinutes=availableMinutes(hours.get(date.getDayOfWeek()));
-            int questionsMinutes=30;
             int remaining=dailyMinutes;
-            var studiedSubjects=new LinkedHashSet<String>();
             while(remaining>=60){
                 var ranked=sections.stream().sorted(Comparator.comparingDouble((Section s)->
                       assigned.get(s.id())/Math.max(.01,s.weight()))).toList();
@@ -172,19 +194,7 @@ public class ScheduleEngine {
                     ?"Pomodoro 50+10: produção de redação, seguida de revisão de conteúdo e linguagem"
                     :"Pomodoro 50+10: estudo objetivo do tópico e síntese dos conceitos essenciais"); block.put("subtopics",takeaways); block.put("done",false);
                 byWeek.computeIfAbsent(date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)),k->new ArrayList<>()).add(block);
-                studiedSubjects.add(chosen.title());
                 remaining-=duration;
-            }
-            if(questionsMinutes>0&&!studiedSubjects.isEmpty()){
-                var exercise=new LinkedHashMap<String,Object>();exercise.put("id","block-"+counter++);exercise.put("day",weekday(date.getDayOfWeek()));
-                exercise.put("date",date.format(BR));exercise.put("isoDate",date);exercise.put("title","Questões dos assuntos do dia");
-                exercise.put("subjectTitle","Treinamento diário");exercise.put("topicTitle","");exercise.put("activityType","QUESTIONS");
-                exercise.put("duration",formatMinutes(questionsMinutes));exercise.put("durationMinutes",questionsMinutes);
-                exercise.put("questionGoal",Math.max(10,questionsMinutes/3));
-                exercise.put("isOptional",true);exercise.put("outsidePlannedHours",true);
-                exercise.put("methodology","Treino extra opcional: escolha o tempo no cronômetro de questões e corrija os erros.");
-                exercise.put("subtopics",new ArrayList<>(studiedSubjects));exercise.put("done",false);
-                byWeek.computeIfAbsent(date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)),k->new ArrayList<>()).add(exercise);
             }
         }
         var result=new ArrayList<Map<String,Object>>(); int i=0;

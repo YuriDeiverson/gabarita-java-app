@@ -31,9 +31,10 @@ public class AdminCatalogController {
     public record BaseStudyMaterialRequest(@NotBlank String sectionId,@NotBlank String cardId,@NotNull String content,
       List<String> keyTakeaways){}
     public record SharedSubjectCreateRequest(@NotBlank @Size(max=240) String title,@NotBlank @Size(max=240) String discipline,
-      @NotBlank String studyGroup,@NotBlank String studyObjective,List<String> reviewSummary){}
+      @NotBlank String studyGroup,@NotBlank String studyObjective,List<String> reviewSummary,@NotBlank String content,
+      List<String> keyTakeaways){}
     public record SharedSubjectUpdateRequest(@NotBlank String discipline,@NotBlank String studyGroup,@NotBlank String studyObjective,
-      List<String> reviewSummary){}
+      List<String> reviewSummary,@NotBlank String content,List<String> keyTakeaways){}
     public record SharedSubjectBatchItem(@NotBlank @Size(max=240) String title,@NotBlank @Size(max=240) String discipline,
       @NotBlank String studyGroup,@NotBlank String studyObjective,List<String> reviewSummary){}
     public record SharedSubjectBatchRequest(@NotEmpty @Size(max=500) List<@Valid SharedSubjectBatchItem> subjects){}
@@ -110,7 +111,8 @@ public class AdminCatalogController {
     public Map<String,Object> createSharedSubject(@Valid @RequestBody SharedSubjectCreateRequest r){currentUser.requireAdmin();
         String title=r.title().trim();String discipline=r.discipline().trim();String group=validStudyGroup(r.studyGroup());
         if(findShared(title,discipline)!=null)throw new IllegalArgumentException("Este assunto já existe nesta disciplina");
-        String id=insertSharedSubject(title,discipline,group,r.studyObjective(),r.reviewSummary());
+        StudyMaterialQuality.validate(r.content(),r.keyTakeaways(),r.reviewSummary());
+        String id=insertSharedSubject(title,discipline,group,r.studyObjective(),r.reviewSummary(),studyContent(r.content()),r.keyTakeaways());
         SharedSnapshot shared=sharedSnapshot(UUID.fromString(id));int synchronizedPlans=synchronizeShared(shared);
         return Map.of("id",id,"title",title,"discipline",discipline,"studyGroup",group,"synchronizedPlans",synchronizedPlans);
     }
@@ -131,18 +133,19 @@ public class AdminCatalogController {
             pending.add(new PendingSharedSubject(key,title,discipline,group,item.studyObjective().trim(),item.reviewSummary()));
         }
         var created=insertSharedSubjects(pending);
-        int synchronizedPlans=synchronizeShared(created);
         return Map.of("imported",created.size(),"skippedExisting",skippedExisting,"skippedRepeated",skippedRepeated,
-          "synchronizedPlans",synchronizedPlans,"ids",created.stream().map(SharedSnapshot::id).toList());
+          "pendingEditorial",created.size(),"synchronizedPlans",0,"ids",created.stream().map(SharedSnapshot::id).toList());
     }
 
     @PutMapping("/subjects/{id}") @Transactional
     public Map<String,Object> updateSharedSubject(@PathVariable UUID id,@Valid @RequestBody SharedSubjectUpdateRequest r){currentUser.requireAdmin();
-        String group=validStudyGroup(r.studyGroup());int updated=jdbc.sql("""
+        String group=validStudyGroup(r.studyGroup());StudyMaterialQuality.validate(r.content(),r.keyTakeaways(),r.reviewSummary());
+        int updated=jdbc.sql("""
           UPDATE shared_study_subjects SET discipline=:discipline,study_group=:group,study_objective=:objective,
-            review_summary=CAST(:summary AS jsonb),updated_at=now() WHERE id=:id
+            review_summary=CAST(:summary AS jsonb),base_content=:content,key_takeaways=CAST(:points AS jsonb),updated_at=now() WHERE id=:id
           """).param("discipline",r.discipline().trim()).param("group",group).param("objective",r.studyObjective().trim())
-          .param("summary",pointsJson(r.reviewSummary())).param("id",id).update();
+          .param("summary",pointsJson(r.reviewSummary())).param("content",studyContent(r.content()))
+          .param("points",pointsJson(r.keyTakeaways())).param("id",id).update();
         if(updated==0)throw new NoSuchElementException("Assunto não encontrado");
         SharedSnapshot shared=sharedSnapshot(id);int synchronizedPlans=synchronizeShared(shared);
         return Map.of("id",id.toString(),"title",shared.title(),"synchronizedPlans",synchronizedPlans);
@@ -269,12 +272,24 @@ public class AdminCatalogController {
     private String pointsJson(List<String> points){try{return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(
         points==null?List.of():points.stream().map(this::text).filter(value->!value.isBlank()).toList());}
         catch(Exception error){throw new IllegalArgumentException("Pontos-chave inválidos");}}
-    private String insertSharedSubject(String title,String discipline,String group,String objective,List<String> summary){
+    private String studyContent(String content){
+        String value=text(content);
+        if(value.matches("(?s).*<\\/?[A-Za-z][^>]*>.*"))return value;
+        return Arrays.stream(value.split("(?:\\r?\\n){2,}"))
+          .map(String::trim).filter(paragraph->!paragraph.isBlank())
+          .map(paragraph->"<p>"+htmlEscape(paragraph).replace("\n","<br>")+"</p>")
+          .reduce("",String::concat);
+    }
+    private String htmlEscape(String value){return value.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+      .replace("\"","&quot;").replace("'","&#39;");}
+    private String insertSharedSubject(String title,String discipline,String group,String objective,List<String> summary,
+      String content,List<String> keyTakeaways){
         return jdbc.sql("""
           INSERT INTO shared_study_subjects(canonical_key,title,discipline,study_group,study_objective,review_summary,base_content,key_takeaways,content_blocks)
-          VALUES(:key,:title,:discipline,:group,:objective,CAST(:summary AS jsonb),'','[]'::jsonb,'[]'::jsonb) RETURNING id::text
+          VALUES(:key,:title,:discipline,:group,:objective,CAST(:summary AS jsonb),:content,CAST(:points AS jsonb),'[]'::jsonb) RETURNING id::text
           """).param("key",availableSharedKey(title,discipline)).param("title",title).param("discipline",discipline)
-          .param("group",group).param("objective",text(objective)).param("summary",pointsJson(summary)).query(String.class).single();
+          .param("group",group).param("objective",text(objective)).param("summary",pointsJson(summary))
+          .param("content",content.trim()).param("points",pointsJson(keyTakeaways)).query(String.class).single();
     }
     private String availableSharedKey(String title,String discipline){
         return availableSharedKey(title,discipline,null);
@@ -410,12 +425,17 @@ public class AdminCatalogController {
         return new SharedSnapshot(String.valueOf(row.get("id")),String.valueOf(row.get("canonical_key")),String.valueOf(row.get("title")),
           String.valueOf(row.get("discipline")),String.valueOf(row.get("study_group")),String.valueOf(row.get("study_objective")),parse(String.valueOf(row.get("summary"))),String.valueOf(row.get("base_content")),parse(String.valueOf(row.get("points"))),parse(String.valueOf(row.get("blocks"))));}
     private SharedSnapshot findSharedById(String value){if(value==null||value.isBlank())return null;try{return sharedSnapshot(UUID.fromString(value));}catch(IllegalArgumentException|NoSuchElementException ignored){return null;}}
+    private boolean completeStudyMaterial(SharedSnapshot shared){return StudyMaterialQuality.isComplete(
+      shared.content(),jsonTextList(shared.keyTakeaways()),jsonTextList(shared.reviewSummary()));}
+    private List<String> jsonTextList(JsonNode values){var result=new ArrayList<String>();
+      if(values!=null&&values.isArray())for(var value:values)if(value.isTextual())result.add(value.asText());return result;}
     private void hydrateFromLibrary(JsonNode curriculum){var rows=jdbc.sql("""
           SELECT id::text id,canonical_key,title,discipline,study_group,study_objective,review_summary::text summary,base_content,key_takeaways::text points,content_blocks::text blocks
           FROM shared_study_subjects
-          """).query().listOfRows();for(var row:rows)applyShared(curriculum,new SharedSnapshot(String.valueOf(row.get("id")),
+          """).query().listOfRows();for(var row:rows){var shared=new SharedSnapshot(String.valueOf(row.get("id")),
           String.valueOf(row.get("canonical_key")),String.valueOf(row.get("title")),String.valueOf(row.get("discipline")),String.valueOf(row.get("study_group")),String.valueOf(row.get("study_objective")),parse(String.valueOf(row.get("summary"))),
-          String.valueOf(row.get("base_content")),parse(String.valueOf(row.get("points"))),parse(String.valueOf(row.get("blocks")))));}
+          String.valueOf(row.get("base_content")),parse(String.valueOf(row.get("points"))),parse(String.valueOf(row.get("blocks"))));
+          if(completeStudyMaterial(shared))applyShared(curriculum,shared);}}
     private int synchronizeShared(SharedSnapshot shared){return synchronizeShared(List.of(shared));}
     private int synchronizeShared(List<SharedSnapshot> sharedSubjects){
         if(sharedSubjects.isEmpty())return 0;

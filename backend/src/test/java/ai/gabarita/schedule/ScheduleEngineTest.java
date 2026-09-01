@@ -1,6 +1,7 @@
 package ai.gabarita.schedule;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -15,16 +16,14 @@ class ScheduleEngineTest {
     private final ScheduleEngine engine = new ScheduleEngine(null,json);
 
     @Test
-    void usesFixedPomodoroBlocksAndKeepsQuestionsOutsideDeclaredTime() {
+    void generatesOnlyFixedStudySessionsWithoutQuestionExtras() {
         var sections=json.createArrayNode().add(section("specific","Conhecimentos Específicos","50%","Redes"));
         var blocks=blocks(engine.generateLegacy(request(sections,2,20)));
         var content=blocks.stream().filter(block->"THEORY".equals(block.get("activityType"))).toList();
         var questions=blocks.stream().filter(block->"QUESTIONS".equals(block.get("activityType"))).toList();
 
         assertTrue(content.stream().allMatch(block->Integer.valueOf(60).equals(block.get("durationMinutes"))));
-        assertTrue(questions.stream().allMatch(block->Integer.valueOf(30).equals(block.get("durationMinutes"))));
-        assertTrue(questions.stream().allMatch(block->Boolean.TRUE.equals(block.get("isOptional"))));
-        assertTrue(questions.stream().allMatch(block->Boolean.TRUE.equals(block.get("outsidePlannedHours"))));
+        assertTrue(questions.isEmpty(),"O cronograma não deve criar sessões extras de questões");
         assertEquals(120,content.stream().filter(block->LocalDate.now().equals(block.get("isoDate")))
                 .mapToInt(block->(Integer)block.get("durationMinutes")).sum());
     }
@@ -58,6 +57,16 @@ class ScheduleEngineTest {
     }
 
     @Test
+    void keepsTheVerticalizedScheduleStableForTheSameInputs() {
+        var sections=json.createArrayNode()
+                .add(section("specific","Conhecimentos Específicos","50%","Redes"))
+                .add(section("general","Conhecimentos Gerais","30%","Português"));
+        var request=request(sections,3,30);
+
+        assertEquals(engine.generateLegacy(request),engine.generateLegacy(request));
+    }
+
+    @Test
     void excludesWeekdaysNotSelectedByTheStudent() {
         var settings=json.createObjectNode();
         var preferences=settings.putObject("preferences");
@@ -66,7 +75,10 @@ class ScheduleEngineTest {
         for(int day=1;day<=5;day++)hours.put(String.valueOf(day),2);
 
         assertTrue(ScheduleEngine.availableOn(settings,LocalDate.of(2026,8,31)));
-        assertTrue(!ScheduleEngine.availableOn(settings,LocalDate.of(2026,9,5)));
+        assertFalse(ScheduleEngine.availableOn(settings,LocalDate.of(2026,9,5)));
+        assertTrue(ScheduleEngine.shouldDisplayTask(settings,LocalDate.of(2026,8,31),"PENDING"));
+        assertFalse(ScheduleEngine.shouldDisplayTask(settings,LocalDate.of(2026,8,31),"SKIPPED"));
+        assertFalse(ScheduleEngine.shouldDisplayTask(settings,LocalDate.of(2026,9,5),"PENDING"));
     }
 
     private ScheduleController.GenerateRequest request(JsonNode sections,double hours,int days){

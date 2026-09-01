@@ -27,7 +27,6 @@ import "./ScheduleTab.css";
 interface Props {
   studyContext: ActiveStudyContext | null;
   onOpenStudy: (context?: ActiveStudyContext) => void;
-  onOpenQuestions: () => void;
   refreshVersion?: number;
 }
 
@@ -37,7 +36,7 @@ const statusLabel: Record<string, string> = {
   AVAILABLE: "Disponível",
   PENDING: "Planejado",
   PLANNED: "Planejado",
-  MISSED: "Não realizado",
+  MISSED: "Não estudado",
   MOVED: "Reagendado",
   SKIPPED: "Ignorado",
 };
@@ -205,13 +204,11 @@ function AgendaTopicAccordion({
               </strong>
             </span>
           </div>
-          {(item.roadmap_topic_id || item.activity_type === "QUESTIONS") && (
+          {item.status !== "MISSED" && item.roadmap_topic_id && (
             <div className="agenda-modal-topic-action">
               <button type="button" onClick={onOpen}>
-                {item.activity_type === "QUESTIONS" ? <CircleHelp /> : <BookOpen />} {" "}
-                {item.activity_type === "QUESTIONS"
-                  ? "Abrir banco de questões"
-                  : item.status === "COMPLETED"
+                <BookOpen /> {" "}
+                {item.status === "COMPLETED"
                   ? "Revisar assunto"
                   : "Abrir assunto para estudar"}
               </button>
@@ -223,7 +220,7 @@ function AgendaTopicAccordion({
   );
 }
 
-export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions, refreshVersion }: Props) {
+export default function ScheduleTab({ studyContext, onOpenStudy, refreshVersion }: Props) {
   const today = isoDate(new Date());
   const [dashboard, setDashboard] = useState<StudyDashboardData | null>(null);
   const [agenda, setAgenda] = useState<ScheduleAgendaDay[]>([]);
@@ -692,10 +689,6 @@ export default function ScheduleTab({ studyContext, onOpenStudy, onOpenQuestions
                             onToggle={() => toggleModalItem(id)}
                             onOpen={() => {
                               closeAgendaModal();
-                              if (item.activity_type === "QUESTIONS") {
-                                onOpenQuestions();
-                                return;
-                              }
                               onOpenStudy({
                                 roadmapTopicId: String(item.roadmap_topic_id),
                                 topicTitle: item.topic_title || item.title,
