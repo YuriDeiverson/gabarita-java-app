@@ -4,7 +4,6 @@ import {
   Brain,
   Check,
   CheckCircle,
-  Lightbulb,
   ListFilter,
   LoaderCircle,
   Target,
@@ -93,21 +92,17 @@ const sanitizeStudyHtml = (html: string) => {
   return template.innerHTML;
 };
 
-const applicationGuide = (discipline: string, subject: string) => {
-  const normalized = normalizeStudyText(`${discipline} ${subject}`);
-  if (/(raciocinio|matematica|estatistica|contabilidade|calculo)/.test(normalized)) {
-    return 'Separe os dados do enunciado, escreva a regra que será usada e só então faça o cálculo. Ao final, confira se o resultado responde exatamente ao que foi perguntado.';
-  }
-  if (/(direito|legislacao|lei|norma|etica)/.test(normalized)) {
-    return 'Identifique quem pratica a conduta, qual regra se aplica, em que condição ela vale e qual é a consequência. Isso evita decorar artigos de forma isolada.';
-  }
-  if (/(lingua|portugues|ingles|redacao|jornalismo)/.test(normalized)) {
-    return 'Localize as palavras-chave do comando, volte ao trecho ou à regra pertinente e justifique a resposta com uma evidência do texto — não apenas pela impressão de leitura.';
-  }
-  if (/(tecnologia|informacao|sistema|seguranca|dados|informatica)/.test(normalized)) {
-    return 'Comece pelo problema que o conceito resolve. Depois relacione seus componentes, benefícios, limitações e um caso de uso prático antes de escolher a alternativa.';
-  }
-  return 'Comece identificando o conceito central, relacione-o a uma situação prática e confirme se a conclusão atende exatamente ao comando da questão.';
+const genericMaterialMarkers = [
+  'integra a disciplina',
+  'deve ser estudado como uma ferramenta',
+  'conecte o problema resolvido aos componentes',
+  'desenhe uma cadeia de entrada processamento saida e controle',
+  'imagine uma questao cobrando',
+];
+
+const isGenericMaterial = (content: string) => {
+  const normalized = normalizeStudyText(content.replace(/<[^>]+>/g, ' '));
+  return !normalized || genericMaterialMarkers.some(marker => normalized.includes(normalizeStudyText(marker)));
 };
 
 export default function StudyTab({ studyContext, onCurrentActivityComplete }: StudyTabProps) {
@@ -245,37 +240,20 @@ export default function StudyTab({ studyContext, onCurrentActivityComplete }: St
   }
 
   const isCompleted = Boolean(completedCards[activeCard.id]);
-  const contentBlocks = activeCard.contentBlocks || [];
+  const materialUnavailable = isGenericMaterial(activeCard.content);
+  const contentBlocks = materialUnavailable ? [] : (activeCard.contentBlocks || []);
   const objective =
     activeCard.studyObjective?.trim() ||
     `Compreender ${activeCard.title} e aplicar os conceitos com segurança em questões de prova.`;
-  const reviewPoints = distinctPoints([...(activeCard.reviewSummary || []), ...(activeCard.keyTakeaways || [])]).slice(
-    0,
-    3
-  );
-  const fallbackMiniQuestions = [
-    {
-      prompt: `Sem consultar o texto, explique qual habilidade você precisa desenvolver em “${activeCard.title}”.`,
-      answer: objective,
-    },
-    {
-      prompt: `Qual é o conceito ou cuidado mais importante deste assunto?`,
-      answer:
-        reviewPoints[0] ||
-        'Retome o conceito central, identifique seus elementos e relacione-os ao comando da questão.',
-    },
-    {
-      prompt: 'Como você verificaria se uma alternativa está correta antes de marcá-la?',
-      answer: reviewPoints[1] || applicationGuide(activeSection.title, activeCard.title),
-    },
-  ];
+  const reviewPoints = materialUnavailable
+    ? []
+    : distinctPoints([...(activeCard.reviewSummary || []), ...(activeCard.keyTakeaways || [])]).slice(0, 3);
   const materialMiniQuestions = contentBlocks
     .flatMap(block => block.miniQuestions || [])
     .filter(question => question?.prompt?.trim() && question?.answer?.trim())
     .slice(0, 3);
-  const miniQuestions = materialMiniQuestions.length > 0 ? materialMiniQuestions : fallbackMiniQuestions;
-  const hasAppliedExample = contentBlocks.some(block => block.id === 'exemplo-aplicado');
-  const safeBaseContent = sanitizeStudyHtml(activeCard.content);
+  const miniQuestions = materialMiniQuestions;
+  const safeBaseContent = materialUnavailable ? '' : sanitizeStudyHtml(activeCard.content);
 
   return (
     <div id="study-tab-container" className="study-layout">
@@ -334,7 +312,7 @@ export default function StudyTab({ studyContext, onCurrentActivityComplete }: St
         </header>
 
         <article className="study-reader-scroll" aria-label={activeCard.title}>
-          <section className="study-reader-learning-path" aria-label="Roteiro de estudo">
+          {!materialUnavailable && <section className="study-reader-learning-path" aria-label="Roteiro de estudo">
             <div>
               <span>Objetivo do estudo</span>
               <h3>Ao final desta sessão, você deverá conseguir:</h3>
@@ -345,21 +323,15 @@ export default function StudyTab({ studyContext, onCurrentActivityComplete }: St
               <li>Use o exemplo guiado para transformar a teoria em um raciocínio de prova.</li>
               <li>Responda às miniquestões antes de revelar a correção.</li>
             </ol>
-          </section>
+          </section>}
 
-          <div className="study-reader-rich-content" dangerouslySetInnerHTML={{ __html: safeBaseContent }} />
-
-          {!hasAppliedExample && (
-            <section className="study-reader-example" aria-label="Exemplo guiado">
-              <strong>
-                <Lightbulb /> Exemplo guiado de aplicação
-              </strong>
-              <p>
-                Imagine uma questão cobrando <b>{activeCard.title}</b>. Antes de olhar as alternativas, explique com suas
-                palavras qual conceito resolve o problema e procure no enunciado a evidência que sustenta essa escolha.
-              </p>
-              <p>{applicationGuide(activeSection.title, activeCard.title)}</p>
+          {materialUnavailable ? (
+            <section className="study-reader-example" role="status">
+              <strong>Material editorial em revisão</strong>
+              <p>Este assunto ainda não possui explicação factual suficiente para ser apresentado como aula.</p>
             </section>
+          ) : (
+            <div className="study-reader-rich-content" dangerouslySetInnerHTML={{ __html: safeBaseContent }} />
           )}
 
           {contentBlocks.map((block, index) => (
@@ -398,7 +370,7 @@ export default function StudyTab({ studyContext, onCurrentActivityComplete }: St
             </aside>
           )}
 
-          <section className="study-reader-mini-questions" aria-label="Miniquestões de fixação">
+          {miniQuestions.length > 0 && <section className="study-reader-mini-questions" aria-label="Miniquestões de fixação">
             <header>
               <div>
                 <strong>
@@ -420,14 +392,14 @@ export default function StudyTab({ studyContext, onCurrentActivityComplete }: St
                 </article>
               ))}
             </div>
-          </section>
+          </section>}
         </article>
 
         <footer className="study-reader-footer">
           <button
             type="button"
             className={isCompleted ? 'is-completed' : ''}
-            disabled={completionBusy}
+            disabled={completionBusy || materialUnavailable}
             onClick={completeCurrent}
           >
             {isCompleted ? <CheckCircle /> : <Check />}

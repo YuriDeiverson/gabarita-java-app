@@ -33,6 +33,30 @@ class StudyMaterialQualityTest {
     }
 
     @Test
+    void rejectsTheGenericTechnologyTemplateShownToStudents() {
+        String content = "<p>Conecte o problema resolvido aos componentes, ao funcionamento, aos benefícios e às limitações da solução.</p>"
+          + "<p>" + "Desenhe uma cadeia de entrada, processamento, saída e controle. ".repeat(12) + "</p>"
+          + "<p>" + "Imagine uma questão cobrando o assunto e identifique o que o enunciado pede. ".repeat(10) + "</p>";
+        assertTrue(StudyMaterialQuality.isGeneric(content));
+        assertThrows(IllegalArgumentException.class,
+          () -> StudyMaterialQuality.validate(content, POINTS, POINTS));
+    }
+
+    @Test
+    void rejectsGenericReviewPointsEvenWithAValidBody() {
+        String content = "<p>" + "Conceito factual e específico. ".repeat(12) + "</p>"
+          + "<p>" + "Funcionamento explicado com causa e efeito. ".repeat(10) + "</p>"
+          + "<p>" + "Aplicação concreta com limites técnicos. ".repeat(10) + "</p>";
+        var genericPoints = List.of(
+          "Qual é a ideia central do assunto?",
+          "Como aplicar este assunto?",
+          "Qual erro deve ser evitado?"
+        );
+        assertThrows(IllegalArgumentException.class,
+          () -> StudyMaterialQuality.validate(content, genericPoints, POINTS));
+    }
+
+    @Test
     void rejectsShortLessonAndRepeatedReview() {
         assertThrows(IllegalArgumentException.class,
           () -> StudyMaterialQuality.validate("<p>Curto.</p>", POINTS, POINTS));

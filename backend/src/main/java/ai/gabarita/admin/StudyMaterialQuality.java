@@ -12,7 +12,14 @@ final class StudyMaterialQuality {
       "integra a disciplina",
       "deve ser estudado como uma ferramenta",
       "comece pelo conceito central",
-      "identifique o que o enunciado pede"
+      "identifique o que o enunciado pede",
+      "conecte o problema resolvido aos componentes",
+      "desenhe uma cadeia de entrada processamento saida e controle",
+      "imagine uma questao cobrando",
+      "qual e a ideia central",
+      "como aplicar este assunto",
+      "qual erro deve ser evitado",
+      "conceito condicao e consequencia devem ser estudados juntos"
     );
 
     private StudyMaterialQuality() {}
@@ -25,7 +32,7 @@ final class StudyMaterialQuality {
             );
         }
         String normalized = normalize(plain);
-        if (GENERIC_MARKERS.stream().map(StudyMaterialQuality::normalize).anyMatch(normalized::contains)) {
+        if (isGenericText(normalized)) {
             throw new IllegalArgumentException(
               "Substitua o texto-modelo por uma explicação factual e específica deste assunto"
             );
@@ -49,6 +56,10 @@ final class StudyMaterialQuality {
         }
     }
 
+    static boolean isGeneric(String content) {
+        return isGenericText(normalize(plainText(content)));
+    }
+
     private static void validatePoints(List<String> values, String label) {
         List<String> useful = values == null ? List.of() : values.stream()
           .filter(value -> value != null && !value.isBlank())
@@ -57,7 +68,13 @@ final class StudyMaterialQuality {
             throw new IllegalArgumentException("Informe ao menos três " + label + " específicos do assunto");
         }
         Set<String> unique = new HashSet<>();
-        for (String value : useful) unique.add(normalize(value));
+        for (String value : useful) {
+            String normalized = normalize(value);
+            if (isGenericText(normalized)) {
+                throw new IllegalArgumentException("Os " + label + " devem explicar fatos específicos do assunto");
+            }
+            unique.add(normalized);
+        }
         if (unique.size() != useful.size()) {
             throw new IllegalArgumentException("Os " + label + " não podem repetir a mesma informação");
         }
@@ -79,5 +96,9 @@ final class StudyMaterialQuality {
           .toLowerCase(Locale.ROOT)
           .replaceAll("[^a-z0-9]+", " ")
           .trim();
+    }
+
+    private static boolean isGenericText(String normalized) {
+        return GENERIC_MARKERS.stream().map(StudyMaterialQuality::normalize).anyMatch(normalized::contains);
     }
 }

@@ -35,7 +35,7 @@ public class DailyStudyService {
         LocalDate today = bootstrap.userToday(currentUser.id());
         planner.enforceAvailability(planId,currentUser.id(),today);
         planner.archiveMissed(planId,currentUser.id(),today);
-        engagement.protectYesterday(currentUser.id(), planId);
+        engagement.protectPreviousStudyDay(currentUser.id(), planId);
         var tasks = bootstrap.ensureToday(planId, currentUser.id(), goal);
         refreshReviews(today);
         engagement.refreshDay(currentUser.id(), planId);

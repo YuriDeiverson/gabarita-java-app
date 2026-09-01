@@ -70,6 +70,13 @@ public class AdaptivePlanningService {
         return profile(planId, userId).minutesFor(date) > 0;
     }
 
+    public Set<Integer> studyWeekdays(UUID planId,UUID userId) {
+        PlanProfile profile=profile(planId,userId);
+        var result=new LinkedHashSet<Integer>();
+        for(int weekday:profile.weekdays())if(profile.minutesByWeekday().getOrDefault(weekday,0)>0)result.add(weekday);
+        return Set.copyOf(result);
+    }
+
     /**
      * Removes unstarted tasks that may have been created by an older schedule on
      * weekdays the student did not select, then fills the valid study days again.

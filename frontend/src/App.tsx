@@ -1257,7 +1257,9 @@ export default function App() {
                 <p>
                   {Boolean(headerStudyData.streak.today_qualified)
                     ? 'Ofensiva garantida hoje'
-                    : 'Responda 1 questão ou conclua 1 sessão hoje'}
+                    : Boolean(headerStudyData.streak.today_is_study_day)
+                      ? 'Conclua uma sessão planejada hoje'
+                      : 'Dia livre · sua ofensiva está preservada'}
                 </p>
                 <p>Recorde: {Number(headerStudyData.streak.longest_streak || 0)} dias</p>
                 <p>
@@ -1370,8 +1372,8 @@ export default function App() {
         <div
           className="header-streak-trigger"
           role="img"
-          aria-label={`Ofensiva atual: ${Number(headerStudyData?.streak?.current_streak || 0)} dias. ${Boolean(headerStudyData?.streak?.today_qualified) ? 'Garantida hoje' : 'Responda uma questão ou conclua uma sessão hoje'}`}
-          title={`Ofensiva atual: ${Number(headerStudyData?.streak?.current_streak || 0)} dias. ${Boolean(headerStudyData?.streak?.today_qualified) ? 'Garantida hoje' : 'Responda uma questão ou conclua uma sessão hoje'}`}
+          aria-label={`Ofensiva atual: ${Number(headerStudyData?.streak?.current_streak || 0)} dias. ${Boolean(headerStudyData?.streak?.today_qualified) ? 'Garantida hoje' : Boolean(headerStudyData?.streak?.today_is_study_day) ? 'Conclua uma sessão planejada hoje' : 'Dia livre; ofensiva preservada'}`}
+          title={`Ofensiva atual: ${Number(headerStudyData?.streak?.current_streak || 0)} dias. ${Boolean(headerStudyData?.streak?.today_qualified) ? 'Garantida hoje' : Boolean(headerStudyData?.streak?.today_is_study_day) ? 'Conclua uma sessão planejada hoje' : 'Dia livre; ofensiva preservada'}`}
         >
           <Flame aria-hidden="true" />
           <span>{Number(headerStudyData?.streak?.current_streak || 0)}</span>
@@ -1565,7 +1567,9 @@ export default function App() {
                   <p>
                     {contextualStreakQualified
                       ? 'Ofensiva garantida hoje'
-                      : 'Responda 1 questão ou conclua 1 sessão hoje'}
+                      : Boolean(headerStudyData?.streak?.today_is_study_day)
+                        ? 'Conclua uma sessão planejada hoje'
+                        : 'Dia livre · sua ofensiva está preservada'}
                   </p>
                   <p>
                     {contextualStudiedDays} {contextualStudiedDays === 1 ? 'dia estudado' : 'dias estudados'} neste mês

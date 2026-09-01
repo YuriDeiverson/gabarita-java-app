@@ -15,8 +15,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/catalog")
 public class CatalogController {
-    private final JdbcClient jdbc;private final ObjectMapper json;
-    public CatalogController(JdbcClient jdbc,ObjectMapper json){this.jdbc=jdbc;this.json=json;}
+    private final JdbcClient jdbc;private final ObjectMapper json;private final StudyMaterialEnrichmentService studyMaterials;
+    public CatalogController(JdbcClient jdbc,ObjectMapper json,StudyMaterialEnrichmentService studyMaterials){
+        this.jdbc=jdbc;this.json=json;this.studyMaterials=studyMaterials;
+    }
 
     @GetMapping("/contests")
     public List<Map<String,Object>> contests(
@@ -57,7 +59,7 @@ public class CatalogController {
           SELECT id::text id,canonical_key,title,discipline,study_group,study_objective,review_summary::text review_summary_json,
             base_content,key_takeaways::text key_takeaways_json,content_blocks::text content_blocks_json,updated_at
           FROM shared_study_subjects ORDER BY study_group,discipline,title
-          """).query().listOfRows();var result=new ArrayList<Map<String,Object>>();
+          """).query().listOfRows();rows=studyMaterials.enrichAll(rows);var result=new ArrayList<Map<String,Object>>();
         for(var row:rows){var item=new LinkedHashMap<String,Object>();item.put("id",row.get("id"));item.put("canonicalKey",row.get("canonical_key"));
             item.put("title",row.get("title"));item.put("discipline",row.get("discipline"));item.put("studyGroup",row.get("study_group"));item.put("studyObjective",row.get("study_objective"));item.put("content",row.get("base_content"));
             try{item.put("keyTakeaways",json.readTree(String.valueOf(row.get("key_takeaways_json"))));}catch(Exception ignored){item.put("keyTakeaways",List.of());}
@@ -74,7 +76,7 @@ public class CatalogController {
           FROM shared_study_subjects WHERE id=:id
           """).param("id",id).query().listOfRows();
         if(rows.isEmpty())throw new NoSuchElementException("Assunto não encontrado");
-        var row=rows.getFirst();var item=new LinkedHashMap<String,Object>();
+        var row=studyMaterials.enrichOne(rows.getFirst());var item=new LinkedHashMap<String,Object>();
         item.put("id",row.get("id"));item.put("canonicalKey",row.get("canonical_key"));item.put("title",row.get("title"));
         item.put("discipline",row.get("discipline"));item.put("studyGroup",row.get("study_group"));
         item.put("studyObjective",row.get("study_objective"));item.put("content",row.get("base_content"));

@@ -16,6 +16,6 @@ public class StudyAutomationScheduler {
         jdbc.sql("UPDATE reviews SET status='OVERDUE' WHERE status IN('SCHEDULED','AVAILABLE') AND scheduled_date<CURRENT_DATE").update();
         jdbc.sql("UPDATE reviews SET status='AVAILABLE' WHERE status='SCHEDULED' AND scheduled_date=CURRENT_DATE").update();
         var plans=jdbc.sql("SELECT user_id,id FROM study_plans WHERE is_primary AND status='ACTIVE'").query().listOfRows();
-        plans.forEach(p->engagement.protectYesterday((UUID)p.get("user_id"),(UUID)p.get("id")));
+        plans.forEach(p->engagement.protectPreviousStudyDay((UUID)p.get("user_id"),(UUID)p.get("id")));
     }
 }
