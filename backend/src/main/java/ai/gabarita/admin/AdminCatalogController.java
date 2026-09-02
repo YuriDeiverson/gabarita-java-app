@@ -38,10 +38,26 @@ public class AdminCatalogController {
     public record SharedSubjectBatchItem(@NotBlank @Size(max=240) String title,@NotBlank @Size(max=240) String discipline,
       @NotBlank String studyGroup,@NotBlank String studyObjective,List<String> reviewSummary){}
     public record SharedSubjectBatchRequest(@NotEmpty @Size(max=500) List<@Valid SharedSubjectBatchItem> subjects){}
+    public record CommentedAnswer(@Min(1) @Max(5) int questionNumber,@NotBlank String answer,
+      @NotBlank String commentary){}
+    public record StructuredStudyMaterialItem(
+      @NotBlank String operation,UUID id,
+      @NotBlank @Size(max=240) String title,@NotBlank @Size(max=240) String discipline,
+      @NotBlank String studyGroup,@NotBlank String learningObjective,
+      @NotBlank String introduction,@NotBlank String fundamentalConcepts,
+      @NotBlank String completeDevelopment,@NotBlank String practicalExamples,
+      @NotBlank String importantComparisons,@NotBlank String examTraps,
+      @NotBlank String howUsuallyTested,
+      @NotNull @Size(min=3,max=20) List<@NotBlank String> reviewSummary,
+      @NotNull @Size(min=5,max=5) List<@NotBlank String> fixationQuestions,
+      @NotNull @Size(min=5,max=5) List<@Valid CommentedAnswer> commentedAnswerKey){}
+    public record StructuredStudyMaterialBatchRequest(
+      @NotEmpty @Size(max=100) List<@Valid StructuredStudyMaterialItem> materials){}
     public record StudyDisciplineRequest(@NotBlank String title){}
     public record StudySubjectRequest(@NotBlank String sectionId,@NotBlank String title){}
 
-    @GetMapping public List<Map<String,Object>> all(){currentUser.requireAdmin();return catalog.catalog(true,true);}
+    @GetMapping public List<Map<String,Object>> all(
+      @RequestParam(defaultValue="true") boolean includeCurriculum){currentUser.requireAdmin();return catalog.catalog(true,includeCurriculum);}
 
     @PostMapping("/contests") @ResponseStatus(HttpStatus.CREATED)
     public Map<String,Object> createContest(@Valid @RequestBody ContestRequest r){currentUser.requireAdmin();
@@ -135,6 +151,58 @@ public class AdminCatalogController {
         var created=insertSharedSubjects(pending);
         return Map.of("imported",created.size(),"skippedExisting",skippedExisting,"skippedRepeated",skippedRepeated,
           "pendingEditorial",created.size(),"synchronizedPlans",0,"ids",created.stream().map(SharedSnapshot::id).toList());
+    }
+
+    @PostMapping("/materials/batch") @ResponseStatus(HttpStatus.CREATED) @Transactional
+    public Map<String,Object> importStructuredStudyMaterials(
+      @Valid @RequestBody StructuredStudyMaterialBatchRequest request){currentUser.requireAdmin();
+        var synchronizedSubjects=new ArrayList<SharedSnapshot>();var resultIds=new ArrayList<String>();
+        var seenSubjects=new HashSet<String>();var seenIds=new HashSet<UUID>();int created=0;int updated=0;
+        for(int index=0;index<request.materials().size();index++){
+            var item=request.materials().get(index);String prefix="Material "+(index+1);
+            String operation=text(item.operation()).toUpperCase(Locale.ROOT);
+            if(!Set.of("CREATE","UPDATE").contains(operation))
+                throw new IllegalArgumentException(prefix+": operation deve ser CREATE ou UPDATE");
+            if("CREATE".equals(operation)&&item.id()!=null)
+                throw new IllegalArgumentException(prefix+": não informe id ao usar operation CREATE");
+            String title=item.title().trim();String discipline=item.discipline().trim();
+            String pair=subjectCanonical(title)+"::"+canonical(discipline);
+            if(!seenSubjects.add(pair))throw new IllegalArgumentException(prefix+": o assunto está repetido neste JSON");
+            if(item.id()!=null&&!seenIds.add(item.id()))throw new IllegalArgumentException(prefix+": o id está repetido neste JSON");
+
+            SharedSnapshot existing=item.id()==null?findShared(title,discipline):findSharedById(item.id().toString());
+            if(item.id()!=null&&existing!=null&&
+              (!subjectCanonical(existing.title()).equals(subjectCanonical(title))||
+                !canonical(existing.discipline()).equals(canonical(discipline))))
+                throw new IllegalArgumentException(prefix+": o id não pertence ao título e à disciplina informados");
+            if("CREATE".equals(operation)&&existing!=null)
+                throw new IllegalArgumentException(prefix+": o assunto já existe; use operation UPDATE e informe seu id, se disponível");
+            if("UPDATE".equals(operation)&&existing==null)
+                throw new NoSuchElementException(prefix+": assunto existente não encontrado para atualização");
+
+            var prepared=prepareStructuredMaterial(item,prefix);
+            String id;
+            if(existing==null){
+                id=insertSharedSubject(title,discipline,prepared.studyGroup(),item.learningObjective(),
+                  item.reviewSummary(),prepared.content(),item.reviewSummary());created++;
+            }else{
+                id=existing.id();
+                jdbc.sql("""
+                  UPDATE shared_study_subjects SET title=:title,discipline=:discipline,study_group=:group,
+                    study_objective=:objective,review_summary=CAST(:summary AS jsonb),base_content=:content,
+                    key_takeaways=CAST(:points AS jsonb),updated_at=now() WHERE id=:id
+                  """).param("title",title).param("discipline",discipline).param("group",prepared.studyGroup())
+                  .param("objective",item.learningObjective().trim()).param("summary",pointsJson(item.reviewSummary()))
+                  .param("content",prepared.content()).param("points",pointsJson(item.reviewSummary()))
+                  .param("id",UUID.fromString(id)).update();updated++;
+            }
+            jdbc.sql("UPDATE shared_study_subjects SET content_blocks=CAST(:blocks AS jsonb),updated_at=now() WHERE id=:id")
+              .param("blocks",prepared.contentBlocks().toString()).param("id",UUID.fromString(id)).update();
+            var shared=sharedSnapshot(UUID.fromString(id));synchronizedSubjects.add(shared);resultIds.add(id);
+        }
+        int synchronizedPlans=synchronizeShared(synchronizedSubjects);
+        return Map.of("created",created,"updated",updated,"processed",resultIds.size(),
+          "synchronizedPlans",synchronizedPlans,"ids",resultIds);
     }
 
     @PutMapping("/subjects/{id}") @Transactional
@@ -340,6 +408,7 @@ public class AdminCatalogController {
     @FunctionalInterface private interface CurriculumMutation{boolean apply(JsonNode root);}
     private record SharedSnapshot(String id,String canonicalKey,String title,String discipline,String studyGroup,String studyObjective,JsonNode reviewSummary,String content,JsonNode keyTakeaways,JsonNode contentBlocks){}
     private record PendingSharedSubject(String key,String title,String discipline,String studyGroup,String studyObjective,List<String> reviewSummary){}
+    record PreparedStructuredMaterial(String studyGroup,String content,JsonNode contentBlocks){}
     private record RoleCurriculum(String courseId,JsonNode curriculum){}
     private RoleCurriculum roleCurriculum(UUID roleId){var row=jdbc.sql("SELECT course_id,curriculum::text curriculum_json FROM catalog_roles WHERE id=:id")
       .param("id",roleId).query().listOfRows().stream().findFirst().orElseThrow(()->new NoSuchElementException("Cargo não encontrado"));
@@ -394,6 +463,58 @@ public class AdminCatalogController {
         SharedSnapshot shared=upsertShared(discipline,studyGroup(curriculum,sectionId),card);return synchronizeShared(shared);
     }
     private JsonNode parse(String value){try{return new com.fasterxml.jackson.databind.ObjectMapper().readTree(value);}catch(Exception error){throw new IllegalArgumentException("Conteúdo programático inválido");}}
+
+    PreparedStructuredMaterial prepareStructuredMaterial(StructuredStudyMaterialItem item,String prefix){
+        String group=validStudyGroup(item.studyGroup());
+        var suppliedTexts=new ArrayList<String>(List.of(item.title(),item.discipline(),item.learningObjective(),
+          item.introduction(),item.fundamentalConcepts(),item.completeDevelopment(),item.practicalExamples(),
+          item.importantComparisons(),item.examTraps(),item.howUsuallyTested()));
+        suppliedTexts.addAll(item.reviewSummary());suppliedTexts.addAll(item.fixationQuestions());
+        item.commentedAnswerKey().forEach(answer->{suppliedTexts.add(answer.answer());suppliedTexts.add(answer.commentary());});
+        if(suppliedTexts.stream().map(this::text).anyMatch(value->value.toUpperCase(Locale.ROOT).contains("[PREENCHA")))
+            throw new IllegalArgumentException(prefix+": substitua todos os marcadores [PREENCHA: ...] pelo conteúdo definitivo");
+        var answers=new TreeMap<Integer,CommentedAnswer>();
+        for(var answer:item.commentedAnswerKey())if(answers.put(answer.questionNumber(),answer)!=null)
+            throw new IllegalArgumentException(prefix+": o gabarito repete a questão "+answer.questionNumber());
+        if(!answers.keySet().equals(Set.of(1,2,3,4,5)))
+            throw new IllegalArgumentException(prefix+": o gabarito comentado deve responder às questões de 1 a 5");
+        var sections=List.of(
+          Map.entry("Introdução",item.introduction()),
+          Map.entry("Conceitos fundamentais",item.fundamentalConcepts()),
+          Map.entry("Desenvolvimento completo",item.completeDevelopment()),
+          Map.entry("Exemplos práticos",item.practicalExamples()),
+          Map.entry("Comparações importantes",item.importantComparisons()),
+          Map.entry("Pegadinhas de prova",item.examTraps()),
+          Map.entry("Como o assunto costuma ser cobrado",item.howUsuallyTested())
+        );
+        var content=new StringBuilder();
+        for(var section:sections)content.append("<h2>").append(htmlEscape(section.getKey())).append("</h2>")
+          .append(structuredStudyContent(section.getValue()));
+        content.append("<h2>Resumo para revisão</h2><ul>");
+        item.reviewSummary().stream().map(this::text).filter(value->!value.isBlank())
+          .forEach(point->content.append("<li>").append(htmlEscape(point)).append("</li>"));
+        content.append("</ul>");
+        StudyMaterialQuality.validate(content.toString(),item.reviewSummary(),item.reviewSummary());
+
+        var mapper=new com.fasterxml.jackson.databind.ObjectMapper();var blocks=mapper.createArrayNode();
+        var fixation=blocks.addObject();fixation.put("id","structured-fixation-questions");
+        fixation.put("title","Cinco questões de fixação e gabarito comentado");
+        fixation.put("content","<p>Responda às cinco questões antes de abrir o gabarito comentado.</p>");
+        fixation.putArray("keyTakeaways");var questions=fixation.putArray("miniQuestions");
+        for(int number=1;number<=5;number++){
+            var answer=answers.get(number);var question=questions.addObject();
+            question.put("prompt",item.fixationQuestions().get(number-1).trim());
+            question.put("answer",answer.answer().trim()+" — "+answer.commentary().trim());
+        }
+        fixation.put("createdAt",Instant.now().toString());
+        return new PreparedStructuredMaterial(group,content.toString(),blocks);
+    }
+    private String structuredStudyContent(String content){
+        return Arrays.stream(text(content).split("(?:\\r?\\n){2,}"))
+          .map(String::trim).filter(paragraph->!paragraph.isBlank())
+          .map(paragraph->"<p>"+htmlEscape(paragraph).replace("\n","<br>")+"</p>")
+          .reduce("",String::concat);
+    }
     private JsonNode findCard(JsonNode root,String sectionId,String cardId){JsonNode sections=root.isArray()?root:root.path("studySections");
         if(!sections.isArray())return null;for(var section:sections){if(!sectionId.trim().equals(section.path("id").asText()))continue;
             for(var card:section.path("cards"))if(cardId.trim().equals(card.path("id").asText()))return card;}return null;}

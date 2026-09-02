@@ -10,7 +10,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { catalogApi, SharedStudySubject, studyPlansApi } from '../services/api';
+import { studyPlansApi } from '../services/api';
 import { ActiveStudyContext, findContextCard, normalizeStudyText } from '../studyContext';
 import { StudyCard, StudySection } from '../types';
 
@@ -35,30 +35,6 @@ const settingsObject = (value: unknown): Record<string, unknown> => {
   }
   return {};
 };
-
-const mergeSharedStudyLibrary = (current: StudySection[], library: SharedStudySubject[]): StudySection[] =>
-  current.map(section => ({
-    ...section,
-    cards: section.cards.map(card => {
-      const shared =
-        library.find(item => card.sharedSubjectId && item.id === card.sharedSubjectId) ||
-        library.find(
-          item =>
-            normalizeStudyText(item.title) === normalizeStudyText(card.title) &&
-            normalizeStudyText(item.discipline) === normalizeStudyText(section.title)
-        );
-      return shared
-        ? {
-            ...card,
-            content: shared.content,
-            keyTakeaways: shared.keyTakeaways,
-            studyObjective: shared.studyObjective,
-            reviewSummary: shared.reviewSummary,
-            contentBlocks: shared.contentBlocks,
-          }
-        : card;
-    }),
-  }));
 
 const distinctPoints = (values: string[]) => {
   const seen = new Set<string>();
@@ -126,21 +102,17 @@ export default function StudyTab({ studyContext, onCurrentActivityComplete }: St
   useEffect(() => {
     let active = true;
     setContentLoading(true);
-    Promise.allSettled([studyPlansApi.getActive(), catalogApi.studyLibrary()])
-      .then(([planResult, libraryResult]) => {
+    studyPlansApi
+      .getActive()
+      .then(plan => {
         if (!active) return;
-        const remote =
-          planResult.status === 'fulfilled' ? settingsObject(planResult.value.settings).studySections : null;
+        const remote = settingsObject(plan.settings).studySections;
         if (!Array.isArray(remote)) {
           setContentError('O plano ativo ainda não possui material cadastrado.');
           setSections([]);
           return;
         }
-        const merged =
-          libraryResult.status === 'fulfilled'
-            ? mergeSharedStudyLibrary(remote as StudySection[], libraryResult.value)
-            : (remote as StudySection[]);
-        setSections(merged);
+        setSections(remote as StudySection[]);
         setContentError('');
       })
       .catch(() => {
@@ -251,7 +223,7 @@ export default function StudyTab({ studyContext, onCurrentActivityComplete }: St
   const materialMiniQuestions = contentBlocks
     .flatMap(block => block.miniQuestions || [])
     .filter(question => question?.prompt?.trim() && question?.answer?.trim())
-    .slice(0, 3);
+    .slice(0, 5);
   const miniQuestions = materialMiniQuestions;
   const safeBaseContent = materialUnavailable ? '' : sanitizeStudyHtml(activeCard.content);
 

@@ -201,7 +201,7 @@ export interface StudyDashboardData {
     practice_minutes:number; window_days:number; window_end:string; strategy:string;
     is_study_day:boolean; next_study_date:string|null };
   experience: { total_xp: number; level: number; level_name: string; current_level_xp: number; next_level_xp: number };
-  reviews: Record<string, any>[]; next: Record<string, any>; roadmap: Record<string, any>[];
+  reviews: Record<string, any>[]; next: Record<string, any>;
   notifications: Record<string, any>[]; unread_notifications: number;
 }
 
@@ -700,6 +700,11 @@ export interface SharedStudySubject {
     createdAt?:string;
   }>;
   updatedAt?: string;
+  contentLoaded?: boolean;
+  contentLength?: number;
+  keyTakeawayCount?: number;
+  reviewCount?: number;
+  contentBlockCount?: number;
 }
 
 export interface AdminPassage { id: string; title: string; content: string; source?: string; }
@@ -730,11 +735,13 @@ export const catalogApi = {
   contest: (id:string) => jsonRequest<CatalogContest>(`/catalog/contests/${encodeURIComponent(id)}`),
   contestNoticePdf: (id:string) => fileRequest<Blob>(`/catalog/contests/${id}/notice-pdf`, undefined, 'blob'),
   studyLibrary: () => jsonRequest<SharedStudySubject[]>('/catalog/study-library'),
+  studyLibrarySummaries: () => jsonRequest<SharedStudySubject[]>('/catalog/study-library/summaries'),
   studySubject: (id:string) => jsonRequest<SharedStudySubject>(`/catalog/study-library/${encodeURIComponent(id)}`),
 };
 
 export const adminApi = {
-  catalog: () => jsonRequest<CatalogContest[]>('/admin/catalog'),
+  catalog: (includeCurriculum = false) =>
+    jsonRequest<CatalogContest[]>(`/admin/catalog?includeCurriculum=${includeCurriculum}`),
   createContest: (data: Record<string,unknown>) => jsonRequest<{id:string}>('/admin/catalog/contests', { method:'POST',body:JSON.stringify(data) }),
   updateContest: (id:string,data:Record<string,unknown>) => jsonRequest<{id:string}>(`/admin/catalog/contests/${id}`, { method:'PUT',body:JSON.stringify(data) }),
   deleteContest: (id:string) => jsonRequest<void>(`/admin/catalog/contests/${id}`, { method:'DELETE' }),
@@ -758,6 +765,10 @@ export const adminApi = {
   deleteBaseStudyMaterial: (roleId:string,sectionId:string,cardId:string) => {
     const params=new URLSearchParams({sectionId,cardId});return jsonRequest<void>(`/admin/catalog/roles/${roleId}/materials/base?${params}`, {method:'DELETE'});
   },
+  importStructuredStudyMaterials: (materials:Record<string,unknown>[]) =>
+    jsonRequest<{created:number;updated:number;processed:number;synchronizedPlans:number;ids:string[]}>(
+      '/admin/catalog/materials/batch', {method:'POST',body:JSON.stringify({materials})}
+    ),
   createSharedSubject: (data:{title:string;discipline:string;studyGroup:string;studyObjective:string;reviewSummary:string[];content:string;keyTakeaways:string[]}) =>
     jsonRequest<{id:string;title:string;discipline:string;studyGroup:string}>('/admin/catalog/subjects', {method:'POST',body:JSON.stringify(data)}),
   importSharedSubjects: (subjects:Array<{title:string;discipline:string;studyGroup:string;studyObjective:string;reviewSummary:string[]}>) =>

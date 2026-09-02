@@ -68,6 +68,28 @@ public class CatalogController {
             item.put("updatedAt",row.get("updated_at"));result.add(item);}return result;
     }
 
+    @GetMapping("/study-library/summaries")
+    public List<Map<String,Object>> studyLibrarySummaries(){
+        return jdbc.sql("""
+          SELECT id::text id,canonical_key,title,discipline,study_group,study_objective,updated_at,
+            length(COALESCE(base_content,'')) content_length,
+            jsonb_array_length(COALESCE(key_takeaways,'[]'::jsonb)) key_takeaway_count,
+            jsonb_array_length(COALESCE(review_summary,'[]'::jsonb)) review_count,
+            jsonb_array_length(COALESCE(content_blocks,'[]'::jsonb)) content_block_count
+          FROM shared_study_subjects ORDER BY study_group,discipline,title
+          """).query().listOfRows().stream().map(row->{
+            Map<String,Object> item=new LinkedHashMap<>();
+            item.put("id",row.get("id"));item.put("canonicalKey",row.get("canonical_key"));
+            item.put("title",row.get("title"));item.put("discipline",row.get("discipline"));
+            item.put("studyGroup",row.get("study_group"));item.put("studyObjective",row.get("study_objective"));
+            item.put("updatedAt",row.get("updated_at"));item.put("contentLength",row.get("content_length"));
+            item.put("keyTakeawayCount",row.get("key_takeaway_count"));item.put("reviewCount",row.get("review_count"));
+            item.put("contentBlockCount",row.get("content_block_count"));item.put("contentLoaded",false);
+            item.put("content","");item.put("keyTakeaways",List.of());item.put("reviewSummary",List.of());
+            item.put("contentBlocks",List.of());return item;
+          }).toList();
+    }
+
     @GetMapping("/study-library/{id}")
     public Map<String,Object> studySubject(@PathVariable UUID id){
         var rows=jdbc.sql("""

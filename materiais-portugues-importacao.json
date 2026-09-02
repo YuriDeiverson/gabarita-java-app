@@ -1,0 +1,1356 @@
+{
+  "materials": [
+    {
+      "operation": "UPDATE",
+      "id": "133f7d4a-3dd6-48a7-a2e6-8189375b8128",
+      "title": "Coesão Textual e Referenciação",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Específicos",
+      "learningObjective": "Compreender como os elementos linguísticos estabelecem relações de continuidade, retomada e progressão dentro do texto.",
+      "introduction": "A coesão textual corresponde aos mecanismos linguísticos que conectam as partes de um texto, estabelecendo relações entre palavras, orações, períodos e parágrafos. A referenciação é um desses mecanismos e ocorre quando uma expressão linguística retoma, antecipa ou constrói um referente no texto.",
+      "fundamentalConcepts": "Coesão: conjunto de mecanismos linguísticos responsáveis pela ligação entre os elementos do texto.\n\nCoesão referencial: ocorre quando um elemento linguístico estabelece relação com outro elemento ou referente, por retomada ou antecipação.\n\nCoesão sequencial: ocorre por mecanismos que articulam a progressão das ideias, como conectores, conjunções, advérbios e relações temporais.\n\nReferente: entidade, objeto, ideia, pessoa ou situação a que uma expressão linguística se relaciona.\n\nAnáfora: retomada de informação anteriormente apresentada.\n\nCatáfora: antecipação de informação que será apresentada posteriormente.",
+      "completeDevelopment": "Referência anafórica\nA expressão retoma um elemento já mencionado. Exemplo: 'Maria estudou muito. Ela foi aprovada.' O pronome 'ela' retoma 'Maria'.\n\nReferência catafórica\nA expressão aparece antes do elemento que será especificado. Exemplo: 'Só desejo isto: que você estude.' O pronome 'isto' antecipa a oração 'que você estude'.\n\nSubstituição\nUm elemento pode ser utilizado para evitar a repetição de outro. Pronomes, expressões nominais e determinados advérbios podem desempenhar essa função.\n\nElipse\nConsiste na omissão de um termo que pode ser recuperado pelo contexto. Exemplo: 'João estudou pela manhã; Maria, à tarde.' O verbo 'estudou' está elíptico na segunda oração.\n\nRepetição\nA repetição pode contribuir para a coesão quando utilizada intencionalmente para manter um tópico ou enfatizar determinada informação. Portanto, repetição não é necessariamente erro.\n\nConectores\nConectores estabelecem relações lógico-semânticas, como causa, consequência, oposição, condição, finalidade, conclusão e explicação.\n\nProgressão textual\nUm texto coeso não apenas retoma informações; ele também acrescenta novas informações, mantendo continuidade temática e avanço argumentativo.",
+      "practicalExamples": "'O servidor apresentou o relatório. O documento foi encaminhado à chefia.' A expressão 'o documento' retoma 'o relatório'.\n\n'Ele tinha apenas um objetivo: ser aprovado.' O pronome 'ele' pode retomar informação anterior, enquanto a expressão posterior especifica seu objetivo.\n\n'A prova foi difícil, mas os candidatos conseguiram resolvê-la.' O conector 'mas' estabelece oposição.",
+      "importantComparisons": "Anáfora × Catáfora\nA anáfora retoma informação anterior; a catáfora antecipa informação posterior.\n\nCoesão × Coerência\nCoesão diz respeito principalmente às relações linguísticas entre as partes do texto; coerência diz respeito à construção de sentido global e à compatibilidade das ideias.",
+      "examTraps": "Nem todo pronome possui necessariamente um antecedente nominal explícito.\n\nA repetição de palavras não constitui automaticamente falta de coesão.\n\nA substituição de um termo por pronome pode alterar a referência se houver mais de um antecedente possível.\n\nConectores devem ser analisados pelo sentido efetivamente produzido no contexto, e não apenas pelo significado mais comum.",
+      "howUsuallyTested": "É comum a questão solicitar a identificação do referente de um pronome ou expressão, verificar se determinada substituição preserva a coesão, analisar o valor de um conector ou perguntar se a alteração de determinado elemento compromete a continuidade textual.",
+      "reviewSummary": [
+        "Coesão conecta linguisticamente as partes do texto.",
+        "Anáfora retoma informação anterior.",
+        "Catáfora antecipa informação posterior.",
+        "Pronomes e expressões nominais podem realizar referenciação.",
+        "Elipse ocorre quando um termo recuperável pelo contexto é omitido.",
+        "Conectores estabelecem relações lógico-semânticas.",
+        "Coesão e coerência são conceitos relacionados, mas não idênticos."
+      ],
+      "fixationQuestions": [
+        "Em 'O candidato apresentou o recurso. Ele foi analisado pela comissão', o pronome 'Ele' estabelece referência anafórica.\nAlternativas: Certo | Errado",
+        "Em 'Só havia uma possibilidade: a aprovação', ocorre antecipação de informação por meio de elemento catafórico.\nAlternativas: Certo | Errado",
+        "A repetição de uma palavra é sempre incompatível com a coesão textual.\nAlternativas: Certo | Errado",
+        "Em 'Estudou bastante, portanto foi aprovado', o termo 'portanto' estabelece relação de conclusão.\nAlternativas: Certo | Errado",
+        "Coesão e coerência são conceitos absolutamente equivalentes.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "O pronome 'Ele' retoma o termo anteriormente apresentado, 'O candidato'."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Certo",
+          "commentary": "A expressão 'uma possibilidade' é especificada depois pelos dois-pontos."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Errado",
+          "commentary": "A repetição pode ser um mecanismo de manutenção temática e produzir coesão."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Certo",
+          "commentary": "'Portanto' introduz uma conclusão decorrente da informação anterior."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Errado",
+          "commentary": "Coesão trata principalmente das relações linguísticas; coerência envolve a construção do sentido global."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "2bdc93ad-1dcf-4f29-8443-0aab6637fc5f",
+      "title": "5.8 Colocação dos pronomes átonos",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Dominar as regras de colocação de pronomes oblíquos átonos, especialmente próclise, mesóclise e ênclise.",
+      "introduction": "Pronomes oblíquos átonos como me, te, se, o, a, lhe, nos e vos normalmente acompanham verbos e exercem funções sintáticas determinadas. A colocação desses pronomes em relação ao verbo pode ocorrer por próclise, mesóclise ou ênclise.",
+      "fundamentalConcepts": "Próclise: pronome antes do verbo. Exemplo: 'Não me avisaram.'\n\nÊnclise: pronome depois do verbo. Exemplo: 'Avisaram-me ontem.'\n\nMesóclise: pronome inserido no interior da forma verbal. Exemplo: 'Avisar-me-ão amanhã.'",
+      "completeDevelopment": "Próclise\nÉ favorecida ou exigida por elementos atrativos, como palavras de sentido negativo, pronomes relativos, pronomes indefinidos, conjunções subordinativas e advérbios em determinadas estruturas.\n\nÊnclise\nÉ tradicionalmente empregada quando não há elemento que determine a próclise, especialmente em construções formais iniciadas por verbo.\n\nMesóclise\nOcorre com futuro do presente ou futuro do pretérito quando não existe elemento que atraia o pronome para antes do verbo.\n\nLocuções verbais\nEm locuções verbais, a posição do pronome depende da estrutura e dos elementos atrativos presentes. É necessário analisar a locução como um conjunto, sem aplicar mecanicamente uma única regra.\n\nParticípio\nCom particípio, não se coloca pronome oblíquo átono depois do particípio em construções da norma-padrão. Exemplo: 'Tinha-me informado', e não 'Tinha informado-me'.",
+      "practicalExamples": "'Não me disseram a verdade.' A palavra negativa 'não' favorece a próclise.\n\n'Entregar-lhe-ei o documento.' O futuro sem elemento atrativo permite mesóclise.\n\n'Entregaram-me o documento.' O pronome aparece depois do verbo, caracterizando ênclise.",
+      "importantComparisons": "Próclise × Ênclise\nNa próclise, o pronome vem antes do verbo; na ênclise, depois.\n\nMesóclise × Ênclise\nNa mesóclise, o pronome é inserido dentro da forma verbal; na ênclise, aparece após o verbo.",
+      "examTraps": "Palavras negativas são importantes elementos atrativos.\n\nA mesóclise não é usada livremente em qualquer tempo verbal.\n\nO uso coloquial brasileiro não deve ser confundido automaticamente com a norma-padrão exigida em prova.\n\nEm estruturas com elemento atrativo, a próclise tende a prevalecer sobre a ênclise.",
+      "howUsuallyTested": "Questões costumam pedir a correção ou incorreção da posição do pronome, a identificação de próclise, mesóclise ou ênclise e a análise do efeito de uma alteração na estrutura sintática.",
+      "reviewSummary": [
+        "Próclise: pronome antes do verbo.",
+        "Ênclise: pronome depois do verbo.",
+        "Mesóclise: pronome no interior do verbo.",
+        "Negação, relativos e subordinativas são importantes fatores de atração.",
+        "Mesóclise relaciona-se aos futuros do presente e do pretérito, quando não houver atração."
+      ],
+      "fixationQuestions": [
+        "Em 'Não me disseram nada', ocorre próclise.\nAlternativas: Certo | Errado",
+        "Em 'Entregar-lhe-ei o relatório', ocorre mesóclise.\nAlternativas: Certo | Errado",
+        "Em 'Avisaram-me sobre a mudança', ocorre ênclise.\nAlternativas: Certo | Errado",
+        "A mesóclise é obrigatória em qualquer tempo verbal.\nAlternativas: Certo | Errado",
+        "Na norma-padrão, a colocação do pronome deve considerar elementos atrativos presentes na oração.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "O pronome 'me' aparece antes do verbo 'disseram'."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Certo",
+          "commentary": "O pronome está inserido na forma verbal do futuro do presente."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "O pronome aparece depois do verbo."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Errado",
+          "commentary": "A mesóclise possui condições específicas de emprego, especialmente com futuros e ausência de elemento atrativo."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "A presença de elementos atrativos é fundamental para determinar a colocação pronominal."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "0e6598c0-a9d0-47d6-a276-9b973ef915c0",
+      "title": "1 Compreensão e interpretação de textos de gêneros variados.",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Desenvolver a capacidade de localizar informações, inferir sentidos, identificar ideias e interpretar textos de diferentes gêneros.",
+      "introduction": "Compreender um texto significa construir seu sentido a partir das informações apresentadas, da organização linguística e do contexto. Interpretar exige distinguir aquilo que está explicitamente escrito daquilo que pode ser legitimamente inferido.",
+      "fundamentalConcepts": "Compreensão: identificação de informações explícitas no texto.\n\nInterpretação: construção de sentidos a partir das informações textuais e das relações estabelecidas entre elas.\n\nInferência: conclusão obtida a partir de informações presentes no texto, ainda que não esteja literalmente escrita.\n\nTema: assunto central desenvolvido.\n\nTese: posição ou ideia central defendida pelo autor em textos argumentativos.\n\nArgumento: razão utilizada para sustentar uma ideia ou tese.",
+      "completeDevelopment": "Informação explícita\nEstá diretamente apresentada no texto e pode ser localizada por leitura objetiva.\n\nInformação implícita\nNão aparece literalmente, mas pode ser inferida de maneira segura a partir das informações disponíveis.\n\nIdeia principal\nRepresenta a informação central de determinado trecho ou do texto como um todo.\n\nIdeias secundárias\nDesenvolvem, explicam, exemplificam ou sustentam a ideia principal.\n\nFinalidade discursiva\nÉ o propósito comunicativo predominante, como informar, persuadir, criticar, instruir, narrar ou descrever.\n\nPressupostos e subentendidos\nSão informações não apresentadas de forma totalmente direta, mas cuja interpretação depende de elementos linguísticos e contextuais.",
+      "practicalExamples": "Se o texto afirma que 'o número de inscrições aumentou 30%', essa informação é explícita.\n\nSe o texto afirma que determinado resultado ocorreu depois de uma mudança e apresenta relação causal, pode ser possível inferir uma relação entre os fatos, desde que o texto forneça base para isso.\n\nEm uma notícia, a finalidade predominante tende a ser informativa; em um editorial, tende a haver forte componente argumentativo.",
+      "importantComparisons": "Tema × Tese\nTema é o assunto; tese é a posição defendida sobre esse assunto.\n\nCompreensão × Inferência\nCompreensão identifica o que está no texto; inferência extrai conclusão autorizada pelas informações textuais.",
+      "examTraps": "Não acrescente ao texto conhecimentos externos que contrariem ou extrapolem suas informações.\n\nUma inferência precisa ser sustentada pelo texto.\n\nA ideia principal não é necessariamente a primeira frase.\n\nUma alternativa pode estar correta em termos gerais, mas errada por extrapolar uma informação específica.",
+      "howUsuallyTested": "É comum exigir identificação de ideias principais, inferências, relações de causa e consequência, finalidade, posicionamento do autor, informações explícitas e implícitas e significado contextual de expressões.",
+      "reviewSummary": [
+        "Leia o texto antes das alternativas.",
+        "Diferencie informação explícita de inferência.",
+        "Não extrapole o conteúdo.",
+        "Identifique tema, tese e argumentos.",
+        "Observe conectores e relações entre as partes.",
+        "Analise cada alternativa com base no texto."
+      ],
+      "fixationQuestions": [
+        "Uma inferência válida deve possuir fundamento nas informações fornecidas pelo texto.\nAlternativas: Certo | Errado",
+        "Tema e tese são sempre conceitos equivalentes.\nAlternativas: Certo | Errado",
+        "Informação explicitamente apresentada pode ser localizada diretamente no texto.\nAlternativas: Certo | Errado",
+        "Conhecimentos externos ao texto devem prevalecer sobre o conteúdo textual quando houver conflito.\nAlternativas: Certo | Errado",
+        "A finalidade discursiva corresponde ao propósito predominante da comunicação.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "Inferência não é livre imaginação; deve decorrer das informações textuais."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Errado",
+          "commentary": "Tema é o assunto; tese é a posição defendida sobre esse assunto."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "A informação explícita está diretamente apresentada."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Errado",
+          "commentary": "Em interpretação de texto, a resposta deve respeitar o conteúdo fornecido pelo texto."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "A finalidade indica a função comunicativa predominante."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "fa9cfda2-b97f-4947-b02d-3ab81d6baffd",
+      "title": "5.5 Concordância verbal e nominal",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Dominar as regras de concordância entre verbo e sujeito e entre nomes e seus determinantes ou modificadores.",
+      "introduction": "Concordância é a relação de adequação entre palavras dentro da oração. A concordância verbal relaciona o verbo ao sujeito; a concordância nominal relaciona substantivos a palavras que os determinam ou caracterizam.",
+      "fundamentalConcepts": "Concordância verbal: adequação da forma verbal ao número e à pessoa do sujeito.\n\nConcordância nominal: adequação de gênero e número entre o substantivo e seus determinantes ou modificadores.\n\nSujeito simples: possui um núcleo.\n\nSujeito composto: possui dois ou mais núcleos.",
+      "completeDevelopment": "Sujeito simples\nO verbo normalmente concorda com o núcleo do sujeito. Exemplo: 'Os candidatos estudaram.'\n\nSujeito composto\nEm regra, o verbo vai para o plural quando o sujeito possui mais de um núcleo. Exemplo: 'João e Maria estudaram.'\n\nVerbos impessoais\nVerbos impessoais não possuem sujeito e permanecem, em determinadas construções, na terceira pessoa do singular. O verbo haver no sentido de existir é exemplo clássico: 'Havia muitos candidatos'.\n\nConcordância nominal\nAdjetivos, artigos, pronomes e numerais devem concordar com os substantivos a que se referem, observadas as regras específicas de cada construção.\n\nExpressões particulares\nPalavras como 'meio', 'bastante', 'anexo', 'incluso', 'mesmo' e 'próprio' podem gerar questões de concordância conforme a função exercida na frase.",
+      "practicalExamples": "'Os servidores chegaram cedo.' O verbo concorda com 'servidores'.\n\n'Havia muitos documentos sobre a mesa.' O verbo 'haver', no sentido de existir, permanece no singular.\n\n'As servidoras estavam bastante cansadas.' 'Bastante' funciona como advérbio e permanece invariável.",
+      "importantComparisons": "Haver com sentido de existir × Existir\nEm 'Havia problemas', haver é impessoal e fica no singular; em 'Existiam problemas', existir concorda com 'problemas'.\n\nBastante adjetivo × Bastante advérbio\nComo adjetivo, varia; como advérbio, normalmente permanece invariável.",
+      "examTraps": "O verbo haver no sentido de existir é impessoal.\n\nO verbo fazer indicando tempo decorrido também apresenta uso impessoal.\n\nO núcleo do sujeito, e não necessariamente o termo mais próximo do verbo, determina a concordância.\n\nA concordância nominal depende da função sintática e do valor da palavra na oração.",
+      "howUsuallyTested": "Questões frequentemente apresentam frases para julgamento ou reescrita, verificando se a substituição de palavras ou alteração da posição dos termos exige mudança na concordância.",
+      "reviewSummary": [
+        "Verbo concorda com o sujeito.",
+        "Adjetivos e determinantes concordam com os substantivos.",
+        "Haver = existir é impessoal.",
+        "Fazer indicando tempo é impessoal.",
+        "Identifique primeiro o núcleo do sujeito."
+      ],
+      "fixationQuestions": [
+        "Em 'Havia muitos candidatos', a forma verbal está adequada à norma-padrão.\nAlternativas: Certo | Errado",
+        "Em 'Existia muitos candidatos', a concordância está adequada à norma-padrão.\nAlternativas: Certo | Errado",
+        "Em 'Os alunos estudaram', o verbo concorda com o núcleo do sujeito.\nAlternativas: Certo | Errado",
+        "O verbo haver no sentido de existir deve concordar normalmente com o termo que aparece depois dele.\nAlternativas: Certo | Errado",
+        "Em 'As servidoras estavam bastante cansadas', 'bastante' funciona como advérbio.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "Haver no sentido de existir é impessoal e permanece no singular."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Errado",
+          "commentary": "O verbo existir possui sujeito e deve concordar com ele: 'Existiam muitos candidatos'."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "O núcleo 'alunos' está no plural, determinando a forma 'estudaram'."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Errado",
+          "commentary": "No sentido de existir, haver é impessoal."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "Nesse contexto, 'bastante' modifica o adjetivo 'cansadas' e funciona como advérbio."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "241f8e69-286a-4e71-ade3-b1939caf1ce5",
+      "title": "5. Domínio da estrutura morfossintática do período",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Identificar e analisar as estruturas sintáticas presentes em períodos simples e compostos.",
+      "introduction": "Morfossintaxe é o estudo integrado das classes gramaticais e de suas funções nas estruturas sintáticas. O domínio da estrutura do período exige reconhecer termos da oração, relações entre orações e mecanismos de articulação sintática.",
+      "fundamentalConcepts": "Período: enunciado organizado em uma ou mais orações.\n\nOração: estrutura que contém verbo ou locução verbal.\n\nPeríodo simples: possui uma oração.\n\nPeríodo composto: possui duas ou mais orações.\n\nTermos essenciais: sujeito e predicado.\n\nTermos integrantes: complementos verbais, complemento nominal e agente da passiva.\n\nTermos acessórios: adjunto adnominal, adjunto adverbial e aposto.",
+      "completeDevelopment": "Sujeito\nÉ o termo com o qual o verbo normalmente estabelece concordância e sobre o qual se declara algo, embora existam estruturas sem sujeito.\n\nPredicado\nÉ aquilo que se declara a respeito do sujeito ou a estrutura que contém o verbo em orações sem sujeito.\n\nComplementos\nObjetos direto e indireto completam o sentido de verbos; complemento nominal completa o sentido de nomes.\n\nAdjuntos\nAdjunto adnominal caracteriza ou determina um substantivo; adjunto adverbial acrescenta circunstâncias.\n\nAposto e vocativo\nAposto explica, especifica ou resume outro termo; vocativo é usado para chamar ou interpelar alguém.",
+      "practicalExamples": "'O servidor entregou o relatório.' O servidor é sujeito; 'o relatório' é objeto direto.\n\n'A equipe trabalhou ontem.' 'Ontem' é adjunto adverbial.\n\n'Brasília, capital do Brasil, possui características próprias.' 'capital do Brasil' é aposto.",
+      "importantComparisons": "Objeto direto × Complemento nominal\nObjeto direto completa verbo transitivo direto; complemento nominal completa nome.\n\nAposto × Vocativo\nAposto mantém relação sintática com outro termo; vocativo serve para chamar ou interpelar.",
+      "examTraps": "Nem toda oração possui sujeito.\n\nO termo que aparece imediatamente antes do verbo não é necessariamente o sujeito.\n\nA análise deve considerar a função sintática, não apenas a classe gramatical.\n\nUm mesmo tipo de palavra pode exercer diferentes funções sintáticas.",
+      "howUsuallyTested": "É frequente a identificação de funções sintáticas, classificação do sujeito e predicado, reconhecimento de complementos e análise do efeito de alterações na estrutura das orações.",
+      "reviewSummary": [
+        "Oração possui verbo ou locução verbal.",
+        "Período simples possui uma oração.",
+        "Período composto possui mais de uma oração.",
+        "Sujeito e predicado são termos essenciais.",
+        "Objetos completam verbos.",
+        "Complemento nominal completa nomes.",
+        "Adjuntos acrescentam características ou circunstâncias."
+      ],
+      "fixationQuestions": [
+        "Uma oração necessariamente possui verbo ou locução verbal.\nAlternativas: Certo | Errado",
+        "O objeto direto completa o sentido de verbo transitivo direto.\nAlternativas: Certo | Errado",
+        "O complemento nominal completa exclusivamente verbos.\nAlternativas: Certo | Errado",
+        "O vocativo exerce a função de chamar ou interpelar o interlocutor.\nAlternativas: Certo | Errado",
+        "Todo período possui apenas uma oração.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "A presença de verbo ou locução verbal é fundamental para caracterizar a oração."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Certo",
+          "commentary": "Essa é a função do objeto direto."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Errado",
+          "commentary": "Complemento nominal completa nomes, como substantivos, adjetivos e advérbios."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Certo",
+          "commentary": "Vocativo é termo utilizado para chamar ou interpelar."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Errado",
+          "commentary": "Períodos podem ser simples ou compostos."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "2726bf0c-bd12-499c-8eca-15fff97a728b",
+      "title": "Domínio da estrutura morfossintáticado período.",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Reforçar a identificação das principais estruturas morfossintáticas do período.",
+      "introduction": "A estrutura morfossintática envolve a identificação das classes de palavras e das funções que elas exercem na oração. Como este item repete o conteúdo de domínio da estrutura morfossintática do período, os fundamentos devem ser consolidados.",
+      "fundamentalConcepts": "Morfologia analisa as classes e formas das palavras.\n\nSintaxe analisa as funções e relações estabelecidas pelas palavras na oração.\n\nMorfossintaxe integra os dois níveis de análise.\n\nOração é uma estrutura organizada em torno de verbo ou locução verbal.",
+      "completeDevelopment": "Classes e funções\nSubstantivo, adjetivo, pronome, verbo e outras classes são classificações morfológicas; sujeito, objeto, predicativo e adjunto são funções sintáticas.\n\nAnálise do sujeito\nO sujeito pode ser simples, composto, oculto, indeterminado ou inexistente, conforme a estrutura.\n\nAnálise do predicado\nO predicado pode ser verbal, nominal ou verbo-nominal, de acordo com a natureza do núcleo e das informações atribuídas.\n\nRelações sintáticas\nAs palavras estabelecem relações de dependência e coordenação. Essas relações determinam funções e podem afetar concordância, regência e pontuação.",
+      "practicalExamples": "'O candidato respondeu corretamente.' 'Candidato' é substantivo e exerce função de núcleo do sujeito.\n\n'O candidato está preparado.' 'Preparado' é adjetivo e exerce função de predicativo do sujeito.",
+      "importantComparisons": "Classe gramatical × Função sintática\nClasse identifica o que a palavra é; função sintática identifica o papel que ela desempenha na oração.\n\nSujeito oculto × Sujeito indeterminado\nNo sujeito oculto, é possível recuperar quem pratica a ação; no indeterminado, não se identifica ou não se deseja identificar o agente.",
+      "examTraps": "Classe gramatical e função sintática não são a mesma coisa.\n\nA posição de uma palavra na frase não determina sozinha sua função.\n\nSujeito oculto não significa sujeito inexistente.",
+      "howUsuallyTested": "Questões podem pedir identificação de funções sintáticas ou avaliar se determinada substituição preserva as relações morfossintáticas.",
+      "reviewSummary": [
+        "Morfologia = classes e formas das palavras.",
+        "Sintaxe = funções e relações.",
+        "Morfossintaxe integra os dois níveis.",
+        "Função sintática depende do contexto.",
+        "Sujeito oculto pode ser recuperado; indeterminado não."
+      ],
+      "fixationQuestions": [
+        "Classe gramatical e função sintática são conceitos equivalentes.\nAlternativas: Certo | Errado",
+        "Uma mesma palavra pode exercer diferentes funções sintáticas conforme o contexto.\nAlternativas: Certo | Errado",
+        "Sujeito oculto e sujeito inexistente são sinônimos.\nAlternativas: Certo | Errado",
+        "Sintaxe estuda as relações e funções desempenhadas pelos termos na oração.\nAlternativas: Certo | Errado",
+        "A posição de um termo é suficiente para determinar sua função sintática.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Errado",
+          "commentary": "Classe gramatical e função sintática pertencem a níveis diferentes de análise."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Certo",
+          "commentary": "A função depende da relação estabelecida no contexto."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Errado",
+          "commentary": "Sujeito oculto existe e pode ser recuperado; sujeito inexistente ocorre em orações sem sujeito."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Certo",
+          "commentary": "Essa é a finalidade central da análise sintática."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Errado",
+          "commentary": "A função depende das relações sintáticas, não apenas da posição."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "71d263aa-c5ff-4b1a-a093-1827353e5aea",
+      "title": "3. Domínio da ortografia oficial",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Dominar as principais regras da ortografia oficial da língua portuguesa relevantes para provas.",
+      "introduction": "Ortografia oficial é o conjunto de regras que orienta a representação escrita das palavras. Em concursos, são frequentes questões sobre emprego de letras, acentuação, hífen e grafias estabelecidas pelo Acordo Ortográfico.",
+      "fundamentalConcepts": "Ortografia: conjunto de convenções que determina a escrita oficial das palavras.\n\nAcentuação gráfica: uso de sinais gráficos para marcar determinadas características da pronúncia e da estrutura das palavras.\n\nHífen: sinal empregado em situações específicas de composição e formação de palavras.",
+      "completeDevelopment": "Acentuação\nA classificação das palavras em oxítonas, paroxítonas e proparoxítonas é essencial para compreender as regras de acentuação.\n\nOxítonas\nSão palavras cuja sílaba tônica é a última. Há regras específicas para acentuação de determinadas terminações.\n\nParoxítonas\nPossuem a penúltima sílaba como tônica e constituem grande parte das palavras da língua portuguesa.\n\nProparoxítonas\nPossuem a antepenúltima sílaba como tônica e, na regra geral, são acentuadas.\n\nHífen\nO emprego do hífen depende da relação entre os elementos e das regras específicas aplicáveis a prefixos e compostos.",
+      "practicalExamples": "'café' é oxítona e recebe acento.\n\n'fácil' é paroxítona e recebe acento.\n\n'médico' é proparoxítona e recebe acento.",
+      "importantComparisons": "Acento tônico × Acento gráfico\nAcento tônico corresponde à sílaba pronunciada com maior intensidade; acento gráfico é o sinal escrito utilizado em determinadas palavras.\n\nOrtografia × Pronúncia\nOrtografia trata da representação escrita; pronúncia trata da realização sonora.",
+      "examTraps": "Nem toda sílaba tônica recebe acento gráfico.\n\nO fato de uma palavra ser paroxítona não significa que ela seja necessariamente acentuada.\n\nMudanças do Acordo Ortográfico afetaram determinadas regras de acentuação e hífen.",
+      "howUsuallyTested": "Pode ser cobrado por identificação de grafia correta, comparação entre palavras, emprego de acentos, uso do hífen e manutenção da ortografia após reescrita.",
+      "reviewSummary": [
+        "Identifique a sílaba tônica.",
+        "Classifique a palavra como oxítona, paroxítona ou proparoxítona.",
+        "Aplique a regra correspondente.",
+        "Conheça as regras de hífen.",
+        "Não confunda tonicidade com acentuação gráfica."
+      ],
+      "fixationQuestions": [
+        "Toda palavra que possui sílaba tônica recebe obrigatoriamente acento gráfico.\nAlternativas: Certo | Errado",
+        "Toda proparoxítona é acentuada segundo a regra geral.\nAlternativas: Certo | Errado",
+        "'Café' é uma palavra oxítona.\nAlternativas: Certo | Errado",
+        "Ortografia e pronúncia são conceitos idênticos.\nAlternativas: Certo | Errado",
+        "O emprego do hífen segue regras específicas e não pode ser determinado apenas pela pronúncia.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Errado",
+          "commentary": "Toda palavra possui tonicidade, mas nem toda palavra recebe acento gráfico."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Certo",
+          "commentary": "Essa é a regra geral das proparoxítonas."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "A sílaba tônica é 'fé', a última."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Errado",
+          "commentary": "Ortografia corresponde à escrita convencional; pronúncia corresponde à realização sonora."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "O hífen possui regras ortográficas próprias."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "6f2700ef-1581-4ed8-8e49-6a38cc2eeb33",
+      "title": "4. Domínio dos mecanismos de coesão textual",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Identificar os mecanismos responsáveis pela ligação e progressão das informações em um texto.",
+      "introduction": "A coesão permite que diferentes partes do texto sejam linguisticamente conectadas. Ela pode ocorrer por referenciação, substituição, repetição, elipse, conectores e outros mecanismos de sequenciação.",
+      "fundamentalConcepts": "Coesão referencial: estabelece relações de retomada ou antecipação.\n\nCoesão sequencial: organiza a progressão das ideias.\n\nConector: palavra ou expressão que estabelece relação entre segmentos textuais.\n\nElipse: omissão de elemento recuperável pelo contexto.",
+      "completeDevelopment": "Referência\nPronomes e expressões nominais podem retomar ou antecipar referentes.\n\nSubstituição\nUm termo é substituído por outro elemento que permite manter a continuidade sem repetição desnecessária.\n\nRepetição\nPode ser utilizada para manter o tópico e reforçar uma ideia.\n\nConectores\nEstabelecem relações como adição, oposição, causa, consequência, condição, finalidade e conclusão.\n\nSequenciação temporal\nTempos verbais, advérbios e expressões temporais podem organizar a sucessão dos acontecimentos.",
+      "practicalExamples": "'Estudou muito, por isso foi aprovado.' 'Por isso' estabelece consequência.\n\n'O projeto foi aprovado. Essa decisão permitiu o início da execução.' 'Essa decisão' retoma informação anterior.",
+      "importantComparisons": "Coesão referencial × Coesão sequencial\nA referencial trabalha principalmente com retomadas e referências; a sequencial organiza a progressão das ideias.",
+      "examTraps": "O mesmo conector pode assumir valor diferente conforme o contexto.\n\nA substituição de um elemento pode alterar o sentido mesmo que a gramática permaneça correta.\n\nCoesão não garante, sozinha, coerência.",
+      "howUsuallyTested": "A banca pode solicitar a identificação do valor de conectores, do referente de pronomes e das relações estabelecidas entre períodos.",
+      "reviewSummary": [
+        "Referência retoma ou antecipa.",
+        "Substituição evita ou controla repetições.",
+        "Repetição pode ser funcional.",
+        "Conectores articulam ideias.",
+        "Sequenciação garante progressão textual."
+      ],
+      "fixationQuestions": [
+        "A coesão referencial pode ser realizada por pronomes.\nAlternativas: Certo | Errado",
+        "Conectores são irrelevantes para a progressão textual.\nAlternativas: Certo | Errado",
+        "A repetição pode funcionar como mecanismo de coesão.\nAlternativas: Certo | Errado",
+        "Um conector possui sempre exatamente o mesmo valor semântico em qualquer contexto.\nAlternativas: Certo | Errado",
+        "Coesão e coerência não são conceitos completamente equivalentes.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "Pronomes são importantes mecanismos de referenciação."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Errado",
+          "commentary": "Conectores desempenham papel fundamental na articulação e progressão textual."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "A repetição pode manter o tópico discursivo."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Errado",
+          "commentary": "O valor semântico deve ser determinado pelo contexto."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "Coesão trata das conexões linguísticas; coerência envolve o sentido global."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "17d5d963-a468-4db8-b78a-93f2f222484b",
+      "title": "5.1 Emprego das classes de palavras",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Reconhecer as principais classes gramaticais e compreender seu emprego no contexto.",
+      "introduction": "As palavras da língua portuguesa são tradicionalmente classificadas conforme suas características morfológicas e seu comportamento. As principais classes são substantivo, adjetivo, artigo, numeral, pronome, verbo, advérbio, preposição, conjunção e interjeição.",
+      "fundamentalConcepts": "Substantivo: nomeia seres, entidades, conceitos e sentimentos.\n\nAdjetivo: caracteriza ou qualifica substantivos.\n\nArtigo: determina ou indetermina substantivos.\n\nNumeral: expressa quantidade, ordem ou proporção, conforme o caso.\n\nPronome: pode substituir ou acompanhar substantivos e estabelecer referências.\n\nVerbo: expressa ação, estado, fenômeno ou processo.\n\nAdvérbio: modifica verbo, adjetivo ou outro advérbio, geralmente expressando circunstância.\n\nPreposição: estabelece relação entre termos.\n\nConjunção: estabelece relação entre orações ou termos.\n\nInterjeição: expressa emoções, estados ou manifestações do falante.",
+      "completeDevelopment": "Classes variáveis\nSubstantivos, artigos, adjetivos, numerais, pronomes e verbos apresentam, em diferentes graus, variações de gênero, número, pessoa, tempo ou modo.\n\nClasses invariáveis\nAdvérbios, preposições, conjunções e interjeições são tradicionalmente classificadas como invariáveis.\n\nValor contextual\nA classificação de uma palavra deve considerar seu emprego na frase. Uma mesma forma pode pertencer a classes ou desempenhar funções diferentes conforme o contexto.",
+      "practicalExamples": "'O estudo foi intenso.' 'Estudo' é substantivo.\n\n'Ele estudou intensamente.' 'Intensamente' é advérbio.\n\n'Aquele candidato foi aprovado.' 'Aquele' é pronome demonstrativo.",
+      "importantComparisons": "Adjetivo × Advérbio\nAdjetivo caracteriza substantivo; advérbio modifica verbo, adjetivo ou outro advérbio.\n\nPreposição × Conjunção\nPreposição relaciona termos; conjunção relaciona orações ou termos coordenados, conforme a construção.",
+      "examTraps": "A classe gramatical não deve ser determinada isolando a palavra do contexto.\n\nPalavras como 'que', 'se' e 'como' podem desempenhar funções diferentes.\n\nA mesma palavra pode exercer funções sintáticas distintas sem necessariamente mudar de classe.",
+      "howUsuallyTested": "É frequente a identificação da classe de uma palavra destacada e a análise do efeito de sua substituição no texto.",
+      "reviewSummary": [
+        "Substantivo nomeia.",
+        "Adjetivo caracteriza substantivo.",
+        "Pronome substitui ou acompanha nomes.",
+        "Verbo indica ação, estado, fenômeno ou processo.",
+        "Advérbio modifica verbo, adjetivo ou advérbio.",
+        "Preposição estabelece relação.",
+        "Conjunção articula termos ou orações."
+      ],
+      "fixationQuestions": [
+        "Adjetivos caracterizam substantivos.\nAlternativas: Certo | Errado",
+        "Advérbios modificam exclusivamente substantivos.\nAlternativas: Certo | Errado",
+        "Pronomes podem estabelecer relações de referência.\nAlternativas: Certo | Errado",
+        "Preposições estabelecem relações entre termos.\nAlternativas: Certo | Errado",
+        "A classificação morfológica deve considerar o contexto de uso da palavra.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "Essa é uma das funções centrais do adjetivo."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Errado",
+          "commentary": "Advérbios modificam principalmente verbos, adjetivos e outros advérbios."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "Pronomes podem retomar, antecipar ou acompanhar referentes."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Certo",
+          "commentary": "Essa é a função característica das preposições."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "O comportamento da palavra na construção é essencial para sua análise."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "e38d37d5-9c60-4823-af40-df81d1209686",
+      "title": "Emprego de elementos de referenciação, substituição e repetição, de conectores e de outros elementos de sequenciação textual.",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Analisar os mecanismos de referenciação, substituição, repetição, conexão e sequenciação responsáveis pela continuidade textual.",
+      "introduction": "A construção de um texto depende da capacidade de relacionar informações já apresentadas às novas informações. Para isso, a língua dispõe de pronomes, expressões nominais, conectores, tempos verbais, advérbios e mecanismos de repetição ou substituição.",
+      "fundamentalConcepts": "Referenciação: construção e manutenção dos referentes no discurso.\n\nSubstituição: emprego de elemento que ocupa o lugar de outro termo ou conteúdo.\n\nRepetição: retomada de palavra ou estrutura.\n\nConector: elemento que explicita relação lógico-semântica.\n\nSequenciação: mecanismo que organiza a progressão das informações.",
+      "completeDevelopment": "Pronomes referenciais\nPronomes pessoais, demonstrativos, relativos e outros podem retomar ou antecipar informações.\n\nExpressões nominais\nUma entidade pode ser retomada por diferentes expressões nominais, que podem acrescentar informações ou avaliações.\n\nConectores argumentativos\nConectores como 'porém', 'portanto', 'porque', 'embora' e 'além disso' estabelecem relações específicas, que devem ser interpretadas no contexto.\n\nSequenciação temporal\nTempos e modos verbais e marcadores temporais organizam eventos e estados no tempo.",
+      "practicalExamples": "'O ministro apresentou a proposta. O projeto será analisado.' A expressão 'o projeto' retoma 'a proposta'.\n\n'O prazo terminou; entretanto, os candidatos permaneceram no local.' 'Entretanto' introduz oposição ou contraste.",
+      "importantComparisons": "Retomada × Antecipação\nRetomada aponta para informação anterior; antecipação aponta para informação posterior.",
+      "examTraps": "O valor de um conector depende do contexto.\n\nUma expressão nominal pode alterar a avaliação do referente.\n\nA substituição deve preservar não apenas a gramática, mas também referência e sentido.",
+      "howUsuallyTested": "A cobrança envolve substituição de expressões, identificação de referentes e análise do valor semântico de conectores.",
+      "reviewSummary": [
+        "Pronomes podem realizar referenciação.",
+        "Expressões nominais podem retomar referentes.",
+        "Conectores explicitam relações.",
+        "Tempos verbais podem organizar a sequência temporal.",
+        "Substituição precisa preservar o sentido."
+      ],
+      "fixationQuestions": [
+        "Expressões nominais podem realizar referenciação.\nAlternativas: Certo | Errado",
+        "Todo conector possui valor semântico fixo independentemente do contexto.\nAlternativas: Certo | Errado",
+        "A substituição de uma expressão pode modificar a referência textual.\nAlternativas: Certo | Errado",
+        "Tempos verbais podem contribuir para a sequenciação textual.\nAlternativas: Certo | Errado",
+        "A referenciação contribui para a continuidade temática.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "Expressões nominais podem retomar ou construir referentes."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Errado",
+          "commentary": "O contexto determina o valor efetivamente produzido."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "A alteração de uma expressão pode modificar o referente ou a relação textual."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Certo",
+          "commentary": "Tempos e modos verbais participam da organização temporal e discursiva."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "A referenciação mantém e desenvolve os referentes do texto."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "0ebf84b8-b8b3-4086-9279-321005ace0cc",
+      "title": "4.1 Emprego de referenciação, substituição, repetição, conectores e elementos de sequenciação textual",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Consolidar os principais mecanismos de coesão e sequenciação textual.",
+      "introduction": "A continuidade de um texto depende de mecanismos que permitam retomar informações e estabelecer relações entre novas ideias e informações anteriores.",
+      "fundamentalConcepts": "Referenciação: relação entre expressões linguísticas e referentes.\n\nSubstituição: emprego de uma forma no lugar de outra.\n\nRepetição: manutenção deliberada de palavra ou estrutura.\n\nConector: elemento que articula ideias.\n\nSequenciação: organização da progressão textual.",
+      "completeDevelopment": "Referenciação\nPode ocorrer por pronomes, expressões nominais e outras formas linguísticas.\n\nSubstituição e elipse\nA substituição utiliza outra forma para manter o conteúdo; a elipse omite elemento recuperável.\n\nConectores\nPodem indicar adição, contraste, causa, consequência, condição, finalidade e conclusão.\n\nSequenciação\nPode ser realizada por conectores, marcadores temporais e recursos de organização do discurso.",
+      "practicalExamples": "'A proposta foi rejeitada. Essa decisão provocou críticas.' Há retomada referencial.\n\n'O candidato estudou muito, mas não foi aprovado.' 'Mas' marca contraste.",
+      "importantComparisons": "Substituição × Elipse\nNa substituição há outro elemento ocupando a posição funcional; na elipse há omissão de elemento recuperável.",
+      "examTraps": "Repetição não é automaticamente defeito.\n\nConectores não devem ser analisados isoladamente.\n\nA troca de um conector pode alterar a relação lógica entre as orações.",
+      "howUsuallyTested": "Questões avaliam se alterações de pronomes, conectores e expressões preservam a coesão e o sentido.",
+      "reviewSummary": [
+        "Referenciação mantém referentes.",
+        "Substituição evita repetições ou retoma conteúdos.",
+        "Elipse omite elementos recuperáveis.",
+        "Conectores articulam ideias.",
+        "Sequenciação organiza a progressão."
+      ],
+      "fixationQuestions": [
+        "A substituição de um conector pode alterar a relação semântica entre duas orações.\nAlternativas: Certo | Errado",
+        "Elipse ocorre quando um elemento recuperável é omitido.\nAlternativas: Certo | Errado",
+        "Referenciação e repetição são mecanismos necessariamente incompatíveis.\nAlternativas: Certo | Errado",
+        "Conectores podem estabelecer relação de oposição.\nAlternativas: Certo | Errado",
+        "A coesão textual pode envolver diferentes mecanismos simultaneamente.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "A alteração do conector pode mudar a relação lógica ou semântica."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Certo",
+          "commentary": "Essa é a definição básica de elipse."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Errado",
+          "commentary": "Diferentes mecanismos podem atuar simultaneamente."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Certo",
+          "commentary": "Conectores como 'porém' e 'mas' podem marcar oposição."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "Um texto normalmente utiliza diversos mecanismos de coesão."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "3c5e115a-6f55-4990-9734-1ff6a90cafbc",
+      "title": "4.2 Emprego de tempos e modos verbais",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Compreender o emprego dos tempos e modos verbais e seus efeitos de sentido.",
+      "introduction": "Os verbos expressam processos, estados e acontecimentos e apresentam categorias como tempo, modo, pessoa, número, voz e aspecto. Tempos e modos podem contribuir para a localização temporal e para a atitude do falante diante do conteúdo.",
+      "fundamentalConcepts": "Modo indicativo: normalmente associado a fatos apresentados como reais ou certos no contexto.\n\nModo subjuntivo: frequentemente associado a hipótese, possibilidade, desejo ou condição.\n\nModo imperativo: empregado principalmente em ordens, pedidos, instruções e recomendações.\n\nTempo verbal: localiza o processo em relação ao momento de referência.\n\nPresente: pode indicar simultaneidade, hábito, verdade geral e outros valores contextuais.\n\nPretérito: relaciona-se a eventos anteriores ao momento de referência.\n\nFuturo: relaciona-se a eventos posteriores ao momento de referência.",
+      "completeDevelopment": "Indicativo\nAbrange presente, pretérito perfeito, pretérito imperfeito, mais-que-perfeito, futuro do presente e futuro do pretérito.\n\nSubjuntivo\nApresenta presente, pretérito imperfeito e futuro, com valores ligados a hipótese, desejo, condição e eventualidade.\n\nImperativo\nExpressa ordem, pedido, conselho, instrução ou proibição.\n\nValor contextual\nUm tempo verbal pode assumir valores além de sua referência temporal básica. O presente, por exemplo, pode narrar fatos passados em determinados contextos.",
+      "practicalExamples": "'Se estudasse, seria aprovado.' O subjuntivo participa de uma estrutura hipotética.\n\n'Estude para a prova.' O verbo expressa orientação ou ordem.\n\n'Todos os dias ele estuda.' O presente indica hábito.",
+      "importantComparisons": "Pretérito perfeito × Pretérito imperfeito\nO perfeito costuma apresentar o fato passado como concluído; o imperfeito pode apresentar duração, habitualidade ou fato em desenvolvimento no passado.\n\nIndicativo × Subjuntivo\nO indicativo tende a apresentar o conteúdo como fato; o subjuntivo frequentemente marca hipótese, possibilidade, desejo ou condição.",
+      "examTraps": "O tempo verbal não possui necessariamente apenas um valor temporal.\n\nO modo subjuntivo não significa simplesmente 'dúvida' em qualquer situação.\n\nO contexto é essencial para identificar o valor discursivo do verbo.",
+      "howUsuallyTested": "A banca pode pedir identificação do tempo e modo verbal, substituição de formas verbais e análise da manutenção ou alteração de sentido.",
+      "reviewSummary": [
+        "Indicativo, subjuntivo e imperativo são modos verbais.",
+        "Tempos verbais situam processos temporalmente.",
+        "Presente pode expressar hábito e outros valores.",
+        "Perfeito tende a marcar fato concluído.",
+        "Imperfeito pode indicar duração ou habitualidade no passado.",
+        "Subjuntivo é frequente em hipóteses, desejos e condições."
+      ],
+      "fixationQuestions": [
+        "Em 'Se estudasse, seria aprovado', 'estudasse' está no pretérito imperfeito do subjuntivo.\nAlternativas: Certo | Errado",
+        "O modo imperativo pode expressar instrução.\nAlternativas: Certo | Errado",
+        "O presente do indicativo somente pode indicar ação que ocorre exatamente no momento da fala.\nAlternativas: Certo | Errado",
+        "O pretérito imperfeito pode expressar habitualidade no passado.\nAlternativas: Certo | Errado",
+        "O valor de um tempo verbal deve ser analisado no contexto.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "A forma 'estudasse' é pretérito imperfeito do subjuntivo."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Certo",
+          "commentary": "Instruções podem ser expressas pelo imperativo."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Errado",
+          "commentary": "O presente pode indicar hábito, verdade geral, presente histórico e outros valores."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Certo",
+          "commentary": "Exemplo: 'Quando era criança, estudava todas as manhãs.'"
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "O contexto determina o valor discursivo efetivamente produzido."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "21212114-304f-43b7-954f-582d799a7f7d",
+      "title": "5.7 Emprego do sinal indicativo de crase",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Compreender quando ocorre a fusão da preposição 'a' com o artigo feminino 'a' ou com determinados pronomes e expressões, identificando os casos de uso obrigatório, facultativo e proibido.",
+      "introduction": "Crase é a fusão de dois sons ou duas ocorrências da vogal 'a', representada graficamente pelo acento grave (à). No estudo para concursos, o caso mais importante é a fusão da preposição 'a' exigida por um termo com o artigo feminino 'a' ou 'as'.",
+      "fundamentalConcepts": "Crase não é simplesmente o acento grave; crase é a fusão.\n\nO acento grave é o sinal gráfico utilizado para indicar essa fusão.\n\nPara haver crase, normalmente é necessário que o termo anterior exija a preposição 'a' e o termo seguinte admita artigo feminino 'a' ou 'as'.",
+      "completeDevelopment": "Regra básica\nVerifique se o termo regente exige preposição 'a' e se o termo regido admite artigo feminino. Exemplo: 'Obedeço à regra.' Quem obedece, obedece a; 'regra' admite a: a + a = à.\n\nLocuções femininas\nO acento grave é empregado em diversas locuções adverbiais, prepositivas e conjuntivas de base feminina, como 'à tarde', 'às vezes', 'à medida que' e 'à procura de'.\n\nNomes próprios femininos\nO emprego pode depender da possibilidade de uso de artigo antes do nome. A substituição por nome masculino pode auxiliar na verificação.\n\nCasos proibidos\nNão ocorre crase antes de palavras masculinas em regra, verbos, pronomes pessoais e outras construções em que não exista a combinação necessária.\n\nCasos facultativos\nExistem situações em que o uso pode ser facultativo, como diante de determinados nomes próprios femininos e pronomes possessivos femininos, conforme a construção.\n\nMétodo de substituição\nSubstitua o termo feminino por um masculino. Se aparecer 'ao', há forte indicação de que no feminino ocorre 'à'. Exemplo: 'Vou à escola' / 'Vou ao colégio'.",
+      "practicalExamples": "'Fui à biblioteca.' Quem vai, vai a algum lugar; 'biblioteca' admite artigo: a + a = à.\n\n'Começou a estudar.' Não há crase antes de verbo.\n\n'Chegou às oito horas.' A expressão de hora determinada admite crase.",
+      "importantComparisons": "Crase × Acento grave\nCrase é o fenômeno de fusão; acento grave é o sinal que normalmente o representa.\n\na × à\n'a' pode ser artigo ou preposição; 'à' registra graficamente a fusão da preposição 'a' com outro elemento feminino.",
+      "examTraps": "Não se deve colocar crase simplesmente porque a palavra seguinte é feminina.\n\nAntes de verbo, não ocorre crase.\n\nAntes de palavra masculina, em regra, não ocorre crase.\n\nLocuções femininas frequentemente exigem crase.\n\nA identificação da regência é fundamental para resolver questões difíceis.",
+      "howUsuallyTested": "É comum a banca pedir a correção do emprego de 'à', avaliar substituições de termos, verificar se determinada alteração exige ou elimina crase e explorar casos obrigatórios, facultativos e proibidos.",
+      "reviewSummary": [
+        "Crase = fusão.",
+        "Acento grave = sinal gráfico.",
+        "Procure a preposição 'a' e o artigo 'a/as'.",
+        "Use o teste do masculino: a → ao.",
+        "Antes de verbo, normalmente não há crase.",
+        "Locuções femininas são importantes.",
+        "Regência é decisiva."
+      ],
+      "fixationQuestions": [
+        "Em 'Fui à biblioteca', o acento grave indica a fusão da preposição 'a' com o artigo 'a'.\nAlternativas: Certo | Errado",
+        "Em 'Começou à estudar', o emprego da crase está correto.\nAlternativas: Certo | Errado",
+        "Em 'Chegou às oito horas', o emprego do acento grave está adequado.\nAlternativas: Certo | Errado",
+        "A presença de uma palavra feminina após o verbo é suficiente para determinar o emprego da crase.\nAlternativas: Certo | Errado",
+        "O teste de substituição por termo masculino pode auxiliar na identificação da crase.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "Há preposição 'a' exigida por 'ir' e artigo feminino antes de 'biblioteca'."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Errado",
+          "commentary": "Não se emprega crase antes de verbo: 'Começou a estudar'."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "A expressão indica hora determinada e recebe crase."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Errado",
+          "commentary": "É necessário verificar a exigência da preposição e a possibilidade de artigo."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "No masculino, a construção equivalente frequentemente revela a ocorrência de 'ao', auxiliando a análise."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "f1f2650e-4310-41f8-82de-4bba53035762",
+      "title": "5.4 Emprego dos sinais de pontuação",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Compreender as funções sintáticas e discursivas dos principais sinais de pontuação.",
+      "introduction": "A pontuação organiza a estrutura escrita e pode indicar relações sintáticas, delimitar termos e orações e contribuir para a interpretação do texto. Em concursos, a análise deve ser sintática e semântica, não baseada apenas em pausas da fala.",
+      "fundamentalConcepts": "Vírgula: pode separar termos ou orações em situações determinadas pelas relações sintáticas.\n\nPonto e vírgula: pode separar estruturas coordenadas mais complexas.\n\nDois-pontos: podem introduzir explicação, enumeração, esclarecimento, citação ou consequência contextual.\n\nTravessão: pode marcar fala, intercalação ou destaque.\n\nParênteses: delimitam informação acessória ou explicativa.\n\nPonto final: encerra período declarativo.\n\nPonto de interrogação: marca pergunta.\n\nPonto de exclamação: marca expressividade.",
+      "completeDevelopment": "Vírgula entre sujeito e predicado\nEm regra, não se separa por vírgula o sujeito do predicado, mesmo quando o sujeito é extenso.\n\nAposto e vocativo\nAposto explicativo e vocativo podem ser delimitados por vírgulas conforme a estrutura.\n\nOrações subordinadas\nA pontuação depende da posição e da natureza da oração. Orações subordinadas adverbiais antepostas frequentemente são separadas por vírgula.\n\nOrações coordenadas\nA pontuação pode marcar a separação entre orações coordenadas, especialmente quando há relação adversativa, conclusiva ou explicativa.\n\nVírgula e sentido\nAlterar a pontuação pode modificar a estrutura sintática e, consequentemente, o sentido.",
+      "practicalExamples": "'Os candidatos, após a prova, aguardaram o resultado.' A expressão intercalada foi isolada.\n\n'João, venha aqui.' 'João' é vocativo.\n\n'Quando terminou a prova, saiu.' A oração adverbial anteposta está separada por vírgula.",
+      "importantComparisons": "Vírgula × Pausa na fala\nA vírgula obedece principalmente à estrutura sintática e semântica; não deve ser colocada apenas para marcar toda pausa oral.\n\nAposto × Vocativo\nAposto explica ou especifica um termo; vocativo chama o interlocutor.",
+      "examTraps": "Não se separa sujeito e predicado por vírgula em regra.\n\nVírgula pode alterar o sentido.\n\nA pontuação não depende exclusivamente da entonação.\n\nOrações restritivas e explicativas podem produzir diferenças de sentido e pontuação.",
+      "howUsuallyTested": "Questões frequentemente pedem a manutenção, retirada ou inclusão de vírgulas e perguntam se a alteração preserva a correção e o sentido.",
+      "reviewSummary": [
+        "Vírgula tem função sintática.",
+        "Não separe sujeito e predicado por vírgula em regra.",
+        "Aposto e vocativo podem ser isolados.",
+        "Orações adverbiais antepostas frequentemente recebem vírgula.",
+        "Pontuação pode modificar o sentido."
+      ],
+      "fixationQuestions": [
+        "A vírgula deve ser empregada obrigatoriamente sempre que houver uma pausa na fala.\nAlternativas: Certo | Errado",
+        "Em regra, não se separa o sujeito do predicado por vírgula.\nAlternativas: Certo | Errado",
+        "O vocativo pode ser isolado por vírgula.\nAlternativas: Certo | Errado",
+        "A alteração da pontuação pode modificar o sentido de uma frase.\nAlternativas: Certo | Errado",
+        "Uma oração subordinada adverbial anteposta pode ser separada por vírgula.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Errado",
+          "commentary": "Pontuação não é simples representação de pausas da fala; depende da estrutura sintática e do sentido."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Certo",
+          "commentary": "Essa é uma regra fundamental de pontuação."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "O vocativo é normalmente isolado por vírgulas."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Certo",
+          "commentary": "A pontuação pode alterar relações sintáticas e semânticas."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "A oração adverbial anteposta é frequentemente separada da principal."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "0ea707c4-6fc0-4738-8668-aaede039a515",
+      "title": "2. Reconhecimento de tipos e gêneros textuais",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Distinguir tipos textuais de gêneros textuais e reconhecer suas características predominantes.",
+      "introduction": "Tipos textuais são categorias relacionadas à organização linguística predominante, enquanto gêneros textuais são formas concretas de comunicação social. Um gênero pode combinar diferentes tipos textuais.",
+      "fundamentalConcepts": "Narração: organização de acontecimentos em sequência.\n\nDescrição: caracterização de seres, objetos, lugares ou situações.\n\nDissertação expositiva: apresentação e explicação de informações.\n\nDissertação argumentativa: defesa de uma posição mediante argumentos.\n\nInjunção: orientação para realização de ação.\n\nGênero textual: forma concreta de texto utilizada em determinada situação comunicativa.",
+      "completeDevelopment": "Tipos textuais\nRepresentam formas de organização discursiva. Um texto pode apresentar mais de um tipo, mas geralmente existe predominância de determinado modo.\n\nGêneros textuais\nSão formas socialmente reconhecidas de comunicação, como notícia, artigo de opinião, relatório, requerimento, edital, receita, propaganda e e-mail.\n\nGênero e finalidade\nO gênero está relacionado à situação comunicativa, ao público, ao objetivo, ao suporte e às convenções de circulação.",
+      "practicalExamples": "Uma notícia pertence a um gênero jornalístico e pode conter narração e descrição.\n\nUm artigo de opinião pertence ao campo argumentativo e apresenta predominantemente argumentação.\n\nUma receita culinária é um gênero predominantemente injuntivo.",
+      "importantComparisons": "Tipo textual × Gênero textual\nTipo é uma forma de organização discursiva; gênero é uma forma concreta de comunicação social.\n\nDescrição × Narração\nDescrição caracteriza; narração organiza acontecimentos.",
+      "examTraps": "Gênero não é sinônimo de tipo textual.\n\nUm gênero pode apresentar mais de um tipo textual.\n\nA classificação depende das características predominantes e da finalidade comunicativa.",
+      "howUsuallyTested": "A banca pode apresentar um texto e pedir identificação do gênero, da tipologia predominante ou da finalidade comunicativa.",
+      "reviewSummary": [
+        "Tipos são formas de organização.",
+        "Gêneros são formas concretas de comunicação.",
+        "Um gênero pode combinar tipos.",
+        "Finalidade e situação comunicativa ajudam a identificar o gênero."
+      ],
+      "fixationQuestions": [
+        "Tipo textual e gênero textual são conceitos equivalentes.\nAlternativas: Certo | Errado",
+        "Um gênero textual pode apresentar mais de um tipo textual.\nAlternativas: Certo | Errado",
+        "A narração caracteriza-se pela organização de acontecimentos.\nAlternativas: Certo | Errado",
+        "A receita é predominantemente injuntiva.\nAlternativas: Certo | Errado",
+        "A finalidade comunicativa auxilia no reconhecimento do gênero textual.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Errado",
+          "commentary": "Tipo e gênero são categorias diferentes."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Certo",
+          "commentary": "Gêneros podem combinar diferentes formas de organização."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "A narração organiza acontecimentos em sequência."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Certo",
+          "commentary": "Receitas orientam o leitor a realizar procedimentos."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "O propósito comunicativo é elemento importante na caracterização dos gêneros."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "76bbb551-3634-4a80-9183-62fb83a36f48",
+      "title": "6. Reescrita de frases e parágrafos do texto",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Avaliar alterações estruturais em frases e parágrafos verificando correção gramatical, coesão, coerência e preservação do sentido.",
+      "introduction": "Questões de reescrita exigem analisar se uma nova formulação mantém a correção e o sentido da estrutura original. A substituição de palavras ou reorganização sintática pode provocar alterações de regência, concordância, pontuação, referência ou significado.",
+      "fundamentalConcepts": "Reescrita: reformulação de uma estrutura linguística.\n\nEquivalência semântica: preservação do sentido relevante.\n\nCorreção gramatical: adequação à norma-padrão exigida.\n\nPreservação da referência: manutenção dos referentes e relações estabelecidas.",
+      "completeDevelopment": "Substituição lexical\nA troca de uma palavra por sinônimo somente preserva o sentido quando o novo termo é adequado ao contexto.\n\nAlteração sintática\nA reorganização da oração pode exigir mudanças de concordância, regência, pronomes e pontuação.\n\nVoz ativa e passiva\nA transformação pode preservar o conteúdo proposicional, mas exige adequações sintáticas.\n\nConectores\nA substituição de conectores pode alterar a relação entre as ideias.",
+      "practicalExamples": "'A comissão analisou o recurso.' → 'O recurso foi analisado pela comissão.' A transformação mantém a relação básica entre agente e ação, mas muda a voz verbal.\n\n'Ele estudou, portanto foi aprovado.' → 'Ele foi aprovado porque estudou.' A relação causal pode ser preservada, mas a estrutura argumentativa deve ser analisada cuidadosamente.",
+      "importantComparisons": "Correção gramatical × Equivalência de sentido\nUma frase pode ser gramaticalmente correta e, ainda assim, não preservar o sentido da original.",
+      "examTraps": "Trocar uma palavra por sinônimo não garante equivalência.\n\nAlterar a posição de uma oração pode modificar seu valor semântico.\n\nPontuação pode alterar a interpretação.\n\nMudanças de regência podem exigir alteração de preposição.",
+      "howUsuallyTested": "A banca apresenta uma versão reescrita e pergunta se ela mantém correção e sentido, podendo combinar diversos tópicos gramaticais.",
+      "reviewSummary": [
+        "Analise gramática e sentido separadamente.",
+        "Verifique regência, concordância e pontuação.",
+        "Confira referentes pronominais.",
+        "Avalie conectores.",
+        "Não considere equivalentes estruturas apenas porque parecem semelhantes."
+      ],
+      "fixationQuestions": [
+        "Uma reescrita pode ser gramaticalmente correta e, ainda assim, alterar o sentido original.\nAlternativas: Certo | Errado",
+        "A substituição por qualquer sinônimo preserva necessariamente o sentido.\nAlternativas: Certo | Errado",
+        "A mudança de voz ativa para passiva pode preservar o conteúdo básico da proposição.\nAlternativas: Certo | Errado",
+        "A troca de conectores nunca modifica as relações entre ideias.\nAlternativas: Certo | Errado",
+        "Questões de reescrita podem envolver simultaneamente sintaxe, semântica e coesão.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "Correção gramatical e equivalência semântica são critérios distintos."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Errado",
+          "commentary": "O sinônimo deve ser compatível com o contexto."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "A transformação pode preservar a proposição fundamental."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Errado",
+          "commentary": "Conectores estabelecem relações semânticas e sua troca pode alterá-las."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "Questões de reescrita frequentemente integram vários aspectos linguísticos."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "b92c64a8-eeca-4263-9adf-84c8f5ebe575",
+      "title": "6.4 Reescrita de textos de diferentes gêneros e níveis de formalidade",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Compreender como adaptar textos a diferentes gêneros e níveis de formalidade sem comprometer sua adequação linguística.",
+      "introduction": "A linguagem deve ser adequada à situação comunicativa. A reescrita de um texto pode exigir alterações de vocabulário, estrutura sintática, tratamento do interlocutor e escolhas discursivas para adequá-lo ao gênero e ao nível de formalidade.",
+      "fundamentalConcepts": "Formalidade: grau de adequação linguística à situação comunicativa.\n\nRegistro: variedade de uso da língua relacionada ao contexto.\n\nAdequação linguística: escolha da forma de expressão compatível com situação, finalidade e interlocutores.\n\nGênero textual: forma comunicativa que possui convenções próprias.",
+      "completeDevelopment": "Linguagem formal\nÉ empregada em situações que exigem maior grau de monitoramento linguístico, como documentos oficiais e determinadas comunicações profissionais.\n\nLinguagem informal\nÉ característica de situações mais espontâneas e de maior proximidade entre os interlocutores.\n\nAdequação\nUma forma não é simplesmente 'melhor' ou 'pior' em abstrato; sua adequação depende da situação comunicativa.\n\nReescrita entre gêneros\nAo mudar o gênero, podem mudar a estrutura, a finalidade, o vocabulário e a organização das informações.",
+      "practicalExamples": "Uma mensagem informal pode precisar de maior formalidade ao ser transformada em comunicação administrativa.\n\nUm texto argumentativo pode precisar de explicitação da tese e dos argumentos ao ser adaptado para determinado gênero opinativo.",
+      "importantComparisons": "Formalidade × Correção\nUma construção pode ser gramaticalmente correta, mas inadequada ao nível de formalidade exigido.\n\nLinguagem informal × Erro linguístico\nMarcas informais não constituem automaticamente erros; devem ser avaliadas conforme o contexto e a variedade linguística.",
+      "examTraps": "Adequação depende do contexto.\n\nFormalidade não significa necessariamente linguagem rebuscada.\n\nReescrever não significa apenas trocar palavras por sinônimos.\n\nMudanças de gênero podem exigir mudanças estruturais.",
+      "howUsuallyTested": "Questões podem apresentar duas versões de um texto e avaliar qual delas é adequada ao gênero, ao público ou ao nível de formalidade solicitado.",
+      "reviewSummary": [
+        "Linguagem deve ser adequada à situação.",
+        "Formalidade depende do contexto.",
+        "Gêneros possuem convenções próprias.",
+        "Reescrita pode exigir mudanças estruturais.",
+        "Informalidade não é automaticamente erro."
+      ],
+      "fixationQuestions": [
+        "A adequação linguística depende da situação comunicativa.\nAlternativas: Certo | Errado",
+        "Linguagem informal é necessariamente incorreta.\nAlternativas: Certo | Errado",
+        "A mudança de gênero textual pode exigir mudança de estrutura.\nAlternativas: Certo | Errado",
+        "Linguagem formal é obrigatoriamente caracterizada por palavras difíceis.\nAlternativas: Certo | Errado",
+        "Uma reescrita adequada deve considerar finalidade e interlocutores.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "Adequação é determinada pela situação comunicativa."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Errado",
+          "commentary": "A informalidade pode ser adequada em determinados contextos."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "Gêneros possuem estruturas e finalidades próprias."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Errado",
+          "commentary": "Formalidade exige adequação, não necessariamente vocabulário rebuscado."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "Finalidade, público e situação são elementos essenciais."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "8169dabc-4d69-464b-87e6-2c45402ebe77",
+      "title": "Reescrita e Equivalência de Frases",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Específicos",
+      "learningObjective": "Avaliar se diferentes formulações linguísticas preservam conteúdo, relações sintáticas e sentido.",
+      "introduction": "Equivalência de frases não significa que duas frases sejam estruturalmente idênticas. Significa que determinada transformação consegue manter o sentido relevante, a relação lógica e as informações essenciais da estrutura original.",
+      "fundamentalConcepts": "Equivalência semântica: preservação do sentido.\n\nEquivalência sintática: manutenção ou transformação controlada das relações sintáticas.\n\nParáfrase: reformulação de uma ideia por outra construção linguística.\n\nReformulação: alteração da forma de expressão sem necessariamente alterar o conteúdo.",
+      "completeDevelopment": "Paráfrase\nUma paráfrase reformula o conteúdo utilizando outra construção linguística, buscando preservar o sentido.\n\nVoz ativa e passiva\nPodem apresentar a mesma situação sob perspectivas sintáticas diferentes.\n\nCoordenação e subordinação\nDeterminadas transformações podem converter relações coordenadas em subordinadas ou vice-versa, mas o sentido lógico precisa ser preservado.\n\nConectores\nA troca de conectores só é equivalente quando mantém a relação semântica original.\n\nNegação\nAlterações envolvendo negação exigem atenção porque podem inverter ou modificar o alcance da informação.",
+      "practicalExamples": "'Embora estivesse cansado, estudou.' pode ser reformulada como 'Estudou apesar de estar cansado', preservando a relação concessiva.\n\n'A comissão aprovou o projeto.' e 'O projeto foi aprovado pela comissão.' apresentam estruturas diferentes, mas preservam a relação fundamental.",
+      "importantComparisons": "Paráfrase × Paródia\nParáfrase busca reformular preservando o sentido; paródia transforma um texto com finalidade de recriação, frequentemente humorística ou crítica.\n\nEquivalência gramatical × Equivalência semântica\nUma construção pode estar correta gramaticalmente sem manter o sentido da original.",
+      "examTraps": "Mudança de conectores pode alterar relações lógicas.\n\nNegação pode modificar completamente o sentido.\n\nUma frase mais curta não é necessariamente equivalente.\n\nTrocas lexicais precisam respeitar contexto e regência.",
+      "howUsuallyTested": "É comum apresentar uma frase original e uma reescrita para julgamento, exigindo análise de sentido, correção, relações sintáticas e conectores.",
+      "reviewSummary": [
+        "Equivalência exige preservação de sentido.",
+        "Paráfrase reformula.",
+        "Voz ativa e passiva podem preservar uma mesma situação.",
+        "Conectores precisam manter a relação lógica.",
+        "Negação merece atenção especial."
+      ],
+      "fixationQuestions": [
+        "Paráfrase consiste em reformular uma ideia buscando preservar seu sentido.\nAlternativas: Certo | Errado",
+        "Toda frase gramaticalmente correta é necessariamente equivalente à frase original.\nAlternativas: Certo | Errado",
+        "A transformação entre voz ativa e passiva pode preservar o conteúdo proposicional.\nAlternativas: Certo | Errado",
+        "A troca de um conector pode modificar a relação lógica.\nAlternativas: Certo | Errado",
+        "Alterações na negação devem ser analisadas quanto ao efeito sobre o sentido.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "Essa é a característica central da paráfrase."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Errado",
+          "commentary": "Correção gramatical não garante equivalência semântica."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "A perspectiva sintática pode mudar sem alteração da situação descrita."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Certo",
+          "commentary": "Conectores determinam relações semânticas entre segmentos."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "A negação pode inverter ou restringir o conteúdo afirmado."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "7b9a5c03-9975-4b62-abff-c28c936532fc",
+      "title": "5.6 Regência verbal e nominal",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Compreender as relações de dependência entre termos e dominar as principais regências verbais e nominais exigidas pela norma-padrão.",
+      "introduction": "Regência é o estudo da relação de dependência estabelecida entre um termo regente e seu complemento. Na regência verbal, o termo regente é um verbo; na nominal, é um nome, como substantivo, adjetivo ou advérbio.",
+      "fundamentalConcepts": "Termo regente: elemento que exige ou seleciona determinado complemento.\n\nTermo regido: elemento que completa o sentido do termo regente.\n\nRegência verbal: relação entre verbo e complemento.\n\nRegência nominal: relação entre nome e complemento.\n\nTransitividade: relação entre verbo e seus complementos.",
+      "completeDevelopment": "Verbo transitivo direto\nExige complemento sem preposição obrigatória. Exemplo: 'Comprei o livro.'\n\nVerbo transitivo indireto\nExige complemento introduzido por preposição. Exemplo: 'Gosto de música.'\n\nVerbo transitivo direto e indireto\nPode exigir dois complementos. Exemplo: 'Entreguei o documento ao servidor.'\n\nRegência nominal\nNomes podem exigir preposições específicas. Exemplo: 'necessidade de recursos', 'favorável à proposta'.\n\nCrase e regência\nA regência é essencial para verificar se um termo exige a preposição 'a', condição importante para o emprego da crase.",
+      "practicalExamples": "'Assistiu ao filme.' Na norma-padrão, assistir no sentido de ver rege a preposição 'a'.\n\n'Obedeceu às regras.' O verbo obedecer exige preposição 'a' e 'regras' admite artigo feminino.",
+      "importantComparisons": "Objeto direto × Objeto indireto\nO objeto direto normalmente não é introduzido por preposição exigida pelo verbo; o indireto é.\n\nRegência × Concordância\nRegência trata da relação entre termos e da exigência de complementos; concordância trata da adequação de gênero, número e pessoa.",
+      "examTraps": "O sentido do verbo pode modificar sua regência.\n\nA regência da norma-padrão pode diferir de usos coloquiais.\n\nCrase frequentemente depende da regência.\n\nA preposição não deve ser analisada isoladamente.",
+      "howUsuallyTested": "São frequentes questões com verbos como assistir, visar, aspirar, preferir, obedecer, implicar, informar, agradar e proceder, sempre considerando o sentido empregado.",
+      "reviewSummary": [
+        "Regência = relação de dependência.",
+        "Verbos podem exigir preposições.",
+        "Nomes também podem exigir preposições.",
+        "O sentido do verbo pode alterar sua regência.",
+        "Regência está diretamente relacionada à crase."
+      ],
+      "fixationQuestions": [
+        "Regência verbal estuda a relação entre verbo e seus complementos.\nAlternativas: Certo | Errado",
+        "Regência nominal trata exclusivamente da concordância entre substantivo e adjetivo.\nAlternativas: Certo | Errado",
+        "O sentido de um verbo pode influenciar sua regência.\nAlternativas: Certo | Errado",
+        "A regência pode ser relevante para a análise da crase.\nAlternativas: Certo | Errado",
+        "Regência e concordância são conceitos idênticos.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "Essa é a definição de regência verbal."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Errado",
+          "commentary": "Regência nominal trata da relação entre nomes e seus complementos."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "Verbos polissêmicos podem apresentar regências diferentes conforme o sentido."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Certo",
+          "commentary": "É necessário verificar se o termo regente exige a preposição 'a'."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Errado",
+          "commentary": "Regência e concordância tratam de relações gramaticais diferentes."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "1d986b6b-9b8f-4228-911f-1221fc5f055b",
+      "title": "5.2 Relações de coordenação entre orações e entre termos da oração",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Reconhecer relações de coordenação entre termos e orações e identificar seus valores semânticos.",
+      "introduction": "Coordenação ocorre quando elementos sintaticamente independentes ou de mesma função são associados. Entre orações, as coordenadas não exercem função sintática umas em relação às outras.",
+      "fundamentalConcepts": "Coordenação: associação de elementos de mesma natureza ou orações sintaticamente independentes.\n\nOração coordenada assindética: não apresenta conjunção coordenativa explícita.\n\nOração coordenada sindética: apresenta conjunção coordenativa.\n\nAditiva: soma de informações.\n\nAdversativa: oposição ou contraste.\n\nAlternativa: alternância.\n\nConclusiva: conclusão.\n\nExplicativa: explicação ou justificativa.",
+      "completeDevelopment": "Coordenação entre termos\nTermos com a mesma função sintática podem ser coordenados. Exemplo: 'Comprei livros e cadernos.'\n\nCoordenação assindética\nAs orações são coordenadas sem conjunção explícita, normalmente separadas por pontuação.\n\nCoordenação sindética\nHá conjunção coordenativa que explicita a relação semântica.\n\nRelações semânticas\nA classificação depende do sentido produzido pela conjunção e pelo contexto.",
+      "practicalExamples": "'Estudou e foi aprovado.' Relação aditiva.\n\n'Estudou, mas não foi aprovado.' Relação adversativa.\n\n'Estude, pois a prova será difícil.' Relação explicativa.",
+      "importantComparisons": "Coordenação × Subordinação\nNa coordenação, as orações não exercem função sintática umas sobre as outras; na subordinação, uma oração depende sintaticamente de outra.",
+      "examTraps": "A conjunção 'e' pode assumir valores além de simples adição em determinados contextos.\n\nA classificação deve considerar o sentido.\n\nAssindética não significa sem relação semântica; significa sem conjunção coordenativa explícita.",
+      "howUsuallyTested": "Questões pedem classificação das orações e análise da substituição de conjunções.",
+      "reviewSummary": [
+        "Coordenação associa estruturas independentes ou de mesma função.",
+        "Assindética = sem conjunção coordenativa explícita.",
+        "Sindética = com conjunção.",
+        "Valores principais: aditivo, adversativo, alternativo, conclusivo e explicativo."
+      ],
+      "fixationQuestions": [
+        "Orações coordenadas são, em regra, sintaticamente independentes entre si.\nAlternativas: Certo | Errado",
+        "Oração coordenada assindética não possui conjunção coordenativa explícita.\nAlternativas: Certo | Errado",
+        "A oração adversativa expressa relação de oposição.\nAlternativas: Certo | Errado",
+        "A conjunção 'e' sempre expressa exclusivamente adição.\nAlternativas: Certo | Errado",
+        "Termos de mesma função sintática podem ser coordenados.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "Essa é característica central da coordenação."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Certo",
+          "commentary": "Assindética significa ausência de conjunção coordenativa explícita."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "A relação adversativa marca contraste ou oposição."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Errado",
+          "commentary": "O valor de 'e' depende do contexto e pode assumir outros efeitos semânticos."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "Coordenação também ocorre entre termos da oração."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "c096aaff-6e7c-4edb-bdce-628e946e8914",
+      "title": "5.3 Relações de subordinação entre orações e entre termos da oração",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Identificar relações de dependência sintática e semântica entre orações e termos.",
+      "introduction": "Subordinação ocorre quando uma estrutura exerce função sintática em relação a outra ou depende dela para completar determinado sentido. As orações subordinadas podem ser substantivas, adjetivas ou adverbiais.",
+      "fundamentalConcepts": "Subordinação: relação de dependência sintática.\n\nOração subordinada substantiva: exerce função típica de substantivo.\n\nOração subordinada adjetiva: exerce função semelhante à de adjetivo e relaciona-se a um antecedente.\n\nOração subordinada adverbial: exerce função circunstancial.",
+      "completeDevelopment": "Substantivas\nPodem exercer funções como sujeito, objeto direto, objeto indireto, complemento nominal, predicativo e aposto.\n\nAdjetivas\nSão introduzidas geralmente por pronomes relativos e podem ser restritivas ou explicativas.\n\nAdverbiais\nExpressam relações como causa, consequência, condição, concessão, finalidade, comparação, conformidade, proporção e tempo.\n\nSubordinação entre termos\nDeterminados termos dependem de outros por relações de regência, complementação ou determinação.",
+      "practicalExamples": "'É necessário que todos estudem.' A oração 'que todos estudem' exerce função de sujeito.\n\n'O livro que comprei é excelente.' A oração relativa caracteriza 'livro'.\n\n'Embora estivesse cansado, continuou estudando.' A oração estabelece relação concessiva.",
+      "importantComparisons": "Oração adjetiva restritiva × Oração adjetiva explicativa\nA restritiva delimita o referente; a explicativa acrescenta informação sobre um referente já delimitado e é normalmente isolada por vírgulas.\n\nCoordenação × Subordinação\nCoordenação apresenta independência sintática entre orações; subordinação apresenta dependência.",
+      "examTraps": "A presença de pronome relativo não significa automaticamente que a oração seja restritiva.\n\nPontuação pode diferenciar oração adjetiva restritiva e explicativa.\n\nO valor semântico de uma oração adverbial deve ser identificado pelo contexto.",
+      "howUsuallyTested": "É comum solicitar classificação de orações, identificação da função sintática e análise do efeito de retirar ou acrescentar vírgulas.",
+      "reviewSummary": [
+        "Subordinação envolve dependência.",
+        "Substantivas exercem funções nominais.",
+        "Adjetivas caracterizam antecedentes.",
+        "Adverbiais expressam circunstâncias.",
+        "Restritiva delimita; explicativa acrescenta informação."
+      ],
+      "fixationQuestions": [
+        "Orações subordinadas apresentam relação de dependência sintática em relação a outra estrutura.\nAlternativas: Certo | Errado",
+        "Orações subordinadas substantivas podem exercer função de sujeito.\nAlternativas: Certo | Errado",
+        "A oração adjetiva restritiva delimita o referente.\nAlternativas: Certo | Errado",
+        "A oração adjetiva explicativa é normalmente isolada por vírgulas.\nAlternativas: Certo | Errado",
+        "Todas as orações subordinadas expressam exclusivamente relação temporal.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "Dependência é característica fundamental da subordinação."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Certo",
+          "commentary": "As subordinadas substantivas podem exercer diversas funções, inclusive sujeito."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "A restritiva limita o conjunto de referentes."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Certo",
+          "commentary": "A explicativa é normalmente marcada por vírgulas."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Errado",
+          "commentary": "Subordinadas adverbiais podem expressar diversas relações, como causa, condição, concessão e finalidade."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "e13c412c-2bdb-4f50-b085-964859f3e51c",
+      "title": "6.3 Reorganização da estrutura de orações e de períodos do texto",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Analisar transformações na ordem e na estrutura das orações, verificando seus efeitos sobre correção e sentido.",
+      "introduction": "A reorganização de um período pode envolver inversão da ordem dos termos, mudança na posição das orações, transformação entre coordenação e subordinação ou alteração da voz verbal. Essas mudanças podem exigir ajustes gramaticais.",
+      "fundamentalConcepts": "Reorganização sintática: mudança da estrutura ou ordem dos elementos.\n\nInversão: alteração da ordem mais comum dos termos.\n\nPeríodo composto: estrutura com duas ou mais orações.\n\nEquivalência: manutenção das relações semânticas relevantes após transformação.",
+      "completeDevelopment": "Inversão\nA mudança de ordem pode ser possível sem alterar o sentido, mas pode exigir mudança de pontuação ou destacar determinada informação.\n\nMudança de posição de oração\nA posição de uma oração subordinada pode influenciar pontuação e destaque discursivo.\n\nTransformação de voz\nA voz ativa pode ser convertida em passiva mediante alterações estruturais.\n\nCoordenação e subordinação\nUma relação pode ser reorganizada por meio de diferentes estruturas, desde que as relações semânticas relevantes sejam preservadas.",
+      "practicalExamples": "'Quando terminou a reunião, os servidores saíram.' → 'Os servidores saíram quando terminou a reunião.' A relação temporal é preservada.\n\n'A comissão analisou o recurso.' → 'O recurso foi analisado pela comissão.' Há transformação de voz.",
+      "importantComparisons": "Ordem direta × Ordem inversa\nOrdem direta segue a organização mais comum; ordem inversa desloca determinados elementos.",
+      "examTraps": "Alterar a ordem pode exigir mudança de pontuação.\n\nNem toda reorganização preserva o sentido.\n\nA transformação sintática pode modificar foco ou ênfase mesmo quando preserva a proposição.",
+      "howUsuallyTested": "Questões apresentam uma nova ordem para os termos ou orações e pedem avaliação da correção, equivalência e sentido.",
+      "reviewSummary": [
+        "Reorganização altera estrutura.",
+        "Inversão pode exigir nova pontuação.",
+        "A posição de orações pode alterar destaque.",
+        "Transformações devem ser avaliadas quanto à correção e ao sentido."
+      ],
+      "fixationQuestions": [
+        "A reorganização sintática pode exigir alteração da pontuação.\nAlternativas: Certo | Errado",
+        "Toda inversão de termos altera obrigatoriamente o sentido.\nAlternativas: Certo | Errado",
+        "A mudança da voz ativa para a passiva modifica a estrutura sintática.\nAlternativas: Certo | Errado",
+        "A posição de uma oração subordinada pode influenciar sua pontuação.\nAlternativas: Certo | Errado",
+        "Reorganizar uma frase exige verificar se as relações semânticas foram preservadas.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "A posição dos termos pode determinar diferentes regras de pontuação."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Errado",
+          "commentary": "Muitas inversões preservam o sentido fundamental."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "A voz verbal modifica a organização sintática dos participantes."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Certo",
+          "commentary": "A posição de uma subordinada, especialmente adverbial, pode afetar a pontuação."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "Equivalência exige verificar o conteúdo e as relações estabelecidas."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "28cc1a4a-9b13-4014-ba6f-3766d8fdf83e",
+      "title": "6.1 Significação das palavras",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Compreender os sentidos das palavras e expressões conforme o contexto e as relações semânticas estabelecidas.",
+      "introduction": "O significado de uma palavra não deve ser analisado apenas pelo significado dicionarizado. O contexto pode determinar sentidos específicos, figurados ou especializados.",
+      "fundamentalConcepts": "Denotação: uso da palavra em sentido mais literal.\n\nConotação: uso em sentido figurado ou associado.\n\nSinonímia: relação entre palavras de significado semelhante.\n\nAntonímia: relação de oposição de sentido.\n\nPolissemia: existência de diferentes sentidos relacionados para uma mesma forma.\n\nHomonímia: coincidência formal entre palavras que possuem significados distintos.\n\nAmbiguidade: possibilidade de mais de uma interpretação.",
+      "completeDevelopment": "Sentido contextual\nUma palavra pode assumir valor diferente conforme as demais palavras e a situação discursiva.\n\nSinonímia contextual\nSinônimos não são necessariamente intercambiáveis em todos os contextos.\n\nPolissemia\nUma mesma palavra pode apresentar vários sentidos relacionados, determinados pelo contexto.\n\nAmbiguidade\nPode decorrer da estrutura sintática ou do vocabulário e comprometer a precisão da mensagem.",
+      "practicalExamples": "A palavra 'banco' pode designar instituição financeira ou assento, conforme o contexto.\n\n'Ele tem um coração de pedra' emprega 'pedra' em sentido figurado.",
+      "importantComparisons": "Polissemia × Homonímia\nNa polissemia, os sentidos da palavra apresentam relação; na homonímia, há coincidência formal entre palavras distintas.\n\nDenotação × Conotação\nDenotação tende ao sentido literal; conotação envolve sentido figurado ou associado.",
+      "examTraps": "Sinônimos não são necessariamente perfeitos.\n\nO contexto pode modificar o sentido.\n\nUma palavra isolada pode ser ambígua, mas o contexto pode eliminar a ambiguidade.",
+      "howUsuallyTested": "É frequente solicitar o significado contextual de palavras, substituição por termos equivalentes e identificação de relações semânticas.",
+      "reviewSummary": [
+        "Sentido depende do contexto.",
+        "Sinonímia é semelhança de sentido.",
+        "Antonímia é oposição.",
+        "Polissemia envolve múltiplos sentidos relacionados.",
+        "Conotação pode produzir sentido figurado.",
+        "Ambiguidade permite interpretações múltiplas."
+      ],
+      "fixationQuestions": [
+        "O contexto pode determinar o significado específico de uma palavra.\nAlternativas: Certo | Errado",
+        "Sinônimos são sempre perfeitamente intercambiáveis.\nAlternativas: Certo | Errado",
+        "Polissemia envolve diferentes sentidos relacionados de uma mesma palavra.\nAlternativas: Certo | Errado",
+        "Conotação pode envolver uso figurado.\nAlternativas: Certo | Errado",
+        "Ambiguidade ocorre quando uma estrutura admite mais de uma interpretação.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Certo",
+          "commentary": "O contexto restringe e determina o sentido relevante."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Errado",
+          "commentary": "Sinônimos podem apresentar diferenças de uso, registro ou sentido."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "Essa é a característica central da polissemia."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Certo",
+          "commentary": "A conotação frequentemente envolve sentido figurado."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "Ambiguidade permite mais de uma leitura possível."
+        }
+      ]
+    },
+    {
+      "operation": "UPDATE",
+      "id": "e247451a-3f86-46e8-99f5-0783c4c1c324",
+      "title": "6.2 Substituição de palavras ou de trechos de texto",
+      "discipline": "Língua Portuguesa",
+      "studyGroup": "Conhecimentos Gerais",
+      "learningObjective": "Avaliar substituições lexicais e sintáticas verificando preservação de sentido, correção e coesão.",
+      "introduction": "A substituição de palavras ou trechos é um recurso frequente em questões de língua portuguesa. Para que uma substituição seja adequada, é necessário analisar não apenas o significado, mas também a função sintática, a regência, a concordância, a referência e o registro.",
+      "fundamentalConcepts": "Substituição lexical: troca de uma palavra por outra.\n\nSubstituição sintática: troca ou reorganização de uma estrutura.\n\nEquivalência contextual: preservação do sentido relevante no contexto.\n\nAdequação: compatibilidade da nova forma com a estrutura e o gênero.",
+      "completeDevelopment": "Sinônimos\nA substituição por sinônimo deve considerar o contexto e as relações sintáticas.\n\nPronomes\nA substituição por pronome pode evitar repetição, mas deve preservar a referência e a clareza.\n\nConectores\nA substituição de conectores exige preservação da relação lógica.\n\nTrechos completos\nAo substituir uma oração ou expressão inteira, devem ser analisados tempo verbal, regência, concordância, pontuação e sentido.",
+      "practicalExamples": "'O candidato foi aprovado porque estudou.' A substituição de 'porque' por 'portanto' exigiria reorganização da estrutura para preservar o sentido.\n\n'O servidor apresentou o documento. Ele foi arquivado.' A substituição deve preservar a referência de 'ele'.",
+      "importantComparisons": "Substituição lexical × Substituição referencial\nA lexical troca uma palavra por outra; a referencial utiliza uma forma que mantém ou constrói a referência.",
+      "examTraps": "Sinônimo não garante equivalência.\n\nPronomes podem gerar ambiguidade.\n\nA troca de conectores pode inverter relações.\n\nA nova estrutura precisa respeitar regência e concordância.",
+      "howUsuallyTested": "É comum apresentar um trecho original e uma alternativa de substituição para verificar se a alteração mantém correção, coesão e sentido.",
+      "reviewSummary": [
+        "Substituição deve ser analisada no contexto.",
+        "Sinônimos podem não ser equivalentes.",
+        "Pronomes precisam manter referência clara.",
+        "Conectores precisam preservar relações.",
+        "Verifique regência, concordância e pontuação."
+      ],
+      "fixationQuestions": [
+        "A substituição por um sinônimo sempre preserva o sentido.\nAlternativas: Certo | Errado",
+        "A substituição por pronome pode gerar ambiguidade referencial.\nAlternativas: Certo | Errado",
+        "A troca de conectores pode exigir reorganização da frase.\nAlternativas: Certo | Errado",
+        "A substituição de trechos deve considerar concordância e regência.\nAlternativas: Certo | Errado",
+        "A equivalência de uma substituição depende do contexto.\nAlternativas: Certo | Errado"
+      ],
+      "commentedAnswerKey": [
+        {
+          "questionNumber": 1,
+          "answer": "Errado",
+          "commentary": "O sinônimo precisa ser adequado ao contexto."
+        },
+        {
+          "questionNumber": 2,
+          "answer": "Certo",
+          "commentary": "Um pronome pode possuir mais de um antecedente possível."
+        },
+        {
+          "questionNumber": 3,
+          "answer": "Certo",
+          "commentary": "Conectores diferentes podem exigir estruturas diferentes para manter a mesma relação."
+        },
+        {
+          "questionNumber": 4,
+          "answer": "Certo",
+          "commentary": "Alterações podem modificar as exigências sintáticas."
+        },
+        {
+          "questionNumber": 5,
+          "answer": "Certo",
+          "commentary": "Equivalência é determinada pelo contexto linguístico e discursivo."
+        }
+      ]
+    }
+  ]
+}

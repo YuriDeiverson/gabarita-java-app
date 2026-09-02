@@ -61,6 +61,8 @@ const PlanManager = lazy(() => import('./components/PlanManager'));
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const InitialStudySetup = lazy(() => import('./components/InitialStudySetup'));
 const LOAD_RETRY_DELAYS_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
+const FOREGROUND_REFRESH_MS = 120_000;
+const BACKGROUND_REFRESH_MS = 300_000;
 const loadRetryDelay = (attempt: number) => LOAD_RETRY_DELAYS_MS[Math.min(attempt, LOAD_RETRY_DELAYS_MS.length - 1)];
 
 type AppTab = 'home' | 'career' | 'study' | 'questions' | 'schedule' | 'performance' | 'notes' | 'admin';
@@ -101,23 +103,15 @@ export default function App() {
     loadStudyPreferences(user?.id)
   );
   const [editingPreferences, setEditingPreferences] = useState(false);
-  const [activeTab, setActiveTab] = useState<AppTab>(() => {
-    const saved = localStorage.getItem('app_active_tab');
-    const setupAvailable = Boolean(loadStudyPreferences(user?.id));
-    if (saved === 'quiz') return hasActiveStudyPlan() ? 'study' : 'home';
-    return saved &&
-      saved !== 'home' &&
-      !hasActiveStudyPlan() &&
-      !(saved === 'career' && setupAvailable) &&
-      !(saved === 'admin' && isAdmin)
-      ? 'home'
-      : (saved as AppTab) || 'home';
-  });
+  // Cada nova entrada autenticada começa no painel do dia. A aba continua
+  // persistida durante a navegação, mas não deve desviar o pós-login.
+  const [activeTab, setActiveTab] = useState<AppTab>('home');
   const [homeMode, setHomeMode] = useState<'dashboard' | 'plans'>(() => (hasActiveStudyPlan() ? 'dashboard' : 'plans'));
   const [serverPlans, setServerPlans] = useState<StudyPlan[]>([]);
   const [plansBootstrapping, setPlansBootstrapping] = useState(true);
   const [plansLoadError, setPlansLoadError] = useState('');
   const plansLoadRequestRef = useRef(0);
+  const initialTodayRequestRef = useRef<Promise<StudyDashboardData> | null>(null);
   const [studyContext, setStudyContext] = useState<ActiveStudyContext | null>(() => {
     try {
       return JSON.parse(localStorage.getItem('active_study_context') || 'null');
@@ -311,18 +305,42 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
+    // A tela diária não depende do conteúdo da lista de planos para começar a
+    // carregar. Antecipá-la elimina a cascata plano -> rotina observada no login.
+    const todayRequest = dailyStudyApi.today();
+    initialTodayRequestRef.current = todayRequest;
+    void todayRequest
+      .then(response => {
+        if (cancelled) return;
+        setHeaderStudyData(response);
+        setHeaderTimerLoadedAt(Date.now());
+        if (response.notifications?.length)
+          setHeaderNotifications(response.notifications.filter(item => !item.read_at));
+      })
+      .catch(() => {
+        // Usuários sem plano ativo recebem a configuração inicial normalmente.
+        // Se houver uma falha temporária, o dashboard tentará novamente.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (plansBootstrapping) return;
+    let cancelled = false;
     let retryTimer = 0;
     let failedAttempts = 0;
 
     const poll = async (showLoading = false) => {
       if (!showLoading && document.visibilityState !== 'visible') {
-        retryTimer = window.setTimeout(() => void poll(), 30_000);
+        retryTimer = window.setTimeout(() => void poll(), BACKGROUND_REFRESH_MS);
         return;
       }
       const loaded = await loadHeaderNotifications(showLoading);
       if (cancelled) return;
       failedAttempts = loaded ? 0 : failedAttempts + 1;
-      const delay = loaded ? 30_000 : loadRetryDelay(failedAttempts - 1);
+      const delay = loaded ? FOREGROUND_REFRESH_MS : loadRetryDelay(failedAttempts - 1);
       retryTimer = window.setTimeout(() => void poll(), delay);
     };
 
@@ -331,7 +349,7 @@ export default function App() {
       cancelled = true;
       window.clearTimeout(retryTimer);
     };
-  }, [loadHeaderNotifications]);
+  }, [loadHeaderNotifications, plansBootstrapping]);
 
   const loadHeaderStudyData = useCallback(async () => {
     if (!hasPlan) {
@@ -339,7 +357,11 @@ export default function App() {
       return;
     }
     try {
-      const response = await dailyStudyApi.today();
+      // O bootstrap inicia esta consulta em paralelo com a busca do plano.
+      // Consumir a mesma Promise evita repetir a montagem custosa do dia.
+      const request = initialTodayRequestRef.current || dailyStudyApi.today();
+      initialTodayRequestRef.current = null;
+      const response = await request;
       setHeaderStudyData(response);
       setHeaderTimerLoadedAt(Date.now());
       if (response.notifications?.length)
@@ -363,8 +385,15 @@ export default function App() {
 
   useEffect(() => {
     void loadHeaderStudyData();
-    const interval = window.setInterval(loadHeaderStudyData, 30_000);
-    return () => window.clearInterval(interval);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void loadHeaderStudyData();
+    };
+    const interval = window.setInterval(refreshWhenVisible, FOREGROUND_REFRESH_MS);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
   }, [dashboardVersion, loadHeaderStudyData]);
 
   useEffect(() => {
@@ -514,8 +543,8 @@ export default function App() {
         const activePlan = plans.find(isPrimaryPlan);
         if (activePlan) {
           hydrateActivePlan(activePlan);
-          // The active plan is an authoritative server result, but restoring it
-          // must not move the user away from the screen they were using.
+          // Um plano ativo sempre abre a rotina atual após a autenticação.
+          setActiveTab('home');
           setHomeMode('dashboard');
         } else {
           localStorage.setItem('study_plan_deleted', 'true');
@@ -528,7 +557,7 @@ export default function App() {
         setPlansBootstrapping(false);
       } catch {
         if (cancelled) return;
-        setPlansLoadError('Carregando seu conograma…');
+        setPlansLoadError('Carregando seu cronograma…');
         retryTimer = window.setTimeout(() => void loadPlans(), loadRetryDelay(failedAttempts++));
       }
     };

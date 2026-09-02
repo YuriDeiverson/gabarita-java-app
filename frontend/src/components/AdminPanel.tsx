@@ -348,6 +348,105 @@ const emptyQuestion = {
   status: 'ACTIVE',
   options: 'A | \nB | \nC | \nD | \nE | ',
 };
+const structuredMaterialBatchTemplate = JSON.stringify(
+  {
+    materials: [
+      {
+        operation: 'CREATE',
+        title: '[PREENCHA: título do assunto]',
+        discipline: '[PREENCHA: nome da disciplina]',
+        studyGroup: 'Conhecimentos Específicos',
+        learningObjective: '[PREENCHA: o que o aluno deverá compreender e aplicar ao final da aula]',
+        introduction: '[PREENCHA: contexto, finalidade e relevância do assunto para a prova]',
+        fundamentalConcepts: '[PREENCHA: definições, elementos, regras e termos indispensáveis]',
+        completeDevelopment:
+          '[PREENCHA: desenvolvimento integral, funcionamento, condições, consequências, limites e exceções]',
+        practicalExamples: '[PREENCHA: situações concretas e aplicação passo a passo dos conceitos]',
+        importantComparisons: '[PREENCHA: conceitos próximos e critérios que os diferenciam]',
+        examTraps: '[PREENCHA: confusões recorrentes, inversões e detalhes usados pela banca]',
+        howUsuallyTested: '[PREENCHA: formatos de cobrança e como reconhecer o ponto decisivo da questão]',
+        reviewSummary: [
+          '[PREENCHA: primeiro ponto específico para revisão]',
+          '[PREENCHA: segundo ponto específico para revisão]',
+          '[PREENCHA: terceiro ponto específico para revisão]',
+        ],
+        fixationQuestions: [
+          '[PREENCHA: questão de fixação 1]',
+          '[PREENCHA: questão de fixação 2]',
+          '[PREENCHA: questão de fixação 3]',
+          '[PREENCHA: questão de fixação 4]',
+          '[PREENCHA: questão de fixação 5]',
+        ],
+        commentedAnswerKey: [
+          { questionNumber: 1, answer: '[PREENCHA: resposta 1]', commentary: '[PREENCHA: comentário técnico 1]' },
+          { questionNumber: 2, answer: '[PREENCHA: resposta 2]', commentary: '[PREENCHA: comentário técnico 2]' },
+          { questionNumber: 3, answer: '[PREENCHA: resposta 3]', commentary: '[PREENCHA: comentário técnico 3]' },
+          { questionNumber: 4, answer: '[PREENCHA: resposta 4]', commentary: '[PREENCHA: comentário técnico 4]' },
+          { questionNumber: 5, answer: '[PREENCHA: resposta 5]', commentary: '[PREENCHA: comentário técnico 5]' },
+        ],
+      },
+    ],
+  },
+  null,
+  2
+);
+const structuredMaterialText = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+const structuredMaterialValidationError = (material: Record<string, unknown>, index: number) => {
+  const prefix = `Material ${index + 1}`;
+  const operation = structuredMaterialText(material.operation).toUpperCase();
+  if (!['CREATE', 'UPDATE'].includes(operation)) return `${prefix}: “operation” deve ser CREATE ou UPDATE.`;
+  const required = [
+    'title',
+    'discipline',
+    'studyGroup',
+    'learningObjective',
+    'introduction',
+    'fundamentalConcepts',
+    'completeDevelopment',
+    'practicalExamples',
+    'importantComparisons',
+    'examTraps',
+    'howUsuallyTested',
+  ];
+  const missing = required.find(field => !structuredMaterialText(material[field]));
+  if (missing) return `${prefix}: o campo obrigatório “${missing}” está vazio.`;
+  const hasPlaceholder = (value: unknown) => structuredMaterialText(value).toUpperCase().includes('[PREENCHA');
+  if (required.some(field => hasPlaceholder(material[field])))
+    return `${prefix}: substitua todos os marcadores [PREENCHA: ...] pelo conteúdo definitivo.`;
+  if (!['Conhecimentos Gerais', 'Conhecimentos Específicos'].includes(structuredMaterialText(material.studyGroup)))
+    return `${prefix}: “studyGroup” deve ser Conhecimentos Gerais ou Conhecimentos Específicos.`;
+  const lessonLength = required.slice(4).reduce((total, field) => total + structuredMaterialText(material[field]).length, 0);
+  if (lessonLength < 500) return `${prefix}: a aula completa deve possuir pelo menos 500 caracteres de conteúdo.`;
+  if (!Array.isArray(material.reviewSummary) || material.reviewSummary.length < 3)
+    return `${prefix}: “reviewSummary” deve conter pelo menos três itens.`;
+  if (material.reviewSummary.some(point => !structuredMaterialText(point)))
+    return `${prefix}: “reviewSummary” não pode conter itens vazios.`;
+  if (material.reviewSummary.some(hasPlaceholder))
+    return `${prefix}: preencha todos os itens de “reviewSummary”.`;
+  if (!Array.isArray(material.fixationQuestions) || material.fixationQuestions.length !== 5)
+    return `${prefix}: “fixationQuestions” deve conter exatamente cinco questões.`;
+  if (material.fixationQuestions.some(question => !structuredMaterialText(question)))
+    return `${prefix}: as cinco questões de fixação devem estar preenchidas.`;
+  if (material.fixationQuestions.some(hasPlaceholder))
+    return `${prefix}: substitua as cinco questões do modelo pelo conteúdo definitivo.`;
+  if (!Array.isArray(material.commentedAnswerKey) || material.commentedAnswerKey.length !== 5)
+    return `${prefix}: “commentedAnswerKey” deve conter exatamente cinco respostas comentadas.`;
+  const answerNumbers = new Set<number>();
+  for (const answer of material.commentedAnswerKey) {
+    if (!answer || typeof answer !== 'object' || Array.isArray(answer))
+      return `${prefix}: cada item do gabarito deve ser um objeto.`;
+    const record = answer as Record<string, unknown>;
+    const number = Number(record.questionNumber);
+    if (!Number.isInteger(number) || number < 1 || number > 5 || answerNumbers.has(number))
+      return `${prefix}: o gabarito deve numerar uma única vez cada questão de 1 a 5.`;
+    if (!structuredMaterialText(record.answer) || !structuredMaterialText(record.commentary))
+      return `${prefix}: cada resposta precisa de “answer” e “commentary”.`;
+    if (hasPlaceholder(record.answer) || hasPlaceholder(record.commentary))
+      return `${prefix}: substitua todas as respostas e comentários do modelo.`;
+    answerNumbers.add(number);
+  }
+  return '';
+};
 const questionBatchTemplate = JSON.stringify(
   [
     {
@@ -740,6 +839,8 @@ export default function AdminPanel({
   const [materialTaxonomySaving, setMaterialTaxonomySaving] = useState<'discipline' | 'subject' | ''>('');
   const [materialCreating, setMaterialCreating] = useState<'discipline' | 'subject' | ''>('');
   const [materialDeleting, setMaterialDeleting] = useState<'discipline' | 'subject' | ''>('');
+  const [materialBatchOpen, setMaterialBatchOpen] = useState(false);
+  const [materialBatchJson, setMaterialBatchJson] = useState('');
   const [questionBatchJson, setQuestionBatchJson] = useState('');
   const [questionBatchImporterOpen, setQuestionBatchImporterOpen] = useState(false);
   const questionTaxonomyAreas = useMemo(
@@ -760,28 +861,36 @@ export default function AdminPanel({
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
+    const includeCurriculum = section === 'roles' || section === 'materials';
+    const needsPassages = section === 'passages' || section === 'questions';
+    const needsLibrary = section === 'subjects' || section === 'materials';
+    const needsTaxonomy = section === 'questions';
     const [catalogResult, passagesResult, libraryResult, taxonomyResult] = await Promise.allSettled([
-      adminApi.catalog(),
-      adminApi.passages(),
-      catalogApi.studyLibrary(),
-      questionsApi.taxonomy('', true),
+      adminApi.catalog(includeCurriculum),
+      needsPassages ? adminApi.passages() : Promise.resolve(null),
+      needsLibrary ? catalogApi.studyLibrarySummaries() : Promise.resolve(null),
+      needsTaxonomy ? questionsApi.taxonomy('', true) : Promise.resolve(null),
     ]);
     if (catalogResult.status === 'fulfilled') setContests(catalogResult.value);
-    if (passagesResult.status === 'fulfilled') setPassages(passagesResult.value);
-    if (libraryResult.status === 'fulfilled') setSharedStudyLibrary(libraryResult.value);
-    if (taxonomyResult.status === 'fulfilled') setQuestionTaxonomy(taxonomyResult.value);
+    if (passagesResult.status === 'fulfilled' && passagesResult.value) setPassages(passagesResult.value);
+    if (libraryResult.status === 'fulfilled' && libraryResult.value) setSharedStudyLibrary(libraryResult.value);
+    if (taxonomyResult.status === 'fulfilled' && taxonomyResult.value) setQuestionTaxonomy(taxonomyResult.value);
     const coreError =
       catalogResult.status === 'rejected'
         ? catalogResult.reason
-        : passagesResult.status === 'rejected'
+        : needsPassages && passagesResult.status === 'rejected'
           ? passagesResult.reason
+          : needsLibrary && libraryResult.status === 'rejected'
+            ? libraryResult.reason
+            : needsTaxonomy && taxonomyResult.status === 'rejected'
+              ? taxonomyResult.reason
           : null;
     if (coreError)
       setError(
         coreError instanceof Error ? coreError.message : 'Parte do painel administrativo não pôde ser carregada.'
       );
     setLoading(false);
-  }, []);
+  }, [section]);
 
   useEffect(() => {
     void load();
@@ -995,7 +1104,7 @@ export default function AdminPanel({
   );
   const effectiveMaterialCard = useMemo(
     () =>
-      materialCard && materialSharedSubject
+      materialCard && materialSharedSubject?.contentLoaded !== false
         ? {
             ...materialCard,
             content: materialSharedSubject.content,
@@ -1424,18 +1533,29 @@ export default function AdminPanel({
       resetSharedSubjectEditor
     );
   };
-  const editSharedSubject = (subject: SharedStudySubject) => {
-    setSharedSubjectForm({
-      title: subject.title,
-      discipline: subject.discipline,
-      studyGroup: sharedSubjectStudyGroup(subject),
-      studyObjective: subject.studyObjective,
-      content: studyContentForEditor(subject.content),
-      keyTakeaways: subject.keyTakeaways.join('\n'),
-      reviewSummary: subject.reviewSummary.join('\n'),
-    });
-    setEditingSharedSubject(subject.id);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  const editSharedSubject = async (subject: SharedStudySubject) => {
+    setSaving(true);
+    setError('');
+    try {
+      const detail = subject.contentLoaded === false ? await catalogApi.studySubject(subject.id) : subject;
+      const loaded = { ...detail, contentLoaded: true };
+      setSharedStudyLibrary(current => current.map(item => (item.id === loaded.id ? loaded : item)));
+      setSharedSubjectForm({
+        title: loaded.title,
+        discipline: loaded.discipline,
+        studyGroup: sharedSubjectStudyGroup(loaded),
+        studyObjective: loaded.studyObjective,
+        content: studyContentForEditor(loaded.content),
+        keyTakeaways: loaded.keyTakeaways.join('\n'),
+        reviewSummary: loaded.reviewSummary.join('\n'),
+      });
+      setEditingSharedSubject(loaded.id);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível carregar o material selecionado.');
+    } finally {
+      setSaving(false);
+    }
   };
   const deleteSharedSubject = (subject: SharedStudySubject) => {
     if (
@@ -1723,6 +1843,75 @@ export default function AdminPanel({
       setError(cause instanceof Error ? cause.message : 'Não foi possível adicionar o material.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const submitStructuredMaterialBatch = async (event: FormEvent) => {
+    event.preventDefault();
+    setError('');
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(materialBatchJson);
+    } catch {
+      setError('O JSON de materiais é inválido. Revise vírgulas, aspas e colchetes.');
+      return;
+    }
+    const materials = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === 'object' && Array.isArray((parsed as Record<string, unknown>).materials)
+        ? ((parsed as Record<string, unknown>).materials as unknown[])
+        : null;
+    if (!materials?.length) {
+      setError('Informe um objeto com “materials” ou um array com pelo menos um material.');
+      return;
+    }
+    if (materials.length > 100) {
+      setError('Cada importação pode conter no máximo 100 materiais completos.');
+      return;
+    }
+    for (let index = 0; index < materials.length; index++) {
+      const item = materials[index];
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        setError(`Material ${index + 1}: cada item deve ser um objeto JSON.`);
+        return;
+      }
+      const validationError = structuredMaterialValidationError(item as Record<string, unknown>, index);
+      if (validationError) {
+        setError(validationError);
+        requestAnimationFrame(() =>
+          document.getElementById('study-material-batch-importer')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        );
+        return;
+      }
+    }
+    setSaving(true);
+    try {
+      const result = await adminApi.importStructuredStudyMaterials(materials as Record<string, unknown>[]);
+      setMaterialBatchJson('');
+      setMaterialBatchOpen(false);
+      await load();
+      notify(
+        `${result.processed} material(is) processado(s): ${result.created} criado(s) e ${result.updated} atualizado(s).` +
+          (result.synchronizedPlans > 0 ? ` ${result.synchronizedPlans} plano(s) sincronizado(s).` : '')
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível importar os materiais.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const loadStructuredMaterialJsonFile = async (file?: File) => {
+    if (!file) return;
+    setError('');
+    if (file.size > 5 * 1024 * 1024) {
+      setError('O arquivo JSON deve ter no máximo 5 MB.');
+      return;
+    }
+    try {
+      setMaterialBatchJson(await file.text());
+    } catch {
+      setError('Não foi possível ler o arquivo JSON selecionado.');
     }
   };
 
@@ -3394,8 +3583,8 @@ export default function AdminPanel({
                             key={subject.id}
                             title={subject.title}
                             eyebrow={group.studyGroup}
-                            details={`${subject.reviewSummary.length} item(ns) de revisão · ${studyContentLength(subject.content) >= 500 && subject.keyTakeaways.length >= 3 ? 'aula completa' : 'aula pendente'}`}
-                            onEdit={() => editSharedSubject(subject)}
+                            details={`${subject.reviewCount ?? subject.reviewSummary.length} item(ns) de revisão · ${subject.contentLength ?? studyContentLength(subject.content)} caracteres`}
+                            onEdit={() => void editSharedSubject(subject)}
                             onDelete={() => deleteSharedSubject(subject)}
                           />
                         ))}
@@ -3412,7 +3601,122 @@ export default function AdminPanel({
       )}
 
       {section === 'materials' && (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(340px,.95fr)]">
+        <div className="space-y-6">
+          <button
+            type="button"
+            aria-expanded={materialBatchOpen}
+            aria-controls="study-material-batch-importer"
+            onClick={() => setMaterialBatchOpen(open => !open)}
+            className={`flex w-full items-center justify-between gap-4 rounded-2xl border px-5 py-4 text-left shadow-sm transition ${materialBatchOpen ? 'border-indigo-200 bg-indigo-50 text-indigo-950' : 'border-slate-200 bg-white text-slate-900 hover:border-indigo-300 hover:bg-indigo-50/50'}`}
+          >
+            <span className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white">
+                <Braces className="h-5 w-5" />
+              </span>
+              <span>
+                <strong className="block text-sm font-black">Importar materiais completos em JSON</strong>
+                <small className="mt-0.5 block text-xs font-medium text-slate-500">
+                  Crie ou atualize até 100 assuntos de uma só vez
+                </small>
+              </span>
+            </span>
+            <span className="flex items-center gap-2 text-xs font-extrabold text-indigo-700">
+              {materialBatchOpen ? 'Recolher' : 'Importar'}
+              <ChevronDown className={`h-4 w-4 transition-transform ${materialBatchOpen ? 'rotate-180' : ''}`} />
+            </span>
+          </button>
+
+          {materialBatchOpen && (
+            <div id="study-material-batch-importer">
+              <AdminCard
+                title="Importação estruturada de materiais"
+                description="Todos os campos pedagógicos são obrigatórios. A operação é atômica: se um material for inválido, nenhum item do arquivo será salvo."
+              >
+                <form onSubmit={event => void submitStructuredMaterialBatch(event)} className="space-y-5">
+                  <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-xs leading-5 text-indigo-950">
+                    <strong className="block font-black">Criação e edição segura</strong>
+                    <p className="mt-1">
+                      Use <code>operation: "CREATE"</code> para um assunto novo. Para alterar conteúdo já cadastrado,
+                      use <code>operation: "UPDATE"</code>; o sistema localiza pelo <code>id</code> ou pela combinação
+                      exata de <code>title</code> e <code>discipline</code>.
+                    </p>
+                  </div>
+                  <section aria-labelledby="material-json-required-fields">
+                    <div className="mb-2 flex items-center gap-2">
+                      <CircleHelp className="h-4 w-4 text-indigo-600" />
+                      <h4 id="material-json-required-fields" className="text-xs font-black uppercase tracking-wider text-slate-700">
+                        Estrutura obrigatória por assunto
+                      </h4>
+                    </div>
+                    <div className="grid gap-2 text-xs text-slate-700 sm:grid-cols-2 lg:grid-cols-3">
+                      {[
+                        'Título',
+                        'Objetivo de aprendizagem',
+                        'Introdução',
+                        'Conceitos fundamentais',
+                        'Desenvolvimento completo',
+                        'Exemplos práticos',
+                        'Comparações importantes',
+                        'Pegadinhas de prova',
+                        'Como o assunto costuma ser cobrado',
+                        'Resumo para revisão (3+ itens)',
+                        'Cinco questões de fixação',
+                        'Gabarito comentado das cinco questões',
+                      ].map(item => (
+                        <span key={item} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-bold">
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </section>
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <label className={`${buttonSecondary} cursor-pointer`}>
+                      <Upload className="h-4 w-4" /> Selecionar arquivo .json
+                      <input
+                        type="file"
+                        accept="application/json,.json"
+                        className="sr-only"
+                        onChange={event => {
+                          void loadStructuredMaterialJsonFile(event.target.files?.[0]);
+                          event.currentTarget.value = '';
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className={buttonSecondary}
+                      onClick={() => setMaterialBatchJson(structuredMaterialBatchTemplate)}
+                    >
+                      <Braces className="h-4 w-4" /> Usar modelo JSON
+                    </button>
+                  </div>
+                  <Field label="JSON dos materiais">
+                    <textarea
+                      required
+                      rows={24}
+                      spellCheck={false}
+                      className={`${inputClass} font-mono text-xs leading-5`}
+                      value={materialBatchJson}
+                      onChange={event => setMaterialBatchJson(event.target.value)}
+                      placeholder={structuredMaterialBatchTemplate}
+                    />
+                  </Field>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-slate-500">
+                      Cada arquivo aceita até 100 aulas. O resumo precisa ter ao menos três pontos e as cinco questões
+                      devem possuir respostas comentadas numeradas de 1 a 5.
+                    </p>
+                    <button type="submit" disabled={saving || !materialBatchJson.trim()} className={buttonPrimary}>
+                      {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                      {saving ? 'Importando…' : 'Validar e importar JSON'}
+                    </button>
+                  </div>
+                </form>
+              </AdminCard>
+            </div>
+          )}
+
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(340px,.95fr)]">
           <AdminCard
             title={
               editingBaseMaterial
@@ -3752,6 +4056,7 @@ export default function AdminPanel({
               </div>
             )}
           </AdminCard>
+          </div>
         </div>
       )}
 

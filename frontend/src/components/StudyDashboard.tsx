@@ -89,16 +89,39 @@ export default function StudyDashboard({
   );
 
   useEffect(() => {
-    load(hadInitialData.current);
+    // App já acabou de buscar estes dados durante o bootstrap. Uma nova chamada
+    // aqui repetia toda a preparação do dia e atrasava a primeira interação.
+    if (hadInitialData.current) {
+      hadInitialData.current = false;
+      return;
+    }
+    void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!initialData) return;
+    setData(initialData);
+    setError('');
+    setLoadedAt(Date.now());
+    setTick(0);
+    const runningTask = initialData.active_session?.daily_task_id
+      ? initialData.tasks.find(task => task.id === initialData.active_session.daily_task_id)
+      : undefined;
+    const contextTask =
+      runningTask || initialData.tasks.find(task => ['AVAILABLE', 'IN_PROGRESS'].includes(task.status));
+    if (contextTask)
+      onStudyContextChange({
+        roadmapTopicId: contextTask.roadmap_topic_id,
+        topicTitle: contextTask.topic_title,
+        subjectName: contextTask.subject_name,
+        source: runningTask ? 'session' : 'daily-plan',
+      });
+  }, [initialData, onStudyContextChange]);
+
   useEffect(() => {
     const interval = window.setInterval(() => setTick(value => value + 1), 1000);
-    const reconcile = window.setInterval(() => load(true), 30000);
-    return () => {
-      clearInterval(interval);
-      clearInterval(reconcile);
-    };
-  }, [load]);
+    return () => clearInterval(interval);
+  }, []);
 
   const restoredSession = data?.active_session && data.active_session.id ? (data.active_session as StudySession) : null;
   const questionPractice = restoredSession?.session_kind === 'QUESTIONS' ? restoredSession : null;

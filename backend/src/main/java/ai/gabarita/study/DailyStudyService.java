@@ -62,7 +62,6 @@ public class DailyStudyService {
         result.put("active_session",sessions.activeOrEmpty(currentUser.id()));
         result.put("streak",engagement.streak(currentUser.id())); result.put("experience",engagement.experience(currentUser.id()));
         result.put("reviews",dashboardReviews(5)); result.put("next",next(planId));
-        result.put("roadmap",roadmap(planId));
         result.put("planning",planner.summary(planId,currentUser.id(),today));
         result.put("notifications", jdbc.sql("""
             SELECT * FROM notifications WHERE user_id=:u AND scheduled_for<=now() ORDER BY read_at NULLS FIRST,scheduled_for DESC LIMIT 5
@@ -187,8 +186,9 @@ public class DailyStudyService {
 
     private Map<String,Object> activePlan() {
         var rows=jdbc.sql("""
-            SELECT sp.*,COALESCE((sp.settings->>'hoursPerDay')::int,2)*60 daily_goal_minutes,
-              sp.settings::text settings_json FROM study_plans sp
+            SELECT sp.id,sp.course_id,sp.title,sp.exam_date,sp.status,sp.is_primary,sp.block_minutes,
+              COALESCE((sp.settings->>'hoursPerDay')::int,2)*60 daily_goal_minutes
+            FROM study_plans sp
             WHERE user_id=:u AND is_primary AND status='ACTIVE' LIMIT 1
             """).param("u",currentUser.id()).query().listOfRows();
         if(rows.isEmpty()) throw new NoSuchElementException("Nenhum plano principal ativo"); return rows.getFirst();
@@ -199,7 +199,9 @@ public class DailyStudyService {
         int count=jdbc.sql("SELECT COUNT(*) FROM roadmap_topics WHERE plan_id=:p AND active").param("p",planId).query(Integer.class).single();
         if(count>0)return;
         try {
-            var root=json.readTree(String.valueOf(plan.get("settings_json")));
+            String settings=jdbc.sql("SELECT settings::text FROM study_plans WHERE id=:p")
+              .param("p",planId).query(String.class).single();
+            var root=json.readTree(settings);
             bootstrap.synchronize(planId,currentUser.id(),root.path("studySections"),number(plan,"block_minutes"),Math.max(1,goal/60));
         } catch(Exception e){throw new IllegalStateException("Não foi possível preparar o roadmap deste plano",e);}
     }
