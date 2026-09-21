@@ -9,6 +9,7 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const QUESTION_BANK_TIMEOUT_MS = 45_000;
 const STUDY_PLAN_MUTATION_TIMEOUT_MS = 120_000;
 const SCHEDULE_GENERATION_TIMEOUT_MS = 60_000;
+const BATCH_IMPORT_TIMEOUT_MS = 180_000;
 const RETRYABLE_HTTP_STATUSES = new Set([408, 429, 502, 503, 504]);
 
 export class ApiRequestError extends Error {
@@ -87,9 +88,18 @@ const fetch=async(input:RequestInfo|URL,init:RequestInit={},timeoutMs=REQUEST_TI
 };
 
 const getApiErrorMessage = async (response: Response, fallback: string) => {
-  // A resposta detalhada pode conter nomes de serviços, SQL ou rastros internos.
-  // A interface deve exibir somente uma orientação segura e compreensível.
-  void response;
+  // Erros 5xx podem conter detalhes internos. Mensagens de validação 4xx são
+  // produzidas pela própria API e ajudam o administrador a corrigir o envio.
+  if (response.status >= 500) return GENERIC_LOAD_ERROR;
+  try {
+    const payload = await response.clone().json() as Record<string, unknown>;
+    const message = typeof payload?.error === 'string' ? payload.error.trim() : '';
+    if (message && !/^(failed|erro interno|internal server)/i.test(message)) return message;
+  } catch {
+    // A resposta pode não ser JSON (por exemplo, quando o proxy está fora do ar).
+  }
+  if (response.status === 401) return 'Sua sessão expirou. Entre novamente e repita a operação.';
+  if (response.status === 403) return 'Sua conta não possui permissão administrativa para esta operação.';
   return /^(failed|erro interno|internal server)/i.test(fallback.trim())
     ? GENERIC_LOAD_ERROR
     : fallback || GENERIC_ACTION_ERROR;
@@ -603,12 +613,12 @@ export const analyticsApi = {
   },
 };
 
-const jsonRequest = async <T>(path: string, options?: RequestInit): Promise<T> => {
+const jsonRequest = async <T>(path: string, options?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> => {
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
       headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
-    });
+    }, timeoutMs);
     if (!response.ok) throw new Error(await getApiErrorMessage(response, GENERIC_ACTION_ERROR));
     if (response.status === 204) return undefined as T;
     return response.json();
@@ -767,7 +777,7 @@ export const adminApi = {
   },
   importStructuredStudyMaterials: (materials:Record<string,unknown>[]) =>
     jsonRequest<{created:number;updated:number;processed:number;synchronizedPlans:number;ids:string[]}>(
-      '/admin/catalog/materials/batch', {method:'POST',body:JSON.stringify({materials})}
+      '/admin/catalog/materials/batch', {method:'POST',body:JSON.stringify({materials})}, BATCH_IMPORT_TIMEOUT_MS
     ),
   createSharedSubject: (data:{title:string;discipline:string;studyGroup:string;studyObjective:string;reviewSummary:string[];content:string;keyTakeaways:string[]}) =>
     jsonRequest<{id:string;title:string;discipline:string;studyGroup:string}>('/admin/catalog/subjects', {method:'POST',body:JSON.stringify(data)}),
