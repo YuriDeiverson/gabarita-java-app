@@ -67,8 +67,17 @@ public class GabaritaApplication {
 
     private static void configureDatabaseUrl() {
         String databaseUrl = configurationValue("DATABASE_URL");
+        String databaseUrlUnpooled = configurationValue("DATABASE_URL_UNPOOLED");
+
+        // Verifica se DATABASE_URL está configurada
         if (databaseUrl == null) {
+            System.err.println("WARNING: DATABASE_URL não está configurada. Usando valores padrão para desenvolvimento local.");
             return;
+        }
+
+        // Verifica se DATABASE_URL_UNPOOLED está configurada quando necessário
+        if (databaseUrlUnpooled == null) {
+            System.err.println("WARNING: DATABASE_URL_UNPOOLED não está configurada. O Flyway pode ter problemas com conexões via pooler.");
         }
 
         // Se já começa com jdbc:, não precisa processar
