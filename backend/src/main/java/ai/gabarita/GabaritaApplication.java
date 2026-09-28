@@ -17,7 +17,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class GabaritaApplication {
     public static void main(String[] args) {
         loadDotEnv();
-        configureDatabaseUrl();
+        // Removido configureDatabaseUrl() - deixando Spring Boot processar URLs JDBC diretamente
         SpringApplication.run(GabaritaApplication.class, args);
     }
 
@@ -66,58 +66,72 @@ public class GabaritaApplication {
     }
 
     private static void configureDatabaseUrl() {
+        // Simplesmente verifica se DATABASE_URL está configurada
+        // Se já estiver no formato JDBC, Spring Boot vai usar diretamente
+        // Se estiver no formato postgresql://, precisa converter
         String databaseUrl = configurationValue("DATABASE_URL");
-        String databaseUrlUnpooled = configurationValue("DATABASE_URL_UNPOOLED");
-
-        // Verifica se DATABASE_URL está configurada
-        if (databaseUrl == null) {
-            System.err.println("WARNING: DATABASE_URL não está configurada. Usando valores padrão para desenvolvimento local.");
-            return;
+        
+        // Remove espaços extras que podem causar problemas
+        if (databaseUrl != null) {
+            databaseUrl = databaseUrl.trim();
         }
-
-        // Verifica se DATABASE_URL_UNPOOLED está configurada quando necessário
-        if (databaseUrlUnpooled == null) {
-            System.err.println("WARNING: DATABASE_URL_UNPOOLED não está configurada. O Flyway pode ter problemas com conexões via pooler.");
+        
+        if (databaseUrl == null) {
+            System.err.println("WARNING: DATABASE_URL não está configurada. Usando valores padrão do application.yml.");
+            return;
         }
 
         // Se já começa com jdbc:, não precisa processar
         if (databaseUrl.startsWith("jdbc:")) {
+            System.err.println("DATABASE_URL já está no formato JDBC, usando diretamente.");
             return;
         }
 
-        // Processa URLs no formato postgresql:// ou postgres://
-        if (!databaseUrl.startsWith("postgresql://") && !databaseUrl.startsWith("postgres://")) {
-            throw new IllegalArgumentException(
-                    "DATABASE_URL deve começar com jdbc:postgresql://, postgresql:// ou postgres://");
+        // Se está no formato postgresql:// ou postgres://, converte para JDBC
+        if (databaseUrl.startsWith("postgresql://") || databaseUrl.startsWith("postgres://")) {
+            System.err.println("Convertendo DATABASE_URL de postgresql:// para jdbc:postgresql://");
+            convertPostgresUrlToJdbc(databaseUrl);
+            return;
         }
 
-        URI uri = URI.create(databaseUrl);
-        String userInfo = uri.getRawUserInfo();
-        String username = "";
-        String password = "";
-        boolean passwordInUrl = false;
+        System.err.println("WARNING: DATABASE_URL tem formato desconhecido: " + databaseUrl);
+    }
 
-        if (userInfo != null) {
-            String[] credentials = userInfo.split(":", 2);
-            username = decodeUriCredential(credentials[0]);
-            if (credentials.length > 1) {
-                password = decodeUriCredential(credentials[1]);
-                passwordInUrl = true;
+    private static void convertPostgresUrlToJdbc(String postgresUrl) {
+        try {
+            URI uri = URI.create(postgresUrl);
+            String userInfo = uri.getRawUserInfo();
+            String username = "";
+            String password = "";
+            boolean passwordInUrl = false;
+
+            if (userInfo != null) {
+                String[] credentials = userInfo.split(":", 2);
+                username = decodeUriCredential(credentials[0]);
+                if (credentials.length > 1) {
+                    password = decodeUriCredential(credentials[1]);
+                    passwordInUrl = true;
+                }
             }
-        }
 
-        int port = uri.getPort() == -1 ? 5432 : uri.getPort();
-        String jdbcUrl = "jdbc:postgresql://" + uri.getHost() + ":" + port + uri.getPath();
-        if (uri.getQuery() != null && !uri.getQuery().isBlank()) {
-            jdbcUrl += "?" + uri.getQuery();
-        }
+            int port = uri.getPort() == -1 ? 5432 : uri.getPort();
+            String jdbcUrl = "jdbc:postgresql://" + uri.getHost() + ":" + port + uri.getPath();
+            if (uri.getQuery() != null && !uri.getQuery().isBlank()) {
+                jdbcUrl += "?" + uri.getQuery();
+            }
 
-        System.setProperty("spring.datasource.url", jdbcUrl);
-        if (!username.isBlank()) {
-            System.setProperty("spring.datasource.username", username);
-        }
-        if (passwordInUrl) {
-            System.setProperty("spring.datasource.password", password);
+            System.setProperty("spring.datasource.url", jdbcUrl);
+            if (!username.isBlank()) {
+                System.setProperty("spring.datasource.username", username);
+            }
+            if (passwordInUrl) {
+                System.setProperty("spring.datasource.password", password);
+            }
+            
+            System.err.println("URL JDBC gerada: " + jdbcUrl);
+        } catch (Exception e) {
+            System.err.println("Erro ao converter URL PostgreSQL: " + e.getMessage());
+            throw new RuntimeException("Falha ao converter DATABASE_URL para JDBC", e);
         }
     }
 
