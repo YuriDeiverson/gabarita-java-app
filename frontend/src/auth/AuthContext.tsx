@@ -1,8 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { Session, User } from '@supabase/supabase-js';
-import { isSupabaseConfigured, supabase } from './supabase';
-import { getValidSession } from './session';
+import type { User } from 'firebase/auth';
+import { isFirebaseConfigured, auth } from './firebase';
 import {
   AUTH_INACTIVITY_TIMEOUT_MS,
   AUTH_LAST_ACTIVITY_KEY,
@@ -13,6 +12,12 @@ import {
   isAuthInactive,
   recordAuthActivity,
 } from './inactivity';
+
+interface Session {
+  user: User;
+  access_token: string;
+  expires_in?: number;
+}
 
 interface AuthContextValue {
   session: Session | null;
@@ -27,11 +32,16 @@ const AUTH_RESTORE_TIMEOUT_MS = 8_000;
 
 type LogoutReason = 'inactivity' | 'restore-timeout';
 
-const restoreSessionWithinLimit = async () => {
+const restoreSessionWithinLimit = async (): Promise<User | null> => {
   let timeout = 0;
   try {
     return await Promise.race([
-      supabase.auth.getSession(),
+      new Promise<User | null>((resolve) => {
+        const unsubscribe = auth.onAuthStateChanged((user) => {
+          unsubscribe();
+          resolve(user);
+        });
+      }),
       new Promise<never>((_, reject) => {
         timeout = window.setTimeout(
           () => reject(new Error('auth-restore-timeout')),
@@ -63,10 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOutLocally = async (reason?: LogoutReason) => {
-    // Start revoking the refresh token, but update the UI immediately. The
-    // zero-delay cleanup lets Supabase read the current token first while still
-    // guaranteeing that a slow/offline endpoint cannot preserve it locally.
-    const signOutRequest = supabase.auth.signOut({ scope: 'local' });
+    const signOutRequest = auth.signOut();
     setSession(null);
     clearApplicationStorage();
     localStorage.removeItem(OWNER_KEY);
@@ -77,12 +84,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    if (!isSupabaseConfigured) { setLoading(false); return; }
+    if (!isFirebaseConfigured) { setLoading(false); return; }
     let active = true;
     void (async () => {
-      let restored: Awaited<ReturnType<typeof supabase.auth.getSession>>;
+      let restoredUser: User | null;
       try {
-        restored = await restoreSessionWithinLimit();
+        restoredUser = await restoreSessionWithinLimit();
       } catch {
         if (!active) return;
         finishLocalSignOut('restore-timeout');
@@ -90,35 +97,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (!active) return;
-      if (restored.error) { setLoading(false); return; }
 
-      const persistedSession = restored.data.session;
-      if (persistedSession?.user.id) isolateUserStorage(persistedSession.user.id);
-      if (persistedSession) recordAuthActivity();
-      setSession(persistedSession);
-      setLoading(false);
-      if (!persistedSession) return;
-
-      try {
-        const nextSession = await getValidSession();
-        if (active) setSession(nextSession);
-      } catch {
-        // Temporary refresh failures do not discard a session that was
-        // already restored. The next API request or reconnect will retry it.
+      if (restoredUser?.uid) isolateUserStorage(restoredUser.uid);
+      if (restoredUser) {
+        recordAuthActivity();
+        const token = await restoredUser.getIdToken();
+        setSession({ user: restoredUser, access_token: token });
       }
+      setLoading(false);
     })();
-    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
-      if (event === 'SIGNED_OUT') {
+
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      if (!active) return;
+      
+      if (!user) {
         clearApplicationStorage();
         clearPersistedAuth();
         localStorage.removeItem(OWNER_KEY);
+        setSession(null);
+      } else {
+        if (user.uid) {
+          isolateUserStorage(user.uid);
+          recordAuthActivity();
+        }
+        const token = await user.getIdToken();
+        setSession({ user, access_token: token });
       }
-      if (nextSession?.user.id) {
-        isolateUserStorage(nextSession.user.id);
-        recordAuthActivity();
-      }
-      setSession(nextSession); setLoading(false);
+      setLoading(false);
     });
+
     const refreshAfterReturning = () => {
       if (document.visibilityState !== 'visible') return;
       if (isAuthInactive()) {
@@ -126,15 +133,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       recordAuthActivity();
-      void getValidSession()
-        .then(nextSession => { if (active) setSession(nextSession); })
-        .catch(() => {});
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        currentUser.getIdToken().then(token => {
+          if (active) setSession({ user: currentUser, access_token: token });
+        }).catch(() => {});
+      }
     };
     window.addEventListener('focus', refreshAfterReturning);
     window.addEventListener('online', refreshAfterReturning);
     document.addEventListener('visibilitychange', refreshAfterReturning);
     return () => {
-      active=false; listener.subscription.unsubscribe();
+      active = false;
+      unsubscribe();
       window.removeEventListener('focus', refreshAfterReturning);
       window.removeEventListener('online', refreshAfterReturning);
       document.removeEventListener('visibilitychange', refreshAfterReturning);
@@ -144,8 +155,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!session) return;
 
-    // A visible page counts as presence even while the user is reading without
-    // touching the screen. Hidden/closed tabs retain their last presence time.
     const recordPresence = () => recordAuthActivity();
     const onVisibilityChange = () => {
       if (document.visibilityState !== 'visible') recordPresence();
@@ -171,7 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session]);
 
   const value = useMemo<AuthContextValue>(() => ({
-    session, user: session?.user || null, loading, configured: isSupabaseConfigured,
+    session, user: session?.user || null, loading, configured: isFirebaseConfigured,
     signOut: () => signOutLocally(),
   }), [session, loading]);
 

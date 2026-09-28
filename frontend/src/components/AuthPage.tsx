@@ -1,8 +1,8 @@
 import { FormEvent, useState } from 'react';
 import { BookOpenCheck, Eye, EyeOff, LockKeyhole, Mail, Sparkles, UserRound } from 'lucide-react';
-import { isAuthRetryableFetchError, type AuthError } from '@supabase/supabase-js';
-import { isSupabaseConfigured, supabase } from '../auth/supabase';
+import { isFirebaseConfigured, auth } from '../auth/firebase';
 import { AUTH_LOGOUT_REASON_KEY } from '../auth/inactivity';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 const initialSessionNotice = () => {
   const reason = sessionStorage.getItem(AUTH_LOGOUT_REASON_KEY);
@@ -15,28 +15,29 @@ const initialSessionNotice = () => {
 };
 
 const authenticationErrorMessage = (cause: unknown) => {
-  const error = cause as Partial<AuthError> | undefined;
+  const error = cause as { code?: string; message?: string } | undefined;
   const code = String(error?.code || '').toLowerCase();
   const message = String(error?.message || '').trim();
-  if (code === 'invalid_credentials' || /invalid login credentials/i.test(message)) {
+  
+  if (code === 'auth/invalid-credential' || code === 'auth/user-not-found' || code === 'auth/wrong-password') {
     return 'E-mail ou senha incorretos.';
   }
-  if (
-    (cause instanceof Error && isAuthRetryableFetchError(cause as AuthError)) ||
-    /failed to fetch|network|timeout|timed out/i.test(message)
-  ) {
+  if (code === 'auth/email-already-in-use') {
+    return 'Este e-mail já está cadastrado. Entre ou recupere sua senha.';
+  }
+  if (code === 'auth/weak-password') {
+    return 'A senha precisa ter pelo menos 6 caracteres.';
+  }
+  if (code === 'auth/invalid-email') {
+    return 'E-mail inválido.';
+  }
+  if (code === 'auth/too-many-requests') {
+    return 'Muitas tentativas. Aguarde um momento e tente novamente.';
+  }
+  if (/network|timeout|timed out/i.test(message)) {
     return 'Não foi possível conectar agora. Confira sua internet e tente novamente.';
   }
   if (message) return message;
-  if (cause && typeof cause === 'object') {
-    const record = cause as Record<string, unknown>;
-    for (const key of ['message', 'error_description', 'details', 'hint']) {
-      const value = record[key];
-      if (typeof value === 'string' && value.trim() && value.trim() !== '{}') {
-        return value.trim();
-      }
-    }
-  }
   return 'Não foi possível concluir o cadastro. Verifique se o e-mail ainda existe e tente novamente.';
 };
 
@@ -44,13 +45,17 @@ const wait = (milliseconds: number) => new Promise<void>(resolve => window.setTi
 
 const signInWithRetry = async (email: string, password: string) => {
   for (let attempt = 0; ; attempt += 1) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (!error) return;
-    if (attempt === 0 && isAuthRetryableFetchError(error)) {
-      await wait(500);
-      continue;
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      return;
+    } catch (error) {
+      const err = error as { code?: string };
+      if (attempt === 0 && err.code === 'auth/network-request-failed') {
+        await wait(500);
+        continue;
+      }
+      throw error;
     }
-    throw error;
   }
 };
 
@@ -68,8 +73,8 @@ export default function AuthPage() {
     event.preventDefault();
     setError('');
     setNotice('');
-    if (!isSupabaseConfigured) {
-      setError('Configure VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY no frontend.');
+    if (!isFirebaseConfigured) {
+      setError('Configure as variáveis de ambiente do Firebase no frontend.');
       return;
     }
     if (password.length < 6) {
@@ -82,17 +87,30 @@ export default function AuthPage() {
         await signInWithRetry(email.trim(), password);
       } else {
         if (name.trim().length < 2) throw new Error('Informe seu nome.');
-        const { data, error: authError } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-          options: { data: { full_name: name.trim() } },
-        });
-        if (authError) throw authError;
-        if (!data.session)
-          setNotice(
-            'Confira seu e-mail para confirmar a conta. Se ela já existia, entre ou solicite a redefinição de senha.'
-          );
+        const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        await updateProfile(userCredential.user, { displayName: name.trim() });
+        setNotice(
+          'Conta criada com sucesso! Você já pode entrar.'
+        );
       }
+    } catch (authError) {
+      setError(authenticationErrorMessage(authError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    setError('');
+    setNotice('');
+    if (!isFirebaseConfigured) {
+      setError('Configure as variáveis de ambiente do Firebase no frontend.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
     } catch (authError) {
       setError(authenticationErrorMessage(authError));
     } finally {
@@ -150,8 +168,8 @@ export default function AuthPage() {
                 : 'Comece seu plano de estudos personalizado.'}
             </p>
           </div>
-          {!isSupabaseConfigured && (
-            <div className="auth-message is-error">Supabase ainda não foi configurado neste ambiente.</div>
+          {!isFirebaseConfigured && (
+            <div className="auth-message is-error">Firebase ainda não foi configurado neste ambiente.</div>
           )}
           {error && (
             <div role="alert" className="auth-message is-error">
@@ -214,9 +232,27 @@ export default function AuthPage() {
               </button>
             </div>
           </label>
-          <button className="auth-submit" disabled={busy || !isSupabaseConfigured}>
+          <button className="auth-submit" disabled={busy || !isFirebaseConfigured}>
             {busy ? 'Aguarde…' : mode === 'login' ? 'Entrar' : 'Criar conta'}
           </button>
+          
+          {mode === 'login' && (
+            <div className="auth-divider">
+              <span>ou</span>
+            </div>
+          )}
+          
+          {mode === 'login' && (
+            <button 
+              type="button" 
+              className="auth-submit auth-google"
+              onClick={signInWithGoogle}
+              disabled={busy || !isFirebaseConfigured}
+            >
+              {busy ? 'Aguarde…' : 'Entrar com Google'}
+            </button>
+          )}
+          
           <p className="auth-switch">
             {mode === 'login' ? 'Ainda não tem uma conta?' : 'Já possui uma conta?'}{' '}
             <button

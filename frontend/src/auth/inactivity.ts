@@ -12,19 +12,19 @@ export const AUTH_INACTIVITY_MINUTES = Number.isFinite(configuredMinutes)
   : DEFAULT_INACTIVITY_MINUTES;
 export const AUTH_INACTIVITY_TIMEOUT_MS = AUTH_INACTIVITY_MINUTES * 60_000;
 
-const supabaseAuthStorageKeys = () =>
+const firebaseAuthStorageKeys = () =>
   Object.keys(localStorage).filter(
-    key => key.startsWith('sb-') && key.includes('-auth-token'),
+    key => key.startsWith('firebase') && key.includes('auth'),
   );
 
 export const clearApplicationStorage = () => {
   Object.keys(localStorage).forEach(key => {
-    if (!key.startsWith('sb-') && key !== OWNER_KEY) localStorage.removeItem(key);
+    if (!key.startsWith('firebase') && key !== OWNER_KEY) localStorage.removeItem(key);
   });
 };
 
 export const clearPersistedAuth = () => {
-  supabaseAuthStorageKeys().forEach(key => localStorage.removeItem(key));
+  firebaseAuthStorageKeys().forEach(key => localStorage.removeItem(key));
   localStorage.removeItem(AUTH_LAST_ACTIVITY_KEY);
 };
 
@@ -43,7 +43,7 @@ export const isAuthInactive = (now = Date.now()) => {
 };
 
 /**
- * Runs before createClient(). Existing installs without an activity marker are
+ * Runs before Firebase initialization. Existing installs without an activity marker are
  * deliberately expired once, avoiding a network refresh of legacy sessions.
  */
 export const expireInactiveSessionBeforeClientCreation = () => {
@@ -56,7 +56,7 @@ export const expireInactiveSessionBeforeClientCreation = () => {
     callbackHash.has('error_description');
   if (isAuthCallback) return false;
 
-  if (supabaseAuthStorageKeys().length === 0) {
+  if (firebaseAuthStorageKeys().length === 0) {
     localStorage.removeItem(AUTH_LAST_ACTIVITY_KEY);
     return false;
   }

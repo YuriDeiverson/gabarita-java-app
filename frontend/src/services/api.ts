@@ -12,6 +12,32 @@ const SCHEDULE_GENERATION_TIMEOUT_MS = 60_000;
 const BATCH_IMPORT_TIMEOUT_MS = 180_000;
 const RETRYABLE_HTTP_STATUSES = new Set([408, 429, 502, 503, 504]);
 
+// Cache inteligente para reduzir requests
+interface CacheEntry {
+  data: unknown;
+  timestamp: number;
+}
+const apiCache = new Map<string, CacheEntry>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
+
+const getCached = (key: string): unknown | null => {
+  const entry = apiCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > CACHE_DURATION) {
+    apiCache.delete(key);
+    return null;
+  }
+  return entry.data;
+};
+
+const setCached = (key: string, data: unknown): void => {
+  apiCache.set(key, { data, timestamp: Date.now() });
+};
+
+const cacheKey = (url: string, method: string = 'GET', body?: string): string => {
+  return `${method}:${url}:${body || ''}`;
+};
+
 export class ApiRequestError extends Error {
   constructor(
     message: string,
@@ -56,6 +82,23 @@ const fetch=async(input:RequestInfo|URL,init:RequestInit={},timeoutMs=REQUEST_TI
     const requestInit = { ...init, headers };
     const method = String(init.method || 'GET').toUpperCase();
     const retrySafe = method === 'GET' || method === 'HEAD';
+    
+    // Cache para requests GET
+    const url = typeof input === 'string' ? input : input.toString();
+    const body = typeof init.body === 'string' ? init.body : JSON.stringify(init.body);
+    const cacheKeyStr = cacheKey(url, method, body);
+    
+    if (method === 'GET') {
+      const cached = getCached(cacheKeyStr);
+      if (cached) {
+        // Return cached response as a fake Response object
+        return new Response(JSON.stringify(cached), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+    
     let response: Response;
     try {
       response=await requestOnce(input,requestInit,timeoutMs);
@@ -80,6 +123,18 @@ const fetch=async(input:RequestInfo|URL,init:RequestInit={},timeoutMs=REQUEST_TI
         response=await requestOnce(input,{...init,headers},timeoutMs);
       }
     }
+    
+    // Cache successful GET responses
+    if (method === 'GET' && response.ok) {
+      try {
+        const clonedResponse = response.clone();
+        const data = await clonedResponse.json();
+        setCached(cacheKeyStr, data);
+      } catch {
+        // Se não for JSON, não cacheia
+      }
+    }
+    
     return response;
   } catch {
     // Não exponha falhas de rede, timeout ou detalhes de serviços ao usuário.

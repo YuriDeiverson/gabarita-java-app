@@ -28,6 +28,32 @@ public class DailyStudyService {
     @Transactional
     public Map<String,Object> today() {
         var plan = activePlan();
+        if (plan.isEmpty()) {
+            // Return empty response when no active plan exists
+            var result = new LinkedHashMap<String,Object>();
+            result.put("plan",Map.of());
+            result.put("today",Map.of(
+                "date",LocalDate.now(),
+                "goal_minutes",0,
+                "remaining_minutes",0,
+                "progress_percentage",0,
+                "planned_minutes",0,
+                "completed_minutes",0,
+                "total_tasks",0,
+                "completed_tasks",0
+            ));
+            result.put("tasks",List.of());
+            result.put("active_session",Map.of());
+            result.put("streak",Map.of("current_streak",0,"longest_streak",0));
+            result.put("experience",Map.of("total_points",0,"level",1));
+            result.put("reviews",List.of());
+            result.put("next",Map.of());
+            result.put("planning",Map.of());
+            result.put("notifications",List.of());
+            result.put("unread_notifications",0);
+            return result;
+        }
+        
         UUID planId = (UUID) plan.get("id");
         int goal = Math.max(60, number(plan,"daily_goal_minutes"));
         ensureRoadmap(plan, goal);
@@ -191,7 +217,8 @@ public class DailyStudyService {
             FROM study_plans sp
             WHERE user_id=:u AND is_primary AND status='ACTIVE' LIMIT 1
             """).param("u",currentUser.id()).query().listOfRows();
-        if(rows.isEmpty()) throw new NoSuchElementException("Nenhum plano principal ativo"); return rows.getFirst();
+        if(rows.isEmpty()) return Map.of(); 
+        return rows.getFirst();
     }
 
     private void ensureRoadmap(Map<String,Object> plan,int goal) {

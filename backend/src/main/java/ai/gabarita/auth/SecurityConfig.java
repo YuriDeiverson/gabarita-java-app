@@ -1,7 +1,7 @@
 package ai.gabarita.auth;
 
-import java.nio.charset.StandardCharsets;
-import javax.crypto.spec.SecretKeySpec;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,17 +9,17 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.oauth2.core.*;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
-import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.*;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 public class SecurityConfig {
-    @Value("${app.auth.supabase-url:}") private String supabaseUrl;
-    @Value("${app.auth.jwks-url:}") private String configuredJwksUrl;
-    @Value("${app.auth.jwt-secret:}") private String legacySecret;
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
+    @Value("${app.auth.firebase-project-id:}") private String firebaseProjectId;
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -29,39 +29,55 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/health", "/actuator/health", "/actuator/info").permitAll()
-                .anyRequest().authenticated());
-        http.oauth2ResourceServer(resource -> resource.jwt(Customizer.withDefaults()));
+                .anyRequest().authenticated())
+            .oauth2ResourceServer(resource -> resource.jwt(Customizer.withDefaults()));
         return http.build();
     }
 
     @Bean
     JwtDecoder jwtDecoder() {
-        String issuer = normalizedSupabaseUrl() + "/auth/v1";
-        NimbusJwtDecoder decoder;
-        if (legacySecret != null && !legacySecret.isBlank()) {
-            var key = new SecretKeySpec(legacySecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
-            decoder = NimbusJwtDecoder.withSecretKey(key).macAlgorithm(MacAlgorithm.HS256).build();
-        } else {
-            String jwks = configuredJwksUrl == null || configuredJwksUrl.isBlank()
-                ? issuer + "/.well-known/jwks.json" : configuredJwksUrl.trim();
-            decoder = NimbusJwtDecoder.withJwkSetUri(jwks)
-                .jwsAlgorithms(algorithms -> {
-                    algorithms.add(SignatureAlgorithm.ES256);
-                    algorithms.add(SignatureAlgorithm.RS256);
-                })
-                .build();
+        if (firebaseProjectId == null || firebaseProjectId.isBlank()) {
+            throw new IllegalStateException("FIREBASE_PROJECT_ID é obrigatório para validar a autenticação Firebase.");
         }
+        
+        String issuer = "https://securetoken.google.com/" + firebaseProjectId.trim();
+        String jwksUri = "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
+        
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwksUri)
+            .jwsAlgorithms(algorithms -> {
+                algorithms.add(SignatureAlgorithm.RS256);
+            })
+            .build();
+        
         OAuth2TokenValidator<Jwt> issuerValidator = JwtValidators.createDefaultWithIssuer(issuer);
-        OAuth2TokenValidator<Jwt> authenticatedRole = jwt -> "authenticated".equals(jwt.getClaimAsString("role"))
-            ? OAuth2TokenValidatorResult.success()
-            : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token", "Token sem papel authenticated", null));
-        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(issuerValidator, authenticatedRole));
+        OAuth2TokenValidator<Jwt> audValidator = jwt -> {
+            Object audClaim = jwt.getClaim("aud");
+            
+            // Firebase may return aud as an array or string
+            boolean isValid = false;
+            if (audClaim instanceof String) {
+                isValid = firebaseProjectId.equals(audClaim);
+            } else if (audClaim instanceof java.util.List) {
+                @SuppressWarnings("unchecked")
+                java.util.List<String> audList = (java.util.List<String>) audClaim;
+                isValid = audList.contains(firebaseProjectId);
+            }
+            
+            if (isValid) {
+                return OAuth2TokenValidatorResult.success();
+            }
+            return OAuth2TokenValidatorResult.failure(
+                new OAuth2Error("invalid_token", "Token com audience inválido", null)
+            );
+        };
+        
+        decoder.setJwtValidator(jwt -> {
+            OAuth2TokenValidatorResult issuerResult = issuerValidator.validate(jwt);
+            if (issuerResult.hasErrors()) {
+                return issuerResult;
+            }
+            return audValidator.validate(jwt);
+        });
         return decoder;
-    }
-
-    private String normalizedSupabaseUrl() {
-        if (supabaseUrl == null || supabaseUrl.isBlank())
-            throw new IllegalStateException("SUPABASE_URL é obrigatório para validar a autenticação.");
-        return supabaseUrl.trim().replaceAll("/+$", "");
     }
 }

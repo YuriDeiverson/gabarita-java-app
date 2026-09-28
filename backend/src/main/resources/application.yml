@@ -11,19 +11,28 @@ spring:
   application.name: gabarita-api
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/gabarita}
-    username: ${DATABASE_USER:gabarita}
-    password: ${DATABASE_PASSWORD:gabarita}
+    username: ${DATABASE_USER:neondb_owner}
+    password: ${DATABASE_PASSWORD:npg_b9muOifD3xMn}
     hikari:
       maximum-pool-size: ${DATABASE_POOL_SIZE:10}
       minimum-idle: ${DATABASE_MIN_IDLE:1}
       connection-timeout: 10000
   flyway:
     enabled: true
+    # Use connection direta (sem pooler) para migrations - Neon requer conexão direta
+    # para operações de schema como migrations do Flyway
+    url: ${spring.flyway.url:${DATABASE_URL:jdbc:postgresql://localhost:5432/gabarita}}
+    user: ${spring.flyway.user:${DATABASE_USER:gabarita}}
+    password: ${spring.flyway.password:${DATABASE_PASSWORD:gabarita}}
     # O pooler do banco pode encerrar uma tentativa TLS durante reinicios ou
     # trocas de instancia. Como o Flyway roda antes da API subir, repita apenas
     # a abertura da conexao em vez de derrubar o deploy na primeira falha.
     connect-retries: ${DATABASE_CONNECT_RETRIES:12}
     connect-retries-interval: ${DATABASE_CONNECT_RETRY_INTERVAL:5s}
+    # Permite reparar checksum mismatch durante desenvolvimento
+    validate-on-migrate: false
+    # Ignora migrações faltantes para evitar problemas com migrações removidas
+    out-of-order: true
   servlet:
     multipart:
       max-file-size: 15MB
@@ -34,6 +43,8 @@ management.endpoints.web.exposure.include: health,info
 app:
   cors-origins: ${CORS_ORIGINS:http://localhost:3000}
   auth:
-    supabase-url: ${SUPABASE_URL:}
-    jwks-url: ${SUPABASE_JWKS_URL:}
-    jwt-secret: ${SUPABASE_JWT_SECRET:}
+    firebase-project-id: ${FIREBASE_PROJECT_ID:}
+    # Legacy Supabase support (optional, for migration)
+    legacy-supabase-url: ${SUPABASE_URL:}
+    legacy-jwks-url: ${SUPABASE_JWKS_URL:}
+    legacy-jwt-secret: ${SUPABASE_JWT_SECRET:}

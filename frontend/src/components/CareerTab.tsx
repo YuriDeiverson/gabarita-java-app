@@ -52,6 +52,7 @@ const loadCatalogCache = (): CareerContest[] => {
 const saveCatalogCache = (contests: CareerContest[]) => {
   try {
     localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify(contests));
+    localStorage.setItem(CATALOG_CACHE_KEY + '_timestamp', String(Date.now()));
   } catch {
     // Storage can be unavailable in private browsing; fresh data still renders.
   }
@@ -112,6 +113,9 @@ export default function CareerTab({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [openingNoticePdf, setOpeningNoticePdf] = useState(false);
   const creatingPlanRef = useRef(false);
+  
+  // Verifica se é uma nova conta (sem preferências configuradas)
+  const isNewAccount = !preferences.selectedWeekdays || preferences.selectedWeekdays.length === 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -124,6 +128,14 @@ export default function CareerTab({
     setError('');
 
     const loadPlans = async () => {
+      // Só carrega planos remotos se tiver preferências configuradas (conta existente)
+      // Para novas contas, pula carregamento de planos para economizar requests
+      if (!preferences.selectedWeekdays || preferences.selectedWeekdays.length === 0) {
+        setRemotePlans([]);
+        setLoadingPlans(false);
+        return;
+      }
+      
       try {
         const plans = await studyPlansApi.getSummaries();
         if (cancelled) return;
@@ -137,6 +149,17 @@ export default function CareerTab({
     };
 
     const loadCatalog = async () => {
+      // Só carrega catálogo se tiver cache expirado ou vazio
+      const cached = loadCatalogCache();
+      const cacheAge = cached.length > 0 ? Date.now() - (parseInt(localStorage.getItem(CATALOG_CACHE_KEY + '_timestamp') || '0')) : Infinity;
+      const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
+      
+      if (cached.length > 0 && cacheAge < CACHE_DURATION) {
+        setRemoteContests(cached);
+        setLoadingCatalog(false);
+        return;
+      }
+      
       try {
         const catalog = await catalogApi.contests();
         if (cancelled) return;
@@ -419,11 +442,28 @@ export default function CareerTab({
       )}
 
       {!contest ? (
-        <section className="career-section">
-          <div className="career-section-heading">
-            <h3>Concursos disponíveis</h3>
-            <p>Explore os editais cadastrados no sistema.</p>
-          </div>
+        <>
+          {isNewAccount ? (
+            <section className="career-section">
+              <div className="career-section-heading">
+                <h3>Bem-vindo ao Gabarita!</h3>
+                <p>Para começar, configure sua disponibilidade de estudo para que possamos criar um plano personalizado.</p>
+              </div>
+              <div className="career-welcome-card">
+                <GraduationCap className="career-welcome-icon" />
+                <h4>Configure sua disponibilidade</h4>
+                <p>Informe quais dias da semana você pode estudar e quantas horas por dia. Isso nos ajudará a criar um plano de estudo otimizado para sua rotina.</p>
+                <button onClick={onEditPreferences} className="career-button career-button-primary">
+                  Configurar disponibilidade
+                </button>
+              </div>
+            </section>
+          ) : (
+            <section className="career-section">
+              <div className="career-section-heading">
+                <h3>Concursos disponíveis</h3>
+                <p>Explore os editais cadastrados no sistema.</p>
+              </div>
           <div className="career-catalog-grid">
             {filteredContests.map(item => (
               <article key={item.id} className="career-contest-card">
@@ -453,6 +493,8 @@ export default function CareerTab({
           {loadingCatalog && <p className="career-empty" role="status"><LoaderCircle className="animate-spin" aria-hidden="true" /> Carregando concursos disponíveis…</p>}
           {!loadingCatalog && filteredContests.length === 0 && <p className="career-empty">Nenhum concurso corresponde aos filtros selecionados.</p>}
         </section>
+          )}
+        </>
       ) : (
         <section className="career-section career-detail">
           <button type="button" onClick={() => { setContest(null); setPendingRole(null); setError(''); }} className="career-back-button">

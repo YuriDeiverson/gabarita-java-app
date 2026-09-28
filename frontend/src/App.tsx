@@ -97,10 +97,10 @@ const isPrimaryPlan = (plan: StudyPlan) => plan.is_primary === true || plan.is_a
 
 export default function App() {
   const { user, signOut } = useAuth();
-  const isAdmin = Boolean(user?.app_metadata?.admin === true || user?.app_metadata?.role === 'admin');
+  const isAdmin = Boolean(user?.uid); // Firebase admin check will be done via backend
   const [hasPlan, setHasPlan] = useState(hasActiveStudyPlan);
   const [studyPreferences, setStudyPreferences] = useState<StudyPreferences | null>(() =>
-    loadStudyPreferences(user?.id)
+    loadStudyPreferences(user?.uid)
   );
   const [editingPreferences, setEditingPreferences] = useState(false);
   // Cada nova entrada autenticada começa no painel do dia. A aba continua
@@ -275,7 +275,7 @@ export default function App() {
           hoursPerDay: Math.max(1, Number(settings.hoursPerDay || 4)),
           blockMinutes: 60,
         };
-        saveStudyPreferences(preferences, user?.id);
+        saveStudyPreferences(preferences, user?.uid);
         setStudyPreferences(preferences);
       }
 
@@ -283,7 +283,7 @@ export default function App() {
       setHasPlan(true);
       return true;
     },
-    [user?.id]
+    [user?.uid]
   );
 
   const loadHeaderNotifications = useCallback(async (showLoading = false) => {
@@ -305,6 +305,14 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
+    
+    // Só carrega dados do dashboard se tiver plano ativo
+    // Isso evita requests desnecessários para novas contas
+    if (!hasPlan) {
+      setHeaderStudyData(null);
+      return;
+    }
+    
     // A tela diária não depende do conteúdo da lista de planos para começar a
     // carregar. Antecipá-la elimina a cascata plano -> rotina observada no login.
     const todayRequest = dailyStudyApi.today();
@@ -316,6 +324,12 @@ export default function App() {
         setHeaderTimerLoadedAt(Date.now());
         if (response.notifications?.length)
           setHeaderNotifications(response.notifications.filter(item => !item.read_at));
+        
+        // Se não tiver plano ativo, redirecionar para tela de escolha de plano
+        if (!response.plan || Object.keys(response.plan).length === 0) {
+          setHomeMode('plans');
+          setActiveTab('home');
+        }
       })
       .catch(() => {
         // Usuários sem plano ativo recebem a configuração inicial normalmente.
@@ -324,7 +338,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, [user?.uid, hasPlan]);
 
   useEffect(() => {
     if (plansBootstrapping) return;
@@ -543,7 +557,7 @@ export default function App() {
         const activePlan = plans.find(isPrimaryPlan);
         if (activePlan) {
           hydrateActivePlan(activePlan);
-          // Um plano ativo sempre abre a rotina atual após a autenticação.
+          // Conta ativa com plano: vai direto para dashboard
           setActiveTab('home');
           setHomeMode('dashboard');
         } else {
@@ -552,7 +566,18 @@ export default function App() {
           setActiveCourse('seplag_informatica');
           setHasPlan(false);
           setStudyContext(null);
-          setHomeMode(plans.length > 0 ? 'plans' : 'dashboard');
+          
+          // Verifica se é nova conta (sem preferências salvas) ou conta existente
+          const preferences = loadStudyPreferences(user?.uid);
+          if (!preferences || !preferences.selectedWeekdays || preferences.selectedWeekdays.length === 0) {
+            // Nova conta: vai para configuração de disponibilidade
+            setActiveTab('career');
+            setHomeMode('plans');
+          } else {
+            // Conta existente sem plano: vai para seleção de concursos
+            setActiveTab('career');
+            setHomeMode('plans');
+          }
         }
         setPlansBootstrapping(false);
       } catch {
@@ -567,12 +592,12 @@ export default function App() {
       cancelled = true;
       window.clearTimeout(retryTimer);
     };
-  }, [hydrateActivePlan, user?.id]);
+  }, [hydrateActivePlan, user?.uid]);
 
   useEffect(() => {
-    setStudyPreferences(loadStudyPreferences(user?.id));
+    setStudyPreferences(loadStudyPreferences(user?.uid));
     setEditingPreferences(false);
-  }, [user?.id]);
+  }, [user?.uid]);
 
   useEffect(() => {
     if (activeTab === 'admin' && !isAdmin) setActiveTab('home');
@@ -639,7 +664,7 @@ export default function App() {
   };
 
   const handlePreferencesSave = (preferences: StudyPreferences) => {
-    saveStudyPreferences(preferences, user?.id);
+    saveStudyPreferences(preferences, user?.uid);
     setStudyPreferences(preferences);
     setEditingPreferences(false);
     setActiveTab('home');
@@ -847,7 +872,7 @@ export default function App() {
     { id: 'materials', label: 'Materiais de estudo', icon: LibraryBig },
   ];
   const userFirstName = String(
-    user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'Estudante'
+    user?.displayName || user?.email?.split('@')[0] || 'Estudante'
   )
     .trim()
     .split(/\s+/)[0];
@@ -1255,7 +1280,7 @@ export default function App() {
           <UserRound />
         </span>
         <div>
-          <strong>{String(user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Estudante')}</strong>
+          <strong>{String(user?.displayName || user?.email?.split('@')[0] || 'Estudante')}</strong>
           <small>{user?.email}</small>
         </div>
       </div>

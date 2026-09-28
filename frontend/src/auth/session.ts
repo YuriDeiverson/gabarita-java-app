@@ -1,75 +1,27 @@
-import {
-  isAuthRefreshDiscardedError,
-  isAuthRetryableFetchError,
-  type AuthError,
-  type Session,
-} from '@supabase/supabase-js';
-import { supabase } from './supabase';
+import { auth } from './firebase';
+import type { User } from 'firebase/auth';
 
 const ACCESS_TOKEN_REFRESH_MARGIN_MS = 60_000;
-const REFRESH_RETRY_DELAYS_MS = [250, 750];
 
-let refreshInFlight: Promise<Session | null> | null = null;
-let localSignOutInFlight: Promise<void> | null = null;
-
-const discardInvalidSession = async () => {
-  if (!localSignOutInFlight) {
-    localSignOutInFlight = supabase.auth
-      .signOut({ scope: 'local' })
-      .then(() => undefined)
-      .finally(() => {
-        localSignOutInFlight = null;
-      });
-  }
-  await localSignOutInFlight;
-};
-
-const isTemporaryRefreshFailure = (error: AuthError) =>
-  isAuthRetryableFetchError(error) || isAuthRefreshDiscardedError(error);
+let refreshInFlight: Promise<string | null> | null = null;
 
 const wait = (milliseconds: number) =>
   new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 
-const refreshPersistedSession = async (): Promise<Session | null> => {
-  for (let attempt = 0; ; attempt += 1) {
-    const { data, error } = await supabase.auth.refreshSession();
-
-    if (!error) return data.session;
-    if (!isTemporaryRefreshFailure(error)) {
-      await discardInvalidSession();
-      return null;
-    }
-    if (attempt >= REFRESH_RETRY_DELAYS_MS.length) throw error;
-
-    // Mobile browsers often resume before the network interface is ready.
-    // A short bounded retry avoids treating that transition as a logout.
-    await wait(REFRESH_RETRY_DELAYS_MS[attempt]);
-  }
-};
-
-const renewSession = async (rejectedAccessToken?: string): Promise<Session | null> => {
+const renewToken = async (rejectedAccessToken?: string): Promise<string | null> => {
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
-      if (rejectedAccessToken) {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) {
-          if (!isTemporaryRefreshFailure(error)) {
-            await discardInvalidSession();
-            return null;
-          }
-          throw error;
-        }
-        if (data.session?.access_token !== rejectedAccessToken) {
-          return data.session;
-        }
-      }
+      const currentUser = auth.currentUser;
+      if (!currentUser) return null;
 
-      const refreshedSession = await refreshPersistedSession();
-      if (!refreshedSession) {
-        await discardInvalidSession();
+      try {
+        const token = await currentUser.getIdToken(true);
+        return token;
+      } catch (error) {
+        console.error('Failed to refresh token:', error);
+        await auth.signOut();
         return null;
       }
-      return refreshedSession;
     })().finally(() => {
       refreshInFlight = null;
     });
@@ -83,41 +35,45 @@ interface ValidSessionOptions {
   rejectedAccessToken?: string;
 }
 
+interface Session {
+  user: User;
+  access_token: string;
+}
+
 /**
  * Returns a session whose access token can be sent to the API.
  *
- * Supabase persists both tokens. This layer adds an explicit preflight check
- * and shares refresh operations between all requests made during page load.
+ * Firebase automatically handles token refresh. This layer adds an explicit
+ * preflight check and shares refresh operations between all requests made
+ * during page load.
  */
 export const getValidSession = async ({
   forceRefresh = false,
   rejectedAccessToken,
 }: ValidSessionOptions = {}): Promise<Session | null> => {
-  const { data, error } = await supabase.auth.getSession();
+  const currentUser = auth.currentUser;
+  if (!currentUser) return null;
 
-  if (error) {
-    if (!isTemporaryRefreshFailure(error)) {
-      await discardInvalidSession();
-      return null;
-    }
-    throw error;
-  }
-
-  const session = data.session;
-  if (!session) return null;
+  const token = await currentUser.getIdToken();
+  if (!token) return null;
 
   // Another request may already have renewed the exact token rejected by the
   // backend. In that case the current token is ready and must not be rotated again.
   if (
     forceRefresh &&
     rejectedAccessToken &&
-    session.access_token !== rejectedAccessToken
+    token !== rejectedAccessToken
   ) {
-    return session;
+    return { user: currentUser, access_token: token };
   }
 
-  const expiresAtMs = (session.expires_at ?? 0) * 1_000;
-  const expiresSoon = !expiresAtMs || expiresAtMs <= Date.now() + ACCESS_TOKEN_REFRESH_MARGIN_MS;
+  // Firebase tokens are typically valid for 1 hour. Force refresh if requested
+  // or if the token was rejected by the backend.
+  if (forceRefresh || rejectedAccessToken) {
+    const newToken = await renewToken(rejectedAccessToken);
+    if (!newToken) return null;
+    return { user: currentUser, access_token: newToken };
+  }
 
-  return forceRefresh || expiresSoon ? renewSession(rejectedAccessToken) : session;
+  return { user: currentUser, access_token: token };
 };
