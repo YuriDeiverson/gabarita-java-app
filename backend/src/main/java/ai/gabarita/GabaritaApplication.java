@@ -17,7 +17,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class GabaritaApplication {
     public static void main(String[] args) {
         loadDotEnv();
-        // Removido configureDatabaseUrl() - deixando Spring Boot processar URLs JDBC diretamente
+        configureDatabaseUrl();
         SpringApplication.run(GabaritaApplication.class, args);
     }
 
@@ -66,20 +66,18 @@ public class GabaritaApplication {
     }
 
     private static void configureDatabaseUrl() {
-        // Simplesmente verifica se DATABASE_URL está configurada
-        // Se já estiver no formato JDBC, Spring Boot vai usar diretamente
-        // Se estiver no formato postgresql://, precisa converter
         String databaseUrl = configurationValue("DATABASE_URL");
         
-        // Remove espaços extras que podem causar problemas
-        if (databaseUrl != null) {
-            databaseUrl = databaseUrl.trim();
-        }
+        System.err.println("DEBUG: DATABASE_URL value: [" + databaseUrl + "]");
         
         if (databaseUrl == null) {
             System.err.println("WARNING: DATABASE_URL não está configurada. Usando valores padrão do application.yml.");
             return;
         }
+
+        // Remove espaços extras
+        databaseUrl = databaseUrl.trim();
+        System.err.println("DEBUG: DATABASE_URL after trim: [" + databaseUrl + "]");
 
         // Se já começa com jdbc:, não precisa processar
         if (databaseUrl.startsWith("jdbc:")) {
