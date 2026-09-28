@@ -21,7 +21,7 @@ spring:
     enabled: true
     # Use connection direta (sem pooler) para migrations - Neon requer conexão direta
     # para operações de schema como migrations do Flyway
-    url: ${DATABASE_URL_UNPOOLED:${DATABASE_URL:jdbc:postgresql://localhost:5432/gabarita}}
+    url: ${DATABASE_URL_UNPOOLED:jdbc:postgresql://localhost:5432/gabarita}
     user: ${DATABASE_USER:gabarita}
     password: ${DATABASE_PASSWORD:gabarita}
     # O pooler do banco pode encerrar uma tentativa TLS durante reinicios ou

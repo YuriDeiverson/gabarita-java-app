@@ -67,10 +67,16 @@ public class GabaritaApplication {
 
     private static void configureDatabaseUrl() {
         String databaseUrl = configurationValue("DATABASE_URL");
-        if (databaseUrl == null || databaseUrl.startsWith("jdbc:")) {
+        if (databaseUrl == null) {
             return;
         }
 
+        // Se já começa com jdbc:, não precisa processar
+        if (databaseUrl.startsWith("jdbc:")) {
+            return;
+        }
+
+        // Processa URLs no formato postgresql:// ou postgres://
         if (!databaseUrl.startsWith("postgresql://") && !databaseUrl.startsWith("postgres://")) {
             throw new IllegalArgumentException(
                     "DATABASE_URL deve começar com jdbc:postgresql://, postgresql:// ou postgres://");
