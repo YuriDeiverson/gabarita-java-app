@@ -16,17 +16,17 @@ spring:
     hikari:
       maximum-pool-size: ${DATABASE_POOL_SIZE:10}
       minimum-idle: ${DATABASE_MIN_IDLE:1}
-      connection-timeout: 10000
+      connection-timeout: 30000
   flyway:
-    enabled: false
-    # Temporariamente desabilitado para isolar problema de conexão
-    # url: ${DATABASE_URL_UNPOOLED:${DATABASE_URL:jdbc:postgresql://localhost:5432/gabarita}}
-    # user: ${DATABASE_USER:gabarita}
-    # password: ${DATABASE_PASSWORD:gabarita}
-    # connect-retries: ${DATABASE_CONNECT_RETRIES:12}
-    # connect-retries-interval: ${DATABASE_CONNECT_RETRY_INTERVAL:5s}
-    # validate-on-migrate: false
-    # out-of-order: true
+    enabled: true
+    # Usando DATABASE_URL_UNPOOLED para migrações (conexão direta sem pooler)
+    url: ${DATABASE_URL_UNPOOLED:jdbc:postgresql://localhost:5432/gabarita}
+    user: ${DATABASE_USER:gabarita}
+    password: ${DATABASE_PASSWORD:gabarita}
+    connect-retries: ${DATABASE_CONNECT_RETRIES:12}
+    connect-retries-interval: ${DATABASE_CONNECT_RETRY_INTERVAL:5s}
+    validate-on-migrate: false
+    out-of-order: true
   servlet:
     multipart:
       max-file-size: 15MB
