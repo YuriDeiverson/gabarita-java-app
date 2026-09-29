@@ -1,6 +1,10 @@
 -- Popula materiais de estudo detalhados para assuntos do concurso ativo
 -- Esta migração cria materiais de alta qualidade apenas para o concurso ativo
 
+-- Drop função existente se ela tiver parâmetros diferentes
+DROP FUNCTION IF EXISTS gabarita_subject_normalized(text);
+DROP FUNCTION IF EXISTS gabarita_subject_normalized(value);
+
 -- Função para normalizar texto para comparação
 CREATE OR REPLACE FUNCTION gabarita_subject_normalized(text TEXT) 
 RETURNS TEXT AS $$
