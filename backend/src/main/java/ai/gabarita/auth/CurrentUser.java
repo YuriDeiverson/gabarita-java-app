@@ -88,7 +88,16 @@ public class CurrentUser {
     public String email() { return token().getClaimAsString("email"); }
     public String name() { return displayName(token(), email()); }
     public boolean isAdmin() {
-        // Firebase admin check through custom claims
+        // Check database admin status first
+        Boolean dbAdmin = jdbc.sql("SELECT is_admin FROM users WHERE id = :id")
+            .param("id", id())
+            .query(Boolean.class)
+            .optional()
+            .orElse(false);
+        
+        if (dbAdmin) return true;
+        
+        // Firebase admin check through custom claims (legacy support)
         Object adminClaim = token().getClaim("admin");
         if (adminClaim instanceof Boolean) return (Boolean) adminClaim;
         
